@@ -205,3 +205,46 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Python cache & compiled files
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+venv-backend/
+venv-frontend/
+env/
+venv-backend/
+venv-frontend/
+
+# Log files
+logs/
+Logs/
+*.log
+
+# NiceGUI state
+.nicegui/
+
+# PID files
+pids/
+*.pid
+
+# Environment variables/secrets
+.env
+.env.*
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Old Files backup
+*.old
+*.bkp
+default.conf
+
+# DB Data
+db/data
+db/init

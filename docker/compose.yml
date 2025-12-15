@@ -1,54 +1,62 @@
 version: "3.9"
 
+name: fin_tracker 
+
+networks:
+  ft-net:
+    driver: bridge
+
+x-common: &common
+  env_file:  /home/sanjay/Application/FinTrack/.env
+
 services:
 
   db:
+    <<: *common
     image: postgres:16
-    container_name: ft_app_db
+    hostname: postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: sanjay
-      POSTGRES_PASSWORD: sanjay123
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: fintracker
     ports:
       - "5432:5432"
     volumes:
-      - ../db/data:/var/lib/postgresql/data
-      - ../db/init:/docker-entrypoint-initdb.d
+      - ../db/data:/var/lib/postgresql/data:z
+      - ../db/init:/docker-entrypoint-initdb.d:z
     networks:
       - ft-net
 
   pgweb:
+    <<: *common
     image: sosedoff/pgweb
-    container_name: ft_pgweb
+    hostname: pgweb
     restart: unless-stopped
     ports:
       - "8081:8081"
     environment:
-      DATABASE_URL: postgres://sanjay:sanjay123@db:5432/fintracker?sslmode=disable
+      PGWEB_DATABASE_URL: postgres://${DB_USER}:${DB_PASSWORD}@db:5432/fintracker?sslmode=disable
     depends_on:
       - db
     networks:
       - ft-net
 
-  backend:
-    build:
-      context: ../backend
-      dockerfile: Dockerfile
-    container_name: ft_backend
-    restart: unless-stopped
-    ports:
-      - "8000:8000"
-    volumes:
-      - ../backend:/app
-    environment:
-      DATABASE_URL: postgres://sanjay:sanjay123@db:5432/fintracker
-      ENV: development
-    depends_on:
-      - db
-    networks:
-      - ft-net
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-
-networks:
-  ft-net:
+  # backend:
+    # build:
+    #   context: ../backend
+    #   dockerfile: Dockerfile
+    # container_name: ft_backend
+    # restart: unless-stopped
+    # ports:
+    #   - "8000:8000"
+    # volumes:
+    #   - ../backend:/app
+    # environment:
+    #   DATABASE_URL: postgres://sanjay:sanjay123@db:5432/fintracker
+    #   ENV: development
+    # depends_on:
+    #   - db
+    # networks:
+    #   - ft-net
+    # command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
