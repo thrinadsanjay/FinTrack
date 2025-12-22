@@ -1,24 +1,33 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
-from app.db.session import get_db
-from app.models.account import Account
+from fastapi import APIRouter, Depends, Request, status
 from app.services.auth import get_current_user
-from app.schemas.account import AccountCreate, AccountOut
+from app.services.accounts import create_account
+from app.services.audit import create_audit_log
 
 router = APIRouter()
 
-@router.post("/", response_model=AccountOut)
-def create_account(payload: AccountCreate, db: Session = Depends(get_db)):
-    account = Account(**payload.dict())
-    db.add(account)
-    db.commit()
-    db.refresh(account)
-    return account
+@router.post("/", status_code=status.HTTP_201_CREATED)
+async def create_account_endpoint(
+    request: Request,
+    name: str,
+    currency: str = "INR",
+    user=Depends(get_current_user),
+):
+    account = await create_account(
+        user_id=user["_id"],
+        name=name,
+        currency=currency,
+    )
 
-@router.get("/")
-def list_accounts(user=Depends(get_current_user)):
+    await create_audit_log(
+        user=user,
+        action="create_account",
+        resource=str(account["_id"]),
+        request=request,
+    )
+
     return {
-        "message": "Authenticated",
-        "user_id": user["sub"],
-        "email": user.get("email"),
+        "id": str(account["_id"]),
+        "name": account["name"],
+        "currency": account["currency"],
+        "balance": account["balance"],
     }

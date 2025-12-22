@@ -1,31 +1,18 @@
-from sqlalchemy.orm import Session
-from app.models.user import User
+from app.db.mongo import db
 
-
-def get_or_create_user(db: Session, token_payload: dict) -> User:
+async def get_or_create_user(token_payload: dict):
     keycloak_id = token_payload["sub"]
-    email = token_payload.get("email")
-    username = token_payload.get("preferred_username")
 
-    user = (
-        db.query(User)
-        .filter(User.keycloak_id == keycloak_id)
-        .first()
-    )
-
+    user = await db.users.find_one({"keycloak_id": keycloak_id})
     if user:
-        # Optional: update email/username if changed
-        user.email = email
-        user.username = username
         return user
 
-    user = User(
-        keycloak_id=keycloak_id,
-        email=email,
-        username=username,
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+    user_doc = {
+        "keycloak_id": keycloak_id,
+        "email": token_payload.get("email"),
+        "username": token_payload.get("preferred_username"),
+    }
 
-    return user
+    result = await db.users.insert_one(user_doc)
+    user_doc["_id"] = result.inserted_id
+    return user_doc

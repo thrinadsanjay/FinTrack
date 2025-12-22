@@ -2,6 +2,9 @@ version: "3.9"
 
 name: fin_tracker 
 
+volumes:
+  mongodb_data:
+
 networks:
   ft-net:
     driver: bridge
@@ -9,38 +12,53 @@ networks:
 x-common: &common
   env_file:  /home/sanjay/Application/FinTrack/.env
 
+
 services:
 
-  db:
-    <<: *common
-    image: postgres:16
-    hostname: postgres
+ version: "3.8"
+
+services:
+  mongodb:
+    image: mongo:7
+    hostname: mongodb
     restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: fintracker
+    #command: ["mongod", "--config", "/etc/mongod.conf"]
     ports:
-      - "5432:5432"
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=${MONGO_DB_NAME}
     volumes:
-      - ../db/data:/var/lib/postgresql/data:z
-      - ../db/init:/docker-entrypoint-initdb.d:z
+      - mongodb_data:/data/db
+      - ../db/config/mongod.conf:/etc/mongod.conf:ro
+      - ../db/certs:/certs:ro
     networks:
       - ft-net
 
-  pgweb:
-    <<: *common
-    image: sosedoff/pgweb
-    hostname: pgweb
+  mongo-express:
+    image: mongo-express:latest
+    hostname: mongo-express
     restart: unless-stopped
     ports:
       - "8081:8081"
     environment:
-      PGWEB_DATABASE_URL: postgres://${DB_USER}:${DB_PASSWORD}@db:5432/fintracker?sslmode=disable
+      - ME_CONFIG_MONGODB_SERVER=mongodb
+      - ME_CONFIG_MONGODB_PORT=27017
+      - ME_CONFIG_OPTIONS_EDITORTHEME=ambiance
+      - ME_CONFIG_BASICAUTH_USERNAME=admin
+      - ME_CONFIG_BASICAUTH_PASSWORD=admin
+      # ME_CONFIG_MONGODB_ENABLE_ADMIN: "true"
+      # ME_CONFIG_MONGODB_SERVER: mongodb
+      # ME_CONFIG_MONGODB_SSL: "true"
+      # ME_CONFIG_MONGODB_SSL_CA_FILE: /certs/ca.pem
+      # ME_CONFIG_MONGODB_SSL_CERT_FILE: /certs/client-cert.pem
+    volumes:
+      - ../db/certs:/certs:ro
     depends_on:
-      - db
+      - mongodb
     networks:
       - ft-net
+  
+
 
   # backend:
     # build:

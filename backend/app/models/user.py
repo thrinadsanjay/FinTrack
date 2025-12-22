@@ -1,18 +1,12 @@
-from sqlalchemy import Column, Integer, String, DateTime, func
+from pydantic_settings import BaseSettings, Field
 from app.db.base import Base
 
-class User(Base):
-    __tablename__ = "users"
 
-    id = Column(Integer, primary_key=True)
-    keycloak_id = Column(String, unique=True, nullable=False, index=True)
+class User(BaseModel):
+    id: ObjectId = Field(alias="_id")
+    keycloak_id: str
+    email: str | None = None
+    username: str | None = None
 
-    email = Column(String, index=True)
-    username = Column(String, index=True)
-
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-    )
+    class Config:
+        arbitrary_types_allowed = True

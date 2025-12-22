@@ -1,7 +1,8 @@
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    DATABASE_URL: str 
+    MONGO_URI: str
+    MONGO_DB_NAME: str
     ENV: str 
     KEYCLOAK_URL: str 
     KEYCLOAK_REALM: str 
