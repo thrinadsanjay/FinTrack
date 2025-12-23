@@ -1,5 +1,3 @@
-version: "3.9"
-
 name: fin_tracker 
 
 volumes:
@@ -12,25 +10,20 @@ networks:
 x-common: &common
   env_file:  /home/sanjay/Application/FinTrack/.env
 
-
-services:
-
- version: "3.8"
-
 services:
   mongodb:
     image: mongo:7
     hostname: mongodb
     restart: unless-stopped
     #command: ["mongod", "--config", "/etc/mongod.conf"]
-    ports:
-      - "27017:27017"
+    # ports:
+    #   - "27017:27017"
     environment:
-      - MONGO_INITDB_DATABASE=${MONGO_DB_NAME}
+    - MONGO_INITDB_DATABASE=fintracker
     volumes:
       - mongodb_data:/data/db
-      - ../db/config/mongod.conf:/etc/mongod.conf:ro
-      - ../db/certs:/certs:ro
+      #- ../db/config/mongod.conf:/etc/mongod.conf:ro
+      #- ../db/certs:/certs:ro
     networks:
       - ft-net
 
@@ -57,24 +50,47 @@ services:
       - mongodb
     networks:
       - ft-net
-  
 
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    hostname: ft_app
+    restart: unless-stopped
+    environment:
+    - ENV=development
+    - PROJECT_NAME=FinTracker
+    - PROJECT_VERSION=0.1.1
+    - MONGO_URI=mongodb://mongodb:27017
+    - MONGO_DB_NAME=fintracker
+    - KEYCLOAK_URL=https://keycloak.sanjay-lab.online/
+    - KEYCLOAK_REALM=sanjay-lab
+    - KEYCLOAK_CLIENT_ID=fintracker
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../backend:/app
+    depends_on:
+      - mongodb
+    networks:
+      - ft-net
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-  # backend:
-    # build:
-    #   context: ../backend
-    #   dockerfile: Dockerfile
-    # container_name: ft_backend
-    # restart: unless-stopped
-    # ports:
-    #   - "8000:8000"
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    hostname: ft_web
+    restart: unless-stopped
+    ports:
+      - "8080:80"
     # volumes:
-    #   - ../backend:/app
-    # environment:
-    #   DATABASE_URL: postgres://sanjay:sanjay123@db:5432/fintracker
-    #   ENV: development
-    # depends_on:
-    #   - db
-    # networks:
-    #   - ft-net
-    # command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    #   - "../frontend/app:/app"
+    depends_on:
+      - backend
+    networks:
+      - ft-net
+
+
+
+  
