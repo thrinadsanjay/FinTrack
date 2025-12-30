@@ -244,6 +244,7 @@ Thumbs.db
 *.old
 *.bkp
 default.conf
+__*_disabled
 
 # DB Data
 db/data
