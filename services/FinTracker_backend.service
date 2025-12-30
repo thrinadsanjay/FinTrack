@@ -1,0 +1,23 @@
+[Unit]
+Description=FinTracker Backend
+After=network.target FinTracker.service
+
+[Service]
+Type=simple
+EnvironmentFile=/home/sanjay/Application/FinTrack/.env
+#ExecStartPre=/home/sanjay/Application/FinTrack/backend/.venv/bin/activate
+ExecStart=/home/sanjay/Application/FinTrack/.venv/bin/uvicorn \
+	  app.main:app \
+	  --host 0.0.0.0 \
+	  --port 8000 --reload
+KillSignal=SIGTERM
+WorkingDirectory=/home/sanjay/Application/FinTrack/
+TimeoutStopSec=30
+SendSIGKILL=no
+Restart=always
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
+
