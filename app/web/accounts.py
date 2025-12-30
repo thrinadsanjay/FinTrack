@@ -15,8 +15,6 @@ ACCOUNT_TYPES = [
     ("other", "Other"),
 ]
 
-print(f"ACCOUNT_TYPES available: {ACCOUNT_TYPES}")
-
 def require_user(request: Request):
     user = request.session.get("user")
     if not user:
@@ -26,19 +24,18 @@ def require_user(request: Request):
 
 @router.get("")
 async def accounts_page(request: Request):
-    print(f"ACCOUNT_TYPES available: {ACCOUNT_TYPES}")
     user = require_user(request)
     if isinstance(user, RedirectResponse):
         return user
-
     accounts = await get_accounts(user["user_id"])    
-    print(f"ACCOUNT_TYPES passed to template: {ACCOUNT_TYPES}")
     return templates.TemplateResponse(
         "accounts.html",
         {
             "request": request,
+            "user": user,
             "accounts": accounts,
             "account_types": ACCOUNT_TYPES,
+            "active_page": "accounts",
         },
     )
 

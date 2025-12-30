@@ -4,11 +4,14 @@ from fastapi import APIRouter, Request, Form
 from fastapi.responses import RedirectResponse, HTMLResponse
 from app.core.config import settings
 from app.core.security import verify_password
+from app.core.http import get_async_http_client
 from app.web.templates import templates
 from app.services.users import get_local_user, update_last_login, update_user_password, update_oauth_last_login, get_oauth_user_by_sub, create_oauth_user
 from app.services.audit import audit_log
-from app.services.keycloak import verify_id_token, decode_id_token # Disable in dev mode
-from app.services.keycloak import decode_id_token # Disable in Prod mode
+# from app.services.keycloak import verify_id_token, decode_id_token # Disable in dev mode
+# from app.services.keycloak import decode_id_token # Disable in Prod mode
+from app.services.keycloak import keycloak_service
+from jose import JWTError
 
 router = APIRouter()
 
@@ -87,7 +90,7 @@ async def callback(request: Request, code: str):
         "protocol/openid-connect/token"
     )
 
-    async with httpx.AsyncClient() as client:
+    async with get_async_http_client() as client:
         resp = await client.post(
             token_url,
             data={
@@ -102,9 +105,22 @@ async def callback(request: Request, code: str):
         token = resp.json()
 
     id_token = token["id_token"]
-    #claims = decode_id_token(id_token) # Dev mode: skip signature validation
-    claims = verify_id_token(id_token)  # Prod mode: validate using JWKS
 
+    # ENV = settings.ENV.lower()
+    # if ENV in ("prod", "production"):
+    #     claims = verify_id_token(id_token)  # Prod mode: validate using JWKS
+    # else:
+    #     claims = decode_id_token(id_token) # Dev mode: skip signature validation
+    try:
+        claims = keycloak_service.verify_id_token(id_token)
+    except JWTError as exc:
+        await audit_log(
+            action="OAUTH_TOKEN_VERIFY_FAILED",
+            request=request,
+            meta={"error": str(exc)},
+        )
+        raise HTTPException(status_code=401, detail="Invalid ID token")
+        
     oauth_sub = claims["sub"]
     email = claims.get("email")
     username = claims.get("preferred_username")
@@ -141,20 +157,59 @@ async def callback(request: Request, code: str):
 
     return RedirectResponse("/", status_code=303)
 
-
 @router.get("/logout")
 async def logout(request: Request):
+    """
+    Logout user based on auth provider:
+    - local     → clear session and go to /login
+    - keycloak  → clear session and redirect to Keycloak logout
+    """
+
+    # ---- Capture data BEFORE clearing session ----
+    auth_provider = request.session.get("auth_provider")
+    user = request.session.get("user")
+
+    audit_user = None
+    audit_meta = {}
+
+    if user:
+        audit_user = {
+            "user_id": str(user.get("_id") or user.get("user_id")),
+            "username": user.get("username"),
+            "auth_provider": auth_provider,
+        }
+        audit_meta = {
+            "email": user.get("email"),
+            "logout_type": "global_idp" if auth_provider == "keycloak" else "local_only",
+        }
+
+    # ---- Audit logout (common for all providers) ----
+    await audit_log(
+        action="LOGOUT",
+        request=request,
+        user=audit_user,
+        meta=audit_meta,
+    )
+
+    # ---- Clear session ----
     request.session.clear()
 
-    logout_url = (
-        f"{settings.KEYCLOAK_URL}/realms/{settings.KEYCLOAK_REALM}"
-        "/protocol/openid-connect/logout"
-        f"?client_id={settings.KEYCLOAK_CLIENT_ID}"
-        f"&post_logout_redirect_uri={settings.APP_BASE_URL}"
-    )
-    
-    return RedirectResponse(logout_url)
-    #return RedirectResponse("/")
+    # ---- Redirect logic ----
+    if auth_provider == "local":
+        return RedirectResponse("/login", status_code=302)
+
+    if auth_provider == "keycloak":
+        logout_url = (
+            f"{settings.KEYCLOAK_URL}/realms/{settings.KEYCLOAK_REALM}"
+            "/protocol/openid-connect/logout"
+            f"?client_id={settings.KEYCLOAK_CLIENT_ID}"
+            f"&post_logout_redirect_uri={settings.APP_BASE_URL}/login"
+        )
+        return RedirectResponse(logout_url, status_code=302)
+
+    # Fallback
+    return RedirectResponse("/login", status_code=302)
+
 
 @router.get("/reset-password", response_class=HTMLResponse)
 async def reset_password_page(request: Request):

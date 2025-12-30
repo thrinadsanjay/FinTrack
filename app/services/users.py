@@ -11,6 +11,7 @@ from app.models.user import UserInDB
 async def create_local_user(
     username: str,
     password: str,
+    email: str,
     is_admin: bool = False,
     must_reset_password: bool = False,
 ) -> UserInDB:
@@ -18,6 +19,7 @@ async def create_local_user(
         username=username,
         auth_provider="local",
         password_hash=hash_password(password),
+        email=email,
         is_admin=is_admin,
         must_reset_password=must_reset_password,
         created_at=datetime.utcnow(),

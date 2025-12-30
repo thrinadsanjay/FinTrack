@@ -2,7 +2,7 @@ from app.db.mongo import db
 
 async def init_indexes():
     # Users
-    await db.users.create_index("keycloak_id", unique=True)
+    await db.users.create_index("email", unique=True)
     # Accounts
     await db.accounts.create_index([("user_id", 1)])
     await db.accounts.create_index([("user_id", 1), ("name", 1)], unique=True, name="unique_account_name_per_user")

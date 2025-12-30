@@ -10,9 +10,10 @@ from app.core.session import add_session_middleware
 from app.core.config import settings
 from fastapi.staticfiles import StaticFiles
 from app.web.templates import templates
-from app.web.routes import router as web_router
+from app.web.home import router as web_router
 from app.web.auth import router as web_auth_router
 from app.web.accounts import router as web_accounts_router
+import logging
 
 
 
@@ -25,6 +26,7 @@ app = FastAPI(
 )
 
 print(f"Starting {settings.APP_NAME} v{settings.APP_VERSION} in {settings.ENV} environment.")
+logging.getLogger("httpx").setLevel(logging.DEBUG)
 
 # Static assets
 app.mount("/static", StaticFiles(directory="app/frontend/static"), name="static")

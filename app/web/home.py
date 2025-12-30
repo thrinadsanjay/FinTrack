@@ -26,18 +26,9 @@ async def dashboard(request: Request):
         "home.html",
         {
             "request": request,
+            "user": user,
             "summary": summary,
             "transactions": transactions,
+            "active_page": "dashboard",
         },
     )
-
-
-# @router.get("/bankaccounts")
-# async def accounts(request: Request):
-#     if "user" not in request.session:
-#         return RedirectResponse("/login")
-
-#     return templates.TemplateResponse(
-#         "accounts.html",
-#         {"request": request},
-#     )

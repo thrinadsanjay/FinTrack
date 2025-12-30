@@ -18,7 +18,7 @@ def get_jwks():
         f"{settings.KEYCLOAK_REALM}/protocol/openid-connect/certs"
     )
 
-    response = httpx.get(url)
+    response = httpx.get(url, verify=get_http_verify())
     response.raise_for_status()
     JWKS_CACHE["jwks"] = response.json()
     return JWKS_CACHE["jwks"]
@@ -35,3 +35,8 @@ def hash_password(password: str) -> str:
 
 def verify_password(password: str, password_hash: str) -> bool:
     return pwd_context.verify(password, password_hash)
+
+# Disable HTTPX verify in Dev Mode
+
+def get_http_verify():
+    return False if settings.ENV.lower() in ("dev", "development") else True

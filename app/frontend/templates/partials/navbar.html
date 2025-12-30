@@ -1,4 +1,22 @@
-<!DOCTYPE html>
-<html>
-    <h2>NAVBAR</h2>
-</html>
+<header class="navbar">
+    <div class="nav-left">
+        <span class="logo head">FinTracker</span>
+
+        <a href="/" class="{% if active_page == 'dashboard' %}active{% endif %}">
+            Dashboard
+        </a>
+
+        <a href="/accounts" class="{% if active_page == 'accounts' %}active{% endif %}">
+            Accounts
+        </a>
+    </div>
+
+    <div class="nav-right">
+        <!-- {% if user %} -->
+        <span class="user">
+            <h4>Welcome {{ user.username }}</h4>
+        </span>
+        <a href="/logout" class="logout">Logout</a>
+        <!-- {% endif %} -->
+    </div>
+</header>

@@ -1,0 +1,42 @@
+body {
+    margin: 0;
+    font-family: system-ui, sans-serif;
+}
+
+.navbar {
+    display: flex;
+    justify-content: space-between;
+    padding: 12px 20px;
+    background: #1f2937;
+    color: white;
+}
+
+.navbar a {
+    color: #d1d5db;
+    margin-right: 15px;
+    text-decoration: none;
+}
+
+.navbar a.active {
+    color: white;
+    font-weight: bold;
+}
+
+.logo {
+    font-weight: bold;
+    margin-right: 25px;
+}
+
+.logo.head {
+    font-weight: bolder;
+    font-size: xx-large;
+    text-transform: uppercase;
+}
+
+.container {
+    padding: 20px;
+}
+
+.logout {
+    color: #fca5a5;
+}

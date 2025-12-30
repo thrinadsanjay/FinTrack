@@ -1,16 +1,17 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>{{ title or "FinTrack" }}</title>
+  <title>{% block title %}FinTracker{% endblock %}</title>
   <link rel="stylesheet" href="/static/css/app.css">
   <link rel="stylesheet" href="/static/css/dash.css">
+  <link rel="stylesheet" href="/static/css/navbar.css">
   <link rel="manifest" href="/static/manifest.json">
   <meta name="theme-color" content="#0f172a">
 </head>
 <body>
-  <!-- {% if request.session.user %}
+  {% if request.session.user %}
     {% include "partials/navbar.html" %}
-  {% endif %} -->
+  {% endif %}
 
   <main>
     {% block content %}{% endblock %}

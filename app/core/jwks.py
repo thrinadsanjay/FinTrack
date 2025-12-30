@@ -9,7 +9,9 @@ JWKS_URL = (
 
 @lru_cache(maxsize=1)
 def get_jwks():
-    with httpx.Client(timeout=5.0) as client:
+    with httpx.Client(timeout=5.0, 
+        verify=get_http_verify(),
+    ) as client:
         response = client.get(JWKS_URL)
         response.raise_for_status()
         return response.json()
