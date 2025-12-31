@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Form
-from fastapi.responses import RedirectResponse, HTMLResponse
+from fastapi.responses import RedirectResponse
 from app.web.templates import templates
 from app.services.accounts import get_accounts, create_account, update_account, delete_account
 
@@ -15,6 +15,7 @@ ACCOUNT_TYPES = [
     ("other", "Other"),
 ]
 
+
 def require_user(request: Request):
     user = request.session.get("user")
     if not user:
@@ -27,7 +28,8 @@ async def accounts_page(request: Request):
     user = require_user(request)
     if isinstance(user, RedirectResponse):
         return user
-    accounts = await get_accounts(user["user_id"])    
+
+    accounts = await get_accounts(user["user_id"])
     return templates.TemplateResponse(
         "accounts.html",
         {
@@ -40,13 +42,15 @@ async def accounts_page(request: Request):
     )
 
 
-
+# -------------------------
+# ADD ACCOUNT
+# -------------------------
 @router.post("/add")
 async def add_account(
     request: Request,
     bank_name: str = Form(...),
     acc_type: str = Form(...),
-    opening_balance: float = Form(...),
+    balance: float = Form(...),
     name: str | None = Form(None),
 ):
     user = require_user(request)
@@ -55,18 +59,18 @@ async def add_account(
 
     try:
         await create_account(
-        user_id=user["user_id"],
-        name=name,
-        bank_name=bank_name,
-        acc_type=acc_type,
-        opening_balance=opening_balance,
-    )
-    except HTTPException as e:
+            user_id=user["user_id"],
+            name=name,
+            bank_name=bank_name,
+            acc_type=acc_type,
+            balance=balance,   # ✅ single balance field
+        )
+    except Exception as e:
         return templates.TemplateResponse(
             "accounts.html",
             {
                 "request": request,
-                "error": e.detail,
+                "error": str(e),
                 "accounts": await get_accounts(user["user_id"]),
                 "account_types": ACCOUNT_TYPES,
             },
@@ -76,13 +80,17 @@ async def add_account(
     return RedirectResponse("/accounts", status_code=303)
 
 
+# -------------------------
+# EDIT ACCOUNT
+# -------------------------
 @router.post("/edit")
 async def edit_account(
     request: Request,
     account_id: str = Form(...),
-    bank_name: str = Form(...),
-    acc_type: str = Form(...),
+    bank_name: str = Form(...),  # validated but NOT editable
+    acc_type: str = Form(...),   # validated but NOT editable
     name: str = Form(...),
+    balance: float = Form(...),
 ):
     user = require_user(request)
     if isinstance(user, RedirectResponse):
@@ -92,13 +100,15 @@ async def edit_account(
         user_id=user["user_id"],
         account_id=account_id,
         name=name,
-        bank_name=bank_name,
-        acc_type=acc_type,
+        balance=balance,   # ✅ update balance only
     )
 
     return RedirectResponse("/accounts", status_code=303)
 
 
+# -------------------------
+# DELETE ACCOUNT
+# -------------------------
 @router.post("/delete")
 async def remove_account(
     request: Request,
@@ -107,7 +117,7 @@ async def remove_account(
     user = require_user(request)
     if isinstance(user, RedirectResponse):
         return user
-
+    
     await delete_account(
         user_id=user["user_id"],
         account_id=account_id,

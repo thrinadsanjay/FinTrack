@@ -1,0 +1,67 @@
+table {
+  max-width: 90vw;
+  border-collapse: collapse;
+
+  margin: 10px;
+}
+
+th, td {
+  padding: 5px;
+  border-bottom: 1px solid #b8b9bb;
+  text-align: center;
+  vertical-align: middle;
+}
+
+th {
+  font-weight: 600;
+  background-color: #f3f4f6;
+}
+
+
+
+.accounts-tbody tr td input, 
+.accounts-tbody tr td select {
+  justify-content: center;
+  border: none;
+  background-color: transparent;
+  text-align: center;
+  -webkit-appearance: none;
+  color: black;
+}
+
+.accounts-tbody tr td input.editing, 
+.accounts-tbody tr td select.editing {
+  border: 1px solid black;
+  background-color: white;
+  border-radius: 1px;
+}
+
+.action-btns {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border: none;
+  position: absolute;
+  /* white-space: nowrap; */
+}
+
+.icon-btn {
+  color: white;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 5px;
+  margin: 0 2px;
+}
+
+.edit-btn {background-color: #9ebaf5;}
+.edit-btn:hover {background-color: #7a8bc4;}
+.save-btn {background-color: #16a34a;}
+.save-btn:hover {background-color: #15803d;}
+.delete-btn {background-color: #dc2626;}
+.delete-btn:hover {background-color: #b91c1c;}
+.cancel-btn {background-color: #f3f4f6; color: #dc2626;}
+.cancel-btn:hover {background-color: #fff; color: #b91c1c;}
+
+
+

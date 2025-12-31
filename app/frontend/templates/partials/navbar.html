@@ -5,7 +5,12 @@
         <a href="/" class="{% if active_page == 'dashboard' %}active{% endif %}">
             Dashboard
         </a>
-
+        <a href="/transactions" class="{% if active_page == 'addtransaction' %}active{% endif %}">
+            New Transaction
+        </a>
+        <a href="/transactions/list" class="{% if active_page == 'listtransactions' %}active{% endif %}">
+            Transactions
+        </a>
         <a href="/accounts" class="{% if active_page == 'accounts' %}active{% endif %}">
             Accounts
         </a>

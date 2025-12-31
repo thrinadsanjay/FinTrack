@@ -20,7 +20,6 @@ class AccountBase(BaseModel):
     name: str
     bank_name: str
     type: str
-    opening_balance: float
     balance: float
 
 
@@ -38,7 +37,7 @@ class AccountInDB(AccountBase):
 class AccountCreate(BaseModel):
     bank_name: str
     type: str
-    opening_balance: float
+    balance: float
     name: Optional[str] = None
 
 
@@ -46,3 +45,4 @@ class AccountUpdate(BaseModel):
     name: str
     bank_name: str
     type: str
+    balance: float

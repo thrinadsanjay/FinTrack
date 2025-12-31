@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}New | FinTracker{% endblock %}
+{% block content %}
+<script src="/static/js/transactions.js"></script>
+<h3>Add Transaction</h3>
+
+<form method="post" action="/transactions/add" id="transaction-form">
+
+  <!-- Amount -->
+  <label>Amount</label>
+  <input type="number" step="0.01" name="amount" required>
+
+  <!-- Account -->
+  <label>Account</label>
+  <select name="account_id" id="account" required>
+    <option value="">-- Select Account --</option>
+    {% for acc in accounts %}
+      <option value="{{ acc._id }}">
+        {{ acc.name }} (₹{{ acc.balance }})
+      </option>
+    {% endfor %}
+  </select>
+
+  <!-- Transaction Type -->
+  <label>Type</label>
+  <select name="tx_type" id="tx_type" required>
+    <option value="">-- Select Type --</option>
+    <option value="debit">Expense</option>
+    <option value="credit">Income</option>
+    <option value="transfer">Self Transfer</option>
+  </select>
+
+  <!-- Target Account (only for transfer) -->
+  <div id="target-account-wrapper" style="display:none">
+    <label>Transfer To</label>
+    <select name="target_account_id" id="target_account">
+      <option value="">-- Select Target Account --</option>
+      {% for acc in accounts %}
+        <option value="{{ acc._id }}">
+          {{ acc.name }}
+        </option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <!-- Category -->
+  <label>Category</label>
+  <select name="category_code" id="category" disabled required>
+    <option value="">-- Select Category --</option>
+  </select>
+
+  <!-- Subcategory -->
+  <label>Subcategory</label>
+  <select name="subcategory_code" id="subcategory" disabled required>
+    <option value="">-- Select Subcategory --</option>
+  </select>
+
+  <!-- Description -->
+  <label>Description</label>
+  <input type="text" name="description">
+
+  <button type="submit">Add Transaction</button>
+</form>
+{% endblock %}
+

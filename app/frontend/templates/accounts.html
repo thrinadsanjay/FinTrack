@@ -2,7 +2,7 @@
 {% block title %}Accounts | FinTracker{% endblock %}
 {% block content %}
 {% set local_account_types = account_types %}
-
+<script src="/static/js/accounts.js"></script>
 <h1>Bank Accounts</h1>
 <!-- Add Account -->
 <div class="card">
@@ -14,7 +14,9 @@
     
     <label>Account Type</label>
     <select name="acc_type" id="acc_type" required>
+      <option value="" hidden selected>Select Type</option>
       {% for val, label in local_account_types %}
+        
         <option value="{{ val }}">{{ label }}</option>
       {% endfor %}
     </select>
@@ -23,7 +25,7 @@
     <input type="text" name="name" id="account_name" placeholder="Unique Identifier">
 
     <label>Opening Balance</label>
-    <input type="number" step="0.01" name="opening_balance" value="0" required>
+    <input type="number" step="0.01" name="balance" value="0" required>
     
     {% if error %}
       <p class="error">{{ error }}</p>
@@ -41,87 +43,109 @@
 <table>
   <thead>
     <tr>
-      <th>Name</th>
-      <th>Bank</th>
-      <th>Type</th>
-      <th>Balance</th>
-      <th></th>
+      <th style="width: 80px;">Name</th>
+      <th style="width: 40px;">Bank</th>
+      <th style="width: 40px;">Type</th>
+      <th style="width: 20px;">Balance</th>
+      <!-- <th style="width: 20px;"></th> -->
     </tr>
   </thead>
-  <tbody>
-    {% for acc in accounts %}
-      <tr>
-        <form method="post" action="/accounts/edit">
-          <td>
-            <input type="hidden" name="account_id" value="{{ acc._id }}">
-            <input name="name" value="{{ acc.name }}">
-          </td>
-          <td>
-            <input name="bank_name" value="{{ acc.bank_name }}">
-          </td>
-          <td>
-            <select name="acc_type">
-              {% for val, label in account_types %}
-                <option value="{{ val }}" {% if acc.type == val %}selected{% endif %}>
-                  {{ label }}
-                </option>
-              {% endfor %}
-            </select>
-          </td>
-          <td>₹ {{ acc.balance }}</td>
-          <td>
-            <button type="submit">Save</button>
-        </form>
 
-        <form method="post" action="/accounts/delete" style="display:inline">
-          <input type="hidden" name="account_id" value="{{ acc._id }}">
-          <button type="submit">Delete</button>
-        </form>
-          </td>
-      </tr>
-    {% else %}
-      <tr>
-        <td colspan="5">No accounts yet</td>
-      </tr>
-    {% endfor %}
-  </tbody>
+  <tbody class="accounts-tbody">
+  {% for acc in accounts %}
+  
+  <tr>
+    <form method="post" action="/accounts/edit">
+
+      <!-- Hidden -->
+      <input type="hidden" name="account_id" value="{{ acc._id }}">
+
+      <!-- Name -->
+      <td>
+        <input
+          name="name"
+          value="{{ acc.name }}"
+          readonly
+        >
+        <input type="hidden" name="bank_name" value="{{ acc.name }}">
+      </td>
+
+      <!-- Bank -->
+      <td>
+        <input value="{{ acc.bank_name }}" readonly>
+        <input type="hidden" name="bank_name" value="{{ acc.bank_name }}">
+      </td>
+
+      <!-- Type -->
+      <td>
+        <select disabled>
+          {% for val, label in account_types %}
+            <option value="{{ val }}" {% if acc.type == val %}selected{% endif %}>
+              {{ label }}
+            </option>
+          {% endfor %}
+        </select>
+        <input type="hidden" name="acc_type" value="{{ acc.type }}">
+      </td>
+
+      <!-- Balance -->
+      <td>
+        <input
+          type="number"
+          step="0.01"
+          name="balance"
+          value="{{ acc.balance }}"
+          data-original="{{ acc.balance }}"
+          class="editable"
+          disabled
+        >
+      </td>
+
+      <!-- Actions -->
+      <td class="action-btns">
+
+        <button 
+          type="button" 
+          class="edit-btn icon-btn"
+          title="Edit balance"
+          > <!-- To Remove Edit Option add | style="display:none" -->
+          <i class="fa-solid fa-pen"></i>
+        </button>
+
+        <button
+          type="submit"
+          class="save-btn icon-btn"
+          title="Save changes"
+          style="display:none">
+          <i class="fa-solid fa-check"></i>
+        </button>
+
+        <button
+          type="button"
+          class="cancel-btn icon-btn"
+          title="Cancel editing"
+          style="display: none">
+          <i class="fa-solid fa-ban"></i>
+        </button>
+
+        <button
+          type="submit"
+          formaction="/accounts/delete"
+          class="delete-btn icon-btn"
+          title="Delete account"
+          onclick="return confirm('Delete this account?')">
+          <i class="fa-solid fa-trash"></i>
+        </button>
+      </td>
+
+    </form>
+  </tr>
+  {% else %}
+  <tr>
+    <td colspan="5">No accounts yet</td>
+  </tr>
+  {% endfor %}
+</tbody>
+
 </table>
-
-
-
-<script>
-document.addEventListener("DOMContentLoaded", () => {
-  const bankInput = document.getElementById("bank_name");
-  const typeSelect = document.getElementById("acc_type");
-  const nameInput = document.getElementById("account_name");
-
-  let userEdited = false;
-
-  function generateName() {
-    if (userEdited) return;
-
-    const bank = bankInput.value.trim();
-    const type = typeSelect.value;
-
-    if (!bank || !type) {
-      nameInput.value = "";
-      return;
-    }
-
-    const typeLabel =
-      typeSelect.options[typeSelect.selectedIndex].text;
-
-    nameInput.value = `${bank}-${typeLabel}`;
-  }
-
-  // Detect manual edits
-  nameInput.addEventListener("input", () => {
-    userEdited = true;
-  });
-
-  // Re-generate on change
-  bankInput.addEventListener("input", generateName);
-  typeSelect.addEventListener("change", generateName);
-});
-</script>
 {% endblock %}

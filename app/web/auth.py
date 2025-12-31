@@ -106,11 +106,6 @@ async def callback(request: Request, code: str):
 
     id_token = token["id_token"]
 
-    # ENV = settings.ENV.lower()
-    # if ENV in ("prod", "production"):
-    #     claims = verify_id_token(id_token)  # Prod mode: validate using JWKS
-    # else:
-    #     claims = decode_id_token(id_token) # Dev mode: skip signature validation
     try:
         claims = keycloak_service.verify_id_token(id_token)
     except JWTError as exc:
