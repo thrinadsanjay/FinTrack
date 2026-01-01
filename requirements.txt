@@ -15,5 +15,4 @@ itsdangerous
 passlib[argon2]
 pydantic[email]
 python-multipart
-python-jose[cryptography]
-jwt
+PyJWT[crypto]

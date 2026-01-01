@@ -51,30 +51,32 @@ services:
     networks:
       - ft-net
 
-#  backend:
-#    build:
-#      context: ../backend
-#      dockerfile: Dockerfile
-#    hostname: ft_app
-#    restart: unless-stopped
-#    environment:
-#    - ENV=development
-#    - APP_NAME=FinTracker
-#    - APP_VERSION=0.1.1
-#    - MONGO_URI=mongodb://mongodb:27017
-#    - MONGO_DB_NAME=fintracker
-#    - KEYCLOAK_URL=https://keycloak.sanjay-lab.online/
-#    - KEYCLOAK_REALM=sanjay-lab
-#    - KEYCLOAK_CLIENT_ID=fintracker
-#    ports:
-#      - "8000:8000"
-#    volumes:
-#      - ../backend:/app
-#    depends_on:
- #     - mongodb
- #   networks:
-#      - ft-net
-#    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+  backend:
+    build:
+      context: ../
+      dockerfile: Dockerfile
+    hostname: ft_app
+    restart: unless-stopped
+    environment:
+     - ENV=Dev
+     - APP_NAME=FinTracker
+     - APP_VERSION=0.1
+     - MONGO_URI=mongodb://mongodb
+     - MONGO_DB_NAME=fintracker
+     - KEYCLOAK_URL=https://keycloak.sanjay-lab.online
+     - KEYCLOAK_REALM=sanjay-lab
+     - KEYCLOAK_CLIENT_ID=fintracker
+     - SESSION_SECRET=super-secret
+     - APP_BASE_URL=https://prod-tracker.sanjay-lab.online
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../app:/fintracker/app
+    depends_on:
+     - mongodb
+    networks:
+      - ft-net
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 #  frontend:
 #    build:
