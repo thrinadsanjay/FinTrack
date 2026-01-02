@@ -1,3 +1,9 @@
+#!/bin/bash
+
+mkdir -p ~/.config/systemd/user/
+
+sudo loginctl enable-linger $USER
+
 cat > ~/.config/systemd/user/FinTracker.service <<EOL
 [Unit]
 Description=FinTracker Service
