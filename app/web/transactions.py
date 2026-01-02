@@ -1,13 +1,30 @@
-from bson import ObjectId
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Request, Form, Query
 from fastapi.responses import RedirectResponse, HTMLResponse
-from fastapi.templating import Jinja2Templates
-from app.services.accounts import get_accounts
+
 from app.web.templates import templates
-from app.db.mongo import db
-from app.services.transactions import create_transaction, get_user_transactions, delete_transaction, edit_transaction
+from app.services.accounts import get_accounts
+from app.services.transactions import (
+    create_transaction,
+    get_user_transactions,
+    delete_transaction,
+    restore_transaction,
+    edit_transaction,
+)
+from app.core.guards import (
+    is_within_edit_window,
+    can_restore_today,
+)
 
 router = APIRouter()
+
+EDIT_WINDOW_DAYS = 2
+RESTORE_WINDOW_HOURS = 24
+
+
+# ======================================================
+# ADD TRANSACTION PAGE
+# ======================================================
 
 @router.get("", response_class=HTMLResponse)
 async def transactions_page(request: Request):
@@ -26,6 +43,11 @@ async def transactions_page(request: Request):
             "active_page": "addtransaction",
         },
     )
+
+
+# ======================================================
+# CREATE TRANSACTION
+# ======================================================
 
 @router.post("/add")
 async def add_transaction(
@@ -57,6 +79,10 @@ async def add_transaction(
     return RedirectResponse("/transactions", status_code=303)
 
 
+# ======================================================
+# LIST TRANSACTIONS
+# ======================================================
+
 @router.get("/list", response_class=HTMLResponse)
 async def transactions_list_page(
     request: Request,
@@ -84,6 +110,38 @@ async def transactions_list_page(
     accounts = await get_accounts(user["user_id"])
     account_map = {str(acc["_id"]): acc["name"] for acc in accounts}
 
+    now = datetime.now(timezone.utc)
+
+    # --------------------------------------------------
+    # PRE-COMPUTE UI FLAGS (NO JINJA LOGIC)
+    # --------------------------------------------------
+    for tx in transactions:
+        created_at = tx.get("created_at")
+
+        if created_at and created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+            tx["created_at"] = created_at
+
+        tx["is_deleted"] = tx.get("deleted_at") is not None
+        tx["can_modify"] = (
+            not tx["is_deleted"]
+            and created_at
+            and is_within_edit_window(created_at)
+        )
+
+        tx["can_restore"] = (
+            tx["is_deleted"]
+            and can_restore_today(tx["deleted_at"])
+        )
+
+        tx["lock_time"] = (
+            created_at + timedelta(days=EDIT_WINDOW_DAYS)
+            if created_at else None
+        )
+
+        # Placeholder for future month-close feature
+        tx["is_month_closed"] = False
+
     return templates.TemplateResponse(
         "transactions_list.html",
         {
@@ -104,51 +162,55 @@ async def transactions_list_page(
         },
     )
 
+
+# ======================================================
+# DELETE TRANSACTION
+# ======================================================
+
 @router.post("/delete")
 async def delete_transaction_route(
     request: Request,
     transaction_id: str = Form(...),
-    transfer_id: str | None = Form(None),
 ):
     user = request.session.get("user")
     if not user:
         return RedirectResponse("/login", status_code=303)
-    
-    if not transaction_id and not transfer_id:
-        raise Exception("Missing delete identifier")
 
     await delete_transaction(
         user_id=user["user_id"],
         transaction_id=transaction_id,
-        transfer_id=transfer_id,
         request=request,
     )
 
     return RedirectResponse("/transactions/list", status_code=303)
 
-# @router.get("/edit/{transaction_id}", response_class=HTMLResponse)
-# async def edit_transaction_page(request: Request, transaction_id: str):
-#     user = request.session.get("user")
-#     if not user:
-#         return RedirectResponse("/login", status_code=303)
 
-#     tx = await db.transactions.find_one(
-#         {"_id": ObjectId(transaction_id), "user_id": ObjectId(user["user_id"])}
-#     )
+# ======================================================
+# RESTORE TRANSACTION
+# ======================================================
 
-#     if not tx or tx.get("transfer_id"):
-#         return RedirectResponse("/transactions/list", status_code=303)
+@router.post("/restore")
+async def restore_transaction_route(
+    request: Request,
+    transaction_id: str = Form(...),
+):
+    user = request.session.get("user")
+    if not user:
+        return RedirectResponse("/login", status_code=303)
 
-#     accounts = await get_accounts(user["user_id"])
+    await restore_transaction(
+        user_id=user["user_id"],
+        transaction_id=transaction_id,
+        request=request,
+    )
 
-#     return templates.TemplateResponse(
-#         "transaction_edit.html",
-#         {
-#             "request": request,
-#             "transaction": tx,
-#             "accounts": accounts,
-#         },
-#     )
+    return RedirectResponse("/transactions/list", status_code=303)
+
+
+
+# ======================================================
+# EDIT TRANSACTION
+# ======================================================
 
 @router.post("/edit")
 async def edit_transaction_submit(
@@ -158,6 +220,7 @@ async def edit_transaction_submit(
     amount: float = Form(...),
     category_code: str = Form(...),
     subcategory_code: str = Form(...),
+    description: str = Form(""),
 ):
     user = request.session.get("user")
     if not user:
@@ -170,8 +233,8 @@ async def edit_transaction_submit(
         new_amount=amount,
         new_category_code=category_code,
         new_subcategory_code=subcategory_code,
+        new_description=description,
         request=request,
     )
 
     return RedirectResponse("/transactions/list", status_code=303)
-

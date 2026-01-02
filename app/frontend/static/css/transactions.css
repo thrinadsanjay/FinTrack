@@ -25,3 +25,14 @@
   gap: 0.5rem;
   margin-top: 1rem;
 }
+
+.info-icon {
+  cursor: help;
+  margin-left: 6px;
+  font-size: 0.9em;
+  opacity: 0.8;
+}
+
+.info-icon:hover {
+  opacity: 1;
+}

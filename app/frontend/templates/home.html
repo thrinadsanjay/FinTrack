@@ -39,7 +39,7 @@
   <tbody>
     {% for tx in transactions %}
       <tr>
-        <td>{{ tx.created_at.strftime("%d %b %Y") }}</td>
+        <td>{{ tx.created_at | localtime(request) | datetimeformat }}</td>
         <td>{{ tx.description }}</td>
         <td>{{ tx.type }}</td>
         <td>

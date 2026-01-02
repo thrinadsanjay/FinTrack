@@ -1,7 +1,12 @@
 from fastapi import APIRouter, Request, Form
 from fastapi.responses import RedirectResponse
 from app.web.templates import templates
-from app.services.accounts import get_accounts, create_account, update_account, delete_account
+from app.services.accounts import (
+    get_accounts,
+    create_account,
+    update_account_name,
+    delete_account,
+)
 
 router = APIRouter()
 
@@ -16,12 +21,20 @@ ACCOUNT_TYPES = [
 ]
 
 
+# ======================================================
+# AUTH GUARD
+# ======================================================
+
 def require_user(request: Request):
     user = request.session.get("user")
     if not user:
         return RedirectResponse("/login", status_code=303)
     return user
 
+
+# ======================================================
+# LIST ACCOUNTS
+# ======================================================
 
 @router.get("")
 async def accounts_page(request: Request):
@@ -30,6 +43,7 @@ async def accounts_page(request: Request):
         return user
 
     accounts = await get_accounts(user["user_id"])
+
     return templates.TemplateResponse(
         "accounts.html",
         {
@@ -42,9 +56,10 @@ async def accounts_page(request: Request):
     )
 
 
-# -------------------------
+# ======================================================
 # ADD ACCOUNT
-# -------------------------
+# ======================================================
+
 @router.post("/add")
 async def add_account(
     request: Request,
@@ -63,7 +78,8 @@ async def add_account(
             name=name,
             bank_name=bank_name,
             acc_type=acc_type,
-            balance=balance,   # ✅ single balance field
+            balance=balance,
+            request=request,
         )
     except Exception as e:
         return templates.TemplateResponse(
@@ -80,35 +96,34 @@ async def add_account(
     return RedirectResponse("/accounts", status_code=303)
 
 
-# -------------------------
-# EDIT ACCOUNT
-# -------------------------
-@router.post("/edit")
-async def edit_account(
+# ======================================================
+# RENAME ACCOUNT (NAME ONLY)
+# ======================================================
+
+@router.post("/rename")
+async def rename_account(
     request: Request,
     account_id: str = Form(...),
-    bank_name: str = Form(...),  # validated but NOT editable
-    acc_type: str = Form(...),   # validated but NOT editable
     name: str = Form(...),
-    balance: float = Form(...),
 ):
     user = require_user(request)
     if isinstance(user, RedirectResponse):
         return user
 
-    await update_account(
+    await update_account_name(
         user_id=user["user_id"],
         account_id=account_id,
         name=name,
-        balance=balance,   # ✅ update balance only
+        request=request,
     )
 
     return RedirectResponse("/accounts", status_code=303)
 
 
-# -------------------------
-# DELETE ACCOUNT
-# -------------------------
+# ======================================================
+# DELETE ACCOUNT (SOFT DELETE)
+# ======================================================
+
 @router.post("/delete")
 async def remove_account(
     request: Request,
@@ -117,10 +132,23 @@ async def remove_account(
     user = require_user(request)
     if isinstance(user, RedirectResponse):
         return user
-    
-    await delete_account(
-        user_id=user["user_id"],
-        account_id=account_id,
-    )
+
+    try:
+        await delete_account(
+            user_id=user["user_id"],
+            account_id=account_id,
+            request=request,
+        )
+    except Exception as e:
+        return templates.TemplateResponse(
+            "accounts.html",
+            {
+                "request": request,
+                "error": str(e),
+                "accounts": await get_accounts(user["user_id"]),
+                "account_types": ACCOUNT_TYPES,
+            },
+            status_code=400,
+        )
 
     return RedirectResponse("/accounts", status_code=303)

@@ -8,90 +8,45 @@ networks:
     driver: bridge
 
 x-common: &common
-  env_file:  /home/sanjay/Application/FinTrack/.env
+  env_file:  ../.env
+  networks:
+      - ft-net
 
 services:
+  <<: *common
   mongodb:
     image: mongo:7
     hostname: mongodb
     restart: unless-stopped
-    #command: ["mongod", "--config", "/etc/mongod.conf"]
-    ports:
-      - "27017:27017"
-    environment:
-    - MONGO_INITDB_DATABASE=fintracker
     volumes:
       - mongodb_data:/data/db
-      #- ../db/config/mongod.conf:/etc/mongod.conf:ro
-      #- ../db/certs:/certs:ro
-    networks:
-      - ft-net
 
   mongo-express:
+    <<: *common
     image: mongo-express:latest
     hostname: mongo-express
     restart: unless-stopped
     ports:
       - "8081:8081"
-    environment:
-      - ME_CONFIG_MONGODB_SERVER=mongodb
-      - ME_CONFIG_MONGODB_PORT=27017
-      - ME_CONFIG_OPTIONS_EDITORTHEME=ambiance
-      - ME_CONFIG_BASICAUTH_USERNAME=admin
-      - ME_CONFIG_BASICAUTH_PASSWORD=admin
-      # ME_CONFIG_MONGODB_ENABLE_ADMIN: "true"
-      # ME_CONFIG_MONGODB_SERVER: mongodb
-      # ME_CONFIG_MONGODB_SSL: "true"
-      # ME_CONFIG_MONGODB_SSL_CA_FILE: /certs/ca.pem
-      # ME_CONFIG_MONGODB_SSL_CERT_FILE: /certs/client-cert.pem
     volumes:
       - ../db/certs:/certs:ro
     depends_on:
       - mongodb
-    networks:
-      - ft-net
 
   backend:
+    <<: *common
     build:
       context: ../
       dockerfile: Dockerfile
     hostname: ft_app
     restart: unless-stopped
-    environment:
-     - ENV=Dev
-     - APP_NAME=FinTracker
-     - APP_VERSION=0.1
-     - MONGO_URI=mongodb://mongodb
-     - MONGO_DB_NAME=fintracker
-     - KEYCLOAK_URL=https://keycloak.sanjay-lab.online
-     - KEYCLOAK_REALM=sanjay-lab
-     - KEYCLOAK_CLIENT_ID=fintracker
-     - SESSION_SECRET=super-secret
-     - APP_BASE_URL=https://prod-tracker.sanjay-lab.online
     ports:
       - "8000:8000"
     volumes:
       - ../app:/fintracker/app
     depends_on:
      - mongodb
-    networks:
-      - ft-net
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-
-#  frontend:
-#    build:
-#      context: ../frontend
-#      dockerfile: Dockerfile
-#    hostname: ft_web
-#    restart: unless-stopped
-#    ports:
-#      - "8080:80"
-#    # volumes:
-#    #   - "../frontend/app:/app"
-#    depends_on:
-#      - backend
-#    networks:
-#      - ft-net
 
 
 

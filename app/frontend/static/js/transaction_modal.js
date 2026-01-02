@@ -7,6 +7,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const amountInp = document.getElementById("edit-amount");
   const categorySel = document.getElementById("edit-category");
   const subcategorySel = document.getElementById("edit-subcategory");
+  const descriptionInp = document.getElementById("edit-description");
 
   function reset(sel, label) {
     sel.innerHTML = `<option value="">${label}</option>`;
@@ -57,6 +58,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
       txId.value = btn.dataset.id;
       amountInp.value = btn.dataset.amount;
+      descriptionInp.value = btn.dataset.description || "";
+      //descriptionInp.value = btn.dataset.description;
 
       // Populate accounts
       accountSel.innerHTML = "";

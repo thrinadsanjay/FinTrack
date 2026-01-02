@@ -70,6 +70,7 @@ SYSTEM_CATEGORIES = [
                     {"code": "water", "name": "Water"},
                     {"code": "internet", "name": "Internet"},
                     {"code": "gas", "name": "Gas"},
+                    {"code": "creditcard", "name": "Credit Card"},
                     {"code": "mobile", "name": "Mobile Recharge"},
                 ],
             },
@@ -80,6 +81,7 @@ SYSTEM_CATEGORIES = [
                     {"code": "rent", "name": "Rent"},
                     {"code": "maintenance", "name": "Maintenance"},
                     {"code": "property_tax", "name": "Property Tax"},
+                    {"code": "maid", "name": "Maid Salary"},
                 ],
             },
             {

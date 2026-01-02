@@ -83,7 +83,7 @@ async def get_recent_transactions(user_id: str, limit: int = 5):
 
     cursor = (
         db.transactions
-        .find({"user_id": uid})
+        .find({"user_id": uid, "deleted_at": None })
         .sort("created_at", -1)
         .limit(limit)
     )
