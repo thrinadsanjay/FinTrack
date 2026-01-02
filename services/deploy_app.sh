@@ -1,5 +1,14 @@
 #!/bin/bash
 
+cat >> ~/.bashrc < EOL
+export XDG_RUNTIME_DIR=/run/user/$(id -u)
+export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+alias BL='journalctl --user -f -u FinTracker'
+alias BR='systemctl --user restart FinTracker'
+EOL
+
+source ~/.bashrc
+
 mkdir -p ~/.config/systemd/user/
 
 sudo loginctl enable-linger $USER
@@ -31,7 +40,3 @@ systemctl --user daemon-reload
 systemctl --user enable FinTracker
 systemctl --user start FinTracker
 
-cat >> ~/.bashrc < EOL
-alias BL='journalctl --user -f -u FinTracker'
-alias BR='systemctl --user restart FinTracker'
-EOL
