@@ -4,7 +4,6 @@ psycopg2-binary
 python-dotenv
 pydantic
 requests
-python-jose
 httpx
 pydantic-settings
 cachetools
@@ -16,3 +15,5 @@ passlib[argon2]
 pydantic[email]
 python-multipart
 PyJWT[crypto]
+#python-jose[cryptography]
+#python-jose
