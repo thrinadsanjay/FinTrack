@@ -8,13 +8,14 @@ networks:
     driver: bridge
 
 x-common: &common
-  env_file:  ../.env
+  env_file: 
+      - ../.env
   networks:
       - ft-net
 
 services:
-  <<: *common
   mongodb:
+    <<: *common
     image: mongo:7
     hostname: mongodb
     restart: unless-stopped
