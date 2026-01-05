@@ -72,24 +72,60 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 });
 
-const targetWrapper = document.getElementById("target-account-wrapper");
-const targetSelect = document.getElementById("target_account");
-const accountSelect = document.getElementById("account");
+  // ----------------------------------
+  // Load To bank in Slef Trasfer Mode
+  // ----------------------------------
 
-typeSelect.addEventListener("change", () => {
-  if (typeSelect.value === "transfer") {
-    targetWrapper.style.display = "block";
-    targetSelect.required = true;
-  } else {
-    targetWrapper.style.display = "none";
-    targetSelect.required = false;
-    targetSelect.value = "";
+document.addEventListener("DOMContentLoaded", () => {
+  const txType = document.getElementById("tx_type");
+  const fromAccount = document.getElementById("account");
+  const targetWrapper = document.getElementById("target-account-wrapper");
+  const targetAccount = document.getElementById("target_account");
+  const category = document.getElementById("category");
+  const subcategory = document.getElementById("subcategory");
+
+  function updateTransferUI() {
+    if (txType.value === "transfer") {
+      targetWrapper.classList.remove("tohidden");
+      targetAccount.required = true;
+
+      // Disable categories for transfer
+      category.disabled = true;
+      subcategory.disabled = true;
+      category.value = "";
+      subcategory.value = "";
+
+      // Hide same account
+      const fromValue = fromAccount.value;
+      Array.from(targetAccount.options).forEach(opt => {
+        if (!opt.value) return;
+        opt.hidden = opt.value === fromValue;
+      });
+
+    } else {
+      targetWrapper.classList.add("tohidden");
+      targetAccount.required = false;
+      targetAccount.value = "";
+
+      // Re-enable category flow
+      category.disabled = false;
+
+      // Reset & disable subcategory until category is selected
+      subcategory.value = "";
+      subcategory.disabled = true;
+
+      // Trigger reload of categories when switching back
+      category.dispatchEvent(new Event("change"));
+    }
   }
-});
 
-accountSelect.addEventListener("change", () => {
-  const source = accountSelect.value;
-  [...targetSelect.options].forEach(opt => {
-    opt.disabled = opt.value === source && opt.value !== "";
+  txType.addEventListener("change", updateTransferUI);
+  fromAccount.addEventListener("change", updateTransferUI);
+
+  targetAccount.addEventListener("change", () => {
+    if (targetAccount.value === fromAccount.value) {
+      alert("From and To accounts cannot be the same");
+      targetAccount.value = "";
+    }
   });
 });

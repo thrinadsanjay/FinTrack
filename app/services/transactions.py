@@ -218,25 +218,38 @@ async def get_user_transactions(
     result = []
 
     for tx in txs:
+        # -----------------------------
+        # TRANSFER (group in + out)
+        # -----------------------------
         if tx.get("transfer_id"):
             tid = str(tx["transfer_id"])
+
             if tid not in grouped:
                 grouped[tid] = {
                     "transfer_id": tid,
                     "type": "transfer",
-                    "amount": tx["amount"],
-                    "category": tx["category"]["name"],
-                    "subcategory": tx["subcategory"]["name"],
+                    "amount": abs(tx["amount"]),
                     "created_at": tx["created_at"],
                     "from_account": None,
                     "to_account": None,
+
+                    # ✅ display-only fields
+                    "category_display": tx.get("category", {}).get("name"),
+                    "subcategory_display": tx.get("subcategory", {}).get("name"),
+                    "description": tx.get("description"),
                 }
 
             if tx["type"] == "transfer_out":
                 grouped[tid]["from_account"] = tx["account_id"]
             else:
                 grouped[tid]["to_account"] = tx["account_id"]
+
+        # -----------------------------
+        # NORMAL TRANSACTIONS
+        # -----------------------------
         else:
+            tx["category_display"] = tx.get("category", {}).get("name")
+            tx["subcategory_display"] = tx.get("subcategory", {}).get("name")
             result.append(tx)
 
     result.extend(grouped.values())

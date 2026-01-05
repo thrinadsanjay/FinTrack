@@ -1,8 +1,6 @@
 {% extends "base.html" %}
 {% block title %}New | FinTracker{% endblock %}
 {% block content %}
-<script src="/static/js/transactions.js"></script>
-
 <h3>Add Transaction</h3>
 
 <form method="post" action="/transactions/add" id="transaction-form">
@@ -32,7 +30,7 @@
   </select>
 
   <!-- Target Account (only for transfer) -->
-  <div id="target-account-wrapper" style="display:none">
+  <div id="target-account-wrapper"  class="tohidden">
     <label>Transfer To</label>
     <select name="target_account_id" id="target_account">
       <option value="">-- Select Target Account --</option>
@@ -62,5 +60,7 @@
 
   <button type="submit">Add Transaction</button>
 </form>
+
+<script src="/static/js/transactions.js" defer></script>
 {% endblock %}
 

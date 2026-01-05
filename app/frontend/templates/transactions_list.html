@@ -78,6 +78,7 @@
       <th>Type</th>
       <th>Account</th>
       <th>Category</th>
+      <th>SubCategory</th>
       <th>Amount</th>
       <th></th>
     </tr>
@@ -106,7 +107,15 @@
       {% endif %}
 
       <!-- CATEGORY -->
-      <td>{{ tx.category.name }} / {{ tx.subcategory.name }}</td>
+
+      
+    <td>{{ tx.category_display or "—" }}</td>
+    {% if tx.category_display %}
+      <td>{{ tx.subcategory_display or "-" }}</td>
+    {% endif %}
+    
+      {# <td>{{ tx.category.name }} </td>
+      <td>{{ tx.subcategory.name }}</td> #}
 
       <!-- AMOUNT -->
       <td>

@@ -36,3 +36,5 @@
 .info-icon:hover {
   opacity: 1;
 }
+
+.tohidden { display: none; }
