@@ -43,10 +43,10 @@
         <td>{{ tx.description }}</td>
         <td>{{ tx.type }}</td>
         <td>
-          {% if tx.type == "expense" %}
-            <span class="red">-₹{{ tx.amount }}</span>
-          {% else %}
-            <span class="green">₹{{ tx.amount }}</span>
+          {% if tx.type in ["debit", "transfer_out"] %}
+            <span style="color:red">- ₹{{ tx.amount }}</span>
+          {% elif tx.type in ["credit", "transfer_in"] %}
+            <span style="color:green">+ ₹{{ tx.amount }}</span>
           {% endif %}
         </td>
       </tr>

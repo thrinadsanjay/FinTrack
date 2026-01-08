@@ -129,3 +129,13 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 });
+
+
+// Recurring Transactions model
+
+const checkbox = document.getElementById("isRecurring");
+const modal = document.getElementById("recurringModal");
+
+checkbox.addEventListener("change", () => {
+  modal.style.display = checkbox.checked ? "block" : "none";
+});

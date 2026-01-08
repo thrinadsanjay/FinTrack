@@ -119,12 +119,13 @@
 
       <!-- AMOUNT -->
       <td>
-        {% if tx.type in ["debit", "transfer"] %}
-          <span style="color:red">- ₹{{ tx.amount }}</span>
-        {% else %}
+        {% if tx.type == "debit" %}
+          <span style="color:red">- ₹{{ tx.amount }}</span>         
+        {% elif tx.type == "credit" %}
           <span style="color:green">+ ₹{{ tx.amount }}</span>
+        {% elif tx.type == "transfer" %}
+          <span style="color:blue">₹{{ tx.amount }}</span>
         {% endif %}
-        
       </td>
 
       <!-- ACTIONS -->

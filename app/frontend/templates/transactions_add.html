@@ -58,8 +58,45 @@
   <label>Description</label>
   <input type="text" name="description">
 
+  <!--Recurring Transaction-->
+  <div class="form-check mt-2">
+    <input class="form-check-input" type="checkbox" id="isRecurring">
+    <label class="form-check-label">
+      Recurring Transaction
+    </label>
+  </div>
+
+
   <button type="submit">Add Transaction</button>
 </form>
+
+<div id="recurringModal" class="modal">
+  <div class="modal-content">
+    <h5>Recurring Details</h5>
+
+    <label>Frequency</label>
+    <select name="frequency">
+      <option value="monthly">Monthly</option>
+      <option value="weekly">Weekly</option>
+      <option value="yearly">Yearly</option>
+    </select>
+
+    <label>Repeat Every</label>
+    <input type="number" name="interval" value="1" min="1">
+
+    <label>Start Date</label>
+    <input type="date" name="start_date">
+
+    <label>End Date (Optional)</label>
+    <input type="date" name="end_date">
+
+    <label>
+      <input type="checkbox" name="auto_post" checked>
+      Auto-create transactions
+    </label>
+  </div>
+</div>
+
 
 <script src="/static/js/transactions.js" defer></script>
 {% endblock %}
