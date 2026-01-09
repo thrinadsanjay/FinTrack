@@ -1,63 +1,116 @@
+"""
+User management service.
+
+Responsibilities:
+- Create local and OAuth users
+- Fetch users
+- Update login metadata
+- Reset passwords
+- Soft delete users
+- Emit audit logs
+
+Must NOT:
+- Handle sessions
+- Render templates
+- Perform auth redirects
+"""
+
 from bson import ObjectId
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
+
 from app.db.mongo import db
 from app.core.security import hash_password
-from app.models.user import UserInDB
+from app.services.audit import audit_log
 
 
-# ---------- CREATE USERS ----------
+# ======================================================
+# HELPERS
+# ======================================================
+
+def _now():
+    return datetime.now(timezone.utc)
+
+
+# ======================================================
+# CREATE USERS
+# ======================================================
 
 async def create_local_user(
+    *,
     username: str,
     password: str,
     email: str,
     is_admin: bool = False,
     must_reset_password: bool = False,
-) -> UserInDB:
-    user = UserInDB(
-        username=username,
-        auth_provider="local",
-        password_hash=hash_password(password),
-        email=email,
-        is_admin=is_admin,
-        must_reset_password=must_reset_password,
-        created_at=datetime.utcnow(),
+):
+    user = {
+        "username": username,
+        "auth_provider": "local",
+        "password_hash": hash_password(password),
+        "email": email,
+        "is_admin": is_admin,
+        "is_active": True,
+        "must_reset_password": must_reset_password,
+        "created_at": _now(),
+        "last_login_at": None,
+        "deleted_at": None,
+    }
+
+    result = await db.users.insert_one(user)
+    user["_id"] = result.inserted_id
+
+    await audit_log(
+        action="USER_CREATED_LOCAL",
+        user={"user_id": str(result.inserted_id), "username": username},
+        meta={"email": email},
     )
 
-    await db.users.insert_one(user.model_dump(exclude={"id"}))
     return user
 
 
 async def create_oauth_user(
+    *,
     oauth_sub: str,
     email: str | None,
     username: str | None,
 ):
     user = {
         "oauth_sub": oauth_sub,
-        "email": email,
-        "username": username,
         "keycloak_id": oauth_sub,
         "auth_provider": "keycloak",
+        "username": username,
+        "email": email,
         "is_admin": False,
         "is_active": True,
         "must_reset_password": False,
-        "created_at": datetime.utcnow(),
-        "last_login_at": datetime.utcnow(),
+        "created_at": _now(),
+        "last_login_at": _now(),
+        "deleted_at": None,
     }
-    res = await db.users.insert_one(user)
-    user["_id"] = res.inserted_id
+
+    result = await db.users.insert_one(user)
+    user["_id"] = result.inserted_id
+
+    await audit_log(
+        action="USER_CREATED_OAUTH",
+        user={"user_id": str(result.inserted_id), "username": username},
+        meta={"email": email},
+    )
+
     return user
 
 
-# ---------- FIND USERS ----------
+# ======================================================
+# FETCH USERS
+# ======================================================
 
 async def get_local_user(username: str) -> Optional[dict]:
     return await db.users.find_one({
         "username": username,
         "auth_provider": "local",
         "is_active": True,
+        "deleted_at": None,
     })
 
 
@@ -66,46 +119,69 @@ async def get_oauth_user_by_sub(oauth_sub: str) -> Optional[dict]:
         "oauth_sub": oauth_sub,
         "auth_provider": "keycloak",
         "is_active": True,
+        "deleted_at": None,
     })
 
-# ---------- UPDATE LAST LOGIN ----------
+
+async def list_users() -> list[dict]:
+    cursor = db.users.find({"deleted_at": None})
+    return [user async for user in cursor]
+
+
+# ======================================================
+# LOGIN METADATA
+# ======================================================
 
 async def update_last_login(user_id: str):
     await db.users.update_one(
-        {"_id": user_id},
-        {"$set": {"last_login_at": datetime.utcnow()}}
+        {"_id": ObjectId(user_id)},
+        {"$set": {"last_login_at": _now()}}
     )
+
 
 async def update_oauth_last_login(user_id: str):
-    await db.users.update_one(
-        {"_id": ObjectId(user_id)},
-        {"$set": {"last_login_at": datetime.utcnow()}}
-    )
+    await update_last_login(user_id)
 
-# ---------- LIST USERS ----------
-async def list_users() -> list[dict]:
-    users = []
-    cursor = db.users.find()
-    async for user in cursor:
-        users.append(user)
-    return users
 
-# ---------- DELETE USERS ----------
-async def delete_user(user_id: str):
-    await db.users.delete_one({"_id": user_id}) 
+# ======================================================
+# PASSWORD RESET
+# ======================================================
 
-# ---------- RESET PASSWORD ----------
 async def update_user_password(user_id: str, new_password: str):
     result = await db.users.update_one(
-        {"_id": ObjectId(user_id)},   # 👈 FIX
+        {"_id": ObjectId(user_id), "deleted_at": None},
         {
             "$set": {
                 "password_hash": hash_password(new_password),
                 "must_reset_password": False,
-                "updated_at": datetime.utcnow(),
+                "updated_at": _now(),
             }
         },
     )
 
     if result.matched_count == 0:
         raise RuntimeError("User not found for password update")
+
+    await audit_log(
+        action="USER_PASSWORD_RESET",
+        user={"user_id": user_id},
+    )
+
+
+# ======================================================
+# SOFT DELETE USER
+# ======================================================
+
+async def delete_user(user_id: str):
+    result = await db.users.update_one(
+        {"_id": ObjectId(user_id), "deleted_at": None},
+        {"$set": {"deleted_at": _now(), "is_active": False}},
+    )
+
+    if result.matched_count == 0:
+        raise RuntimeError("User not found or already deleted")
+
+    await audit_log(
+        action="USER_DELETED",
+        user={"user_id": user_id},
+    )

@@ -1,23 +1,37 @@
-from pydantic import BaseModel, Field
-from typing import Optional
+"""
+Transaction-related API schemas.
+
+Used for:
+- Recurring transaction creation via API
+- Future scheduler integrations
+
+NOT used directly by Web (HTML forms).
+"""
+
 from datetime import date
-from bson import ObjectId
+from typing import Optional
+from pydantic import BaseModel, Field
+
 
 class RecurringTransactionCreate(BaseModel):
-    name: str
+    """
+    Schema for creating a recurring transaction.
+    """
     amount: float
-    category_id: str
-    transaction_type: str  # debit / credit
+    tx_type: str  # credit / debit
 
-    frequency: str         # daily / weekly / monthly / yearly
-    interval: int = 1
+    category_code: str
+    subcategory_code: str
+
+    description: Optional[str] = None
+
+    # -----------------------------
+    # Recurrence rules
+    # -----------------------------
+    frequency: str          # daily / weekly / monthly / yearly
+    interval: int = Field(default=1, ge=1)
+
     start_date: date
     end_date: Optional[date] = None
-    auto_post: bool = True
 
-class RecurringTransactionDB(RecurringTransactionCreate):
-    id: ObjectId = Field(alias="_id")
-    user_id: str
-    next_run: date
-    last_run: Optional[date] = None
-    is_active: bool = True
+    auto_post: bool = True

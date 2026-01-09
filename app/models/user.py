@@ -1,8 +1,20 @@
+"""
+Internal User database model.
+
+Used by:
+- services/users.py
+- startup admin creation
+
+NOT used directly by routers.
+"""
+
 from datetime import datetime
 from typing import Optional, Literal
-from pydantic import BaseModel, Field, model_validator
+
 from bson import ObjectId
-from app.models.account import PyObjectId
+from pydantic import BaseModel, Field, model_validator
+
+from app.models.base import PyObjectId  # 👈 shared base
 
 
 AuthProvider = Literal["local", "keycloak"]
@@ -16,19 +28,28 @@ class UserInDB(BaseModel):
 
     auth_provider: AuthProvider
 
-    # ✅ AUTH-SPECIFIC FIELDS
-    password_hash: Optional[str] = None     # ← REQUIRED for local users
-    keycloak_id: Optional[str] = None        # ← REQUIRED for keycloak users
+    # --------------------------------------------------
+    # AUTH-SPECIFIC FIELDS
+    # --------------------------------------------------
+    password_hash: Optional[str] = None   # required for local users
+    keycloak_id: Optional[str] = None     # required for keycloak users
 
-    # ✅ FLAGS
+    # --------------------------------------------------
+    # FLAGS
+    # --------------------------------------------------
     is_admin: bool = False
     is_active: bool = True
     must_reset_password: bool = False
 
-    # ✅ TIMESTAMPS
+    # --------------------------------------------------
+    # TIMESTAMPS
+    # --------------------------------------------------
     created_at: datetime = Field(default_factory=datetime.utcnow)
     last_login_at: Optional[datetime] = None
 
+    # --------------------------------------------------
+    # VALIDATION
+    # --------------------------------------------------
     @model_validator(mode="after")
     def validate_auth_provider(self):
         if self.auth_provider == "local" and not self.password_hash:

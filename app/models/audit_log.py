@@ -1,8 +1,18 @@
+"""
+Internal audit log model.
+
+NOTE:
+- Not currently used by services
+- Provided for future admin / reporting APIs
+"""
+
 from datetime import datetime
 from typing import Optional, Dict, Any
-from pydantic import BaseModel, Field
+
 from bson import ObjectId
-from app.models.account import PyObjectId
+from pydantic import BaseModel, Field
+
+from app.models.base import PyObjectId
 
 
 class AuditLogInDB(BaseModel):
@@ -13,13 +23,11 @@ class AuditLogInDB(BaseModel):
     auth_provider: Optional[str] = None
 
     action: str
-    resource: Optional[str] = None
 
-    ip_address: Optional[str] = None
+    ip: Optional[str] = None
     user_agent: Optional[str] = None
 
-    meta: Dict[str, Any] = {}
-
+    meta: Dict[str, Any] = Field(default_factory=dict)
     timestamp: datetime
 
     class Config:

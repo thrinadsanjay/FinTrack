@@ -10,8 +10,14 @@ async def init_indexes():
     await db.audit_logs.create_index([("user_id", 1)])
     await db.audit_logs.create_index({ "action": 1 })
     await db.audit_logs.create_index([("timestamp", -1)])
+    # await db.audit_logs.createIndex({ user_id: 1, timestamp: -1 })
+    # await db.audit_logs.createIndex({ action: 1, timestamp: -1 })
+
     # Transactions
     await db.transactions.create_index([("user_id", 1)])
     await db.transactions.create_index([("account_id", 1)])
     await db.transactions.create_index([("created_at", -1)])
+
+
+    
     

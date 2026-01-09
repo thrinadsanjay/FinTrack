@@ -1,19 +1,28 @@
-from datetime import timezone
+"""
+Time & timezone utilities.
+
+Used by:
+- Web layer (templates, UI)
+- Services (date range conversion)
+"""
+
+from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 DEFAULT_TZ = "Asia/Kolkata"
 
-def get_user_timezone(request):
+
+def get_user_timezone(request) -> ZoneInfo:
     """
-    Returns user's timezone as ZoneInfo
+    Returns user's timezone from session or default.
     """
     tz_name = request.session.get("timezone", DEFAULT_TZ)
     return ZoneInfo(tz_name)
 
 
-def utc_to_local(dt, user_tz):
+def utc_to_local(dt, user_tz: ZoneInfo):
     """
-    Convert UTC datetime → user timezone
+    Convert UTC datetime → user timezone.
     """
     if dt is None:
         return None
@@ -23,7 +32,11 @@ def utc_to_local(dt, user_tz):
 
     return dt.astimezone(user_tz)
 
-def local_date_range_to_utc(date_from, date_to, user_tz):
+
+def local_date_range_to_utc(date_from: str, date_to: str, user_tz: ZoneInfo):
+    """
+    Convert local date range → UTC datetime range.
+    """
     start = datetime.fromisoformat(date_from).replace(tzinfo=user_tz)
     end = datetime.fromisoformat(date_to).replace(tzinfo=user_tz)
 
@@ -32,16 +45,18 @@ def local_date_range_to_utc(date_from, date_to, user_tz):
         end.astimezone(timezone.utc),
     )
 
+
+# ------------------------------------------------------
+# TEMPLATE HELPERS
+# ------------------------------------------------------
+
 def localtime(dt, request):
-    user_tz = get_user_timezone(request)
-    return utc_to_local(dt, user_tz)
+    return utc_to_local(dt, get_user_timezone(request))
+
 
 def datetimeformat(value, fmt="%d-%m-%Y %I:%M %p"):
-    if value is None:
-        return ""
-    return value.strftime(fmt)
+    return value.strftime(fmt) if value else ""
+
 
 def dateformat(value, fmt="%d-%m-%Y"):
-    if value is None:
-        return ""
-    return value.strftime(fmt)
+    return value.strftime(fmt) if value else ""

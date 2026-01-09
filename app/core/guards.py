@@ -1,15 +1,39 @@
+"""
+Time-based guard utilities.
+
+Responsibilities:
+- Enforce edit window rules
+- Enforce restore window rules
+- Support month-close logic
+
+Must remain:
+- Pure
+- Stateless
+- Side-effect free
+"""
+
 from datetime import datetime, timedelta, timezone
 
-EDIT_WINDOW_DAYS = 2  # today + yesterday
-RESTORE_WINDOW_HOURS = 24
+# ======================================================
+# CONFIGURABLE WINDOWS
+# ======================================================
 
-now = datetime.now(timezone.utc)
+EDIT_WINDOW_DAYS = 2        # today + yesterday
+RESTORE_WINDOW_HOURS = 24  # rolling window
 
-def is_within_edit_window(dt):
+
+# ======================================================
+# EDIT WINDOW
+# ======================================================
+
+def is_within_edit_window(dt) -> bool:
+    """
+    Returns True if datetime is within editable window.
+    """
     if not dt:
         return False
 
-    # ✅ Normalize to UTC-aware
+    # Normalize to UTC-aware
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
 
@@ -17,16 +41,34 @@ def is_within_edit_window(dt):
     return dt >= cutoff
 
 
-def is_month_closed(dt_utc, closed_months):
+# ======================================================
+# MONTH CLOSE
+# ======================================================
+
+def is_month_closed(dt_utc, closed_months: list[dict]) -> bool:
+    """
+    Checks whether the given datetime falls in a closed month.
+    """
     return any(
         m["year"] == dt_utc.year and m["month"] == dt_utc.month
         for m in closed_months
     )
 
-def can_restore_today(deleted_at_utc):
-    if deleted_at_utc is None:
+
+# ======================================================
+# RESTORE WINDOW
+# ======================================================
+
+def can_restore_today(deleted_at_utc) -> bool:
+    """
+    Returns True if a transaction can be restored
+    within the rolling restore window.
+    """
+    if not deleted_at_utc:
         return False
 
-    now = datetime.now(timezone.utc)
-    return deleted_at_utc.date() == now.date()
+    if deleted_at_utc.tzinfo is None:
+        deleted_at_utc = deleted_at_utc.replace(tzinfo=timezone.utc)
 
+    now = datetime.now(timezone.utc)
+    return now - deleted_at_utc <= timedelta(hours=RESTORE_WINDOW_HOURS)

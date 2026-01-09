@@ -1,3 +1,8 @@
+"""
+UI controller for transactions.
+Handles forms, templates, redirects.
+"""
+
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Request, Form, Query
 from fastapi.responses import RedirectResponse, HTMLResponse
@@ -11,20 +16,12 @@ from app.services.transactions import (
     restore_transaction,
     edit_transaction,
 )
-from app.core.guards import (
-    is_within_edit_window,
-    can_restore_today,
-)
+from app.core.guards import is_within_edit_window, can_restore_today
 
 router = APIRouter()
 
 EDIT_WINDOW_DAYS = 2
-RESTORE_WINDOW_HOURS = 24
 
-
-# ======================================================
-# ADD TRANSACTION PAGE
-# ======================================================
 
 @router.get("", response_class=HTMLResponse)
 async def transactions_page(request: Request):
@@ -45,10 +42,6 @@ async def transactions_page(request: Request):
     )
 
 
-# ======================================================
-# CREATE TRANSACTION
-# ======================================================
-
 @router.post("/add")
 async def add_transaction(
     request: Request,
@@ -59,10 +52,30 @@ async def add_transaction(
     amount: float = Form(...),
     description: str = Form(""),
     target_account_id: str | None = Form(None),
+    is_recurring: bool = Form(False),
+    frequency: str | None = Form(None),
+    interval: int = Form(1),
+    start_date: str | None = Form(None),
+    end_date: str | None = Form(None),
 ):
     user = request.session.get("user")
     if not user:
         return RedirectResponse("/login", status_code=303)
+
+    recurring = None
+    if is_recurring:
+        recurring = {
+            "frequency": frequency,
+            "interval": interval,
+            "start_date": (
+                datetime.fromisoformat(start_date).date()
+                if start_date else None
+            ),
+            "end_date": (
+                datetime.fromisoformat(end_date).date()
+                if end_date else None
+            ),
+        }
 
     await create_transaction(
         user_id=user["user_id"],
@@ -73,11 +86,11 @@ async def add_transaction(
         category_code=category_code,
         subcategory_code=subcategory_code,
         description=description,
+        recurring=recurring,
         request=request,
     )
 
     return RedirectResponse("/transactions", status_code=303)
-
 
 # ======================================================
 # LIST TRANSACTIONS
@@ -110,11 +123,11 @@ async def transactions_list_page(
     accounts = await get_accounts(user["user_id"])
     account_map = {str(acc["_id"]): acc["name"] for acc in accounts}
 
+    # --------------------------------------------------
+    # UI FLAGS (NO JINJA LOGIC)
+    # --------------------------------------------------
     now = datetime.now(timezone.utc)
 
-    # --------------------------------------------------
-    # PRE-COMPUTE UI FLAGS (NO JINJA LOGIC)
-    # --------------------------------------------------
     for tx in transactions:
         created_at = tx.get("created_at")
 
@@ -139,8 +152,7 @@ async def transactions_list_page(
             if created_at else None
         )
 
-        # Placeholder for future month-close feature
-        tx["is_month_closed"] = False
+        tx["is_month_closed"] = False  # future feature
 
     return templates.TemplateResponse(
         "transactions_list.html",
@@ -162,79 +174,6 @@ async def transactions_list_page(
         },
     )
 
-
-# ======================================================
-# DELETE TRANSACTION
-# ======================================================
-
-@router.post("/delete")
-async def delete_transaction_route(
-    request: Request,
-    transaction_id: str = Form(...),
-):
-    user = request.session.get("user")
-    if not user:
-        return RedirectResponse("/login", status_code=303)
-
-    await delete_transaction(
-        user_id=user["user_id"],
-        transaction_id=transaction_id,
-        request=request,
-    )
-
-    return RedirectResponse("/transactions/list", status_code=303)
-
-
-# ======================================================
-# RESTORE TRANSACTION
-# ======================================================
-
-@router.post("/restore")
-async def restore_transaction_route(
-    request: Request,
-    transaction_id: str = Form(...),
-):
-    user = request.session.get("user")
-    if not user:
-        return RedirectResponse("/login", status_code=303)
-
-    await restore_transaction(
-        user_id=user["user_id"],
-        transaction_id=transaction_id,
-        request=request,
-    )
-
-    return RedirectResponse("/transactions/list", status_code=303)
-
-
-
-# ======================================================
-# EDIT TRANSACTION
-# ======================================================
-
-@router.post("/edit")
-async def edit_transaction_submit(
-    request: Request,
-    transaction_id: str = Form(...),
-    account_id: str = Form(...),
-    amount: float = Form(...),
-    category_code: str = Form(...),
-    subcategory_code: str = Form(...),
-    description: str = Form(""),
-):
-    user = request.session.get("user")
-    if not user:
-        return RedirectResponse("/login", status_code=303)
-
-    await edit_transaction(
-        user_id=user["user_id"],
-        transaction_id=transaction_id,
-        new_account_id=account_id,
-        new_amount=amount,
-        new_category_code=category_code,
-        new_subcategory_code=subcategory_code,
-        new_description=description,
-        request=request,
-    )
-
-    return RedirectResponse("/transactions/list", status_code=303)
+@router.get("", response_class=HTMLResponse)
+async def transactions_default(request: Request):
+    return await transactions_list_page(request)

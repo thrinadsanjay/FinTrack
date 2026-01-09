@@ -15,5 +15,6 @@ passlib[argon2]
 pydantic[email]
 python-multipart
 PyJWT[crypto]
-#python-jose[cryptography]
-#python-jose
+python-jose[cryptography]
+python-dateutil
+apscheduler

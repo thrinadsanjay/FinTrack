@@ -1,52 +1,43 @@
+"""
+JSON API for system categories.
+Read-only endpoints.
+"""
+
 from fastapi import APIRouter, Query, HTTPException
-from app.db.mongo import db
+from app.services.categories import (
+    get_categories_by_type,
+    get_subcategories,
+)
 
 router = APIRouter()
 
+
 @router.get("")
-async def get_categories(
+async def list_categories(
     type: str = Query(..., regex="^(credit|debit|transfer)$"),
 ):
-    cursor = db.categories.find(
-        {
-            "type": type,
-            "is_system": True,
-        },
-        {
-            "_id": 0,
-            "code": 1,
-            "name": 1,
-        },
-    ).sort("name", 1)
-
-    categories = await cursor.to_list(length=None)
+    categories = await get_categories_by_type(type)
 
     return {
         "type": type,
         "categories": categories,
     }
 
+
 @router.get("/{category_code}/subcategories")
-async def get_subcategories(
+async def list_subcategories(
     category_code: str,
     type: str = Query(..., regex="^(credit|debit|transfer)$"),
 ):
-    category = await db.categories.find_one(
-        {
-            "code": category_code,
-            "type": type,
-            "is_system": True,
-        },
-        {
-            "_id": 0,
-            "subcategories": 1,
-        },
+    subcategories = await get_subcategories(
+        category_code=category_code,
+        tx_type=type,
     )
 
-    if not category:
+    if subcategories is None:
         raise HTTPException(status_code=404, detail="Category not found")
 
     return {
         "category": category_code,
-        "subcategories": category.get("subcategories", []),
+        "subcategories": subcategories,
     }

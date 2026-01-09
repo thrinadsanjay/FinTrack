@@ -1,48 +1,34 @@
+"""
+Internal Account database model.
+
+Used by:
+- services/accounts.py
+- services/transactions.py
+
+NOT used directly by routers.
+"""
+
 from datetime import datetime
-from typing import Optional
-from pydantic import BaseModel, Field
 from bson import ObjectId
+from pydantic import BaseModel, Field
+
+from app.models.base import PyObjectId
 
 
-class PyObjectId(ObjectId):
-    @classmethod
-    def __get_validators__(cls):
-        yield cls.validate
+class AccountInDB(BaseModel):
+    id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
 
-    @classmethod
-    def validate(cls, v):
-        if not ObjectId.is_valid(v):
-            raise ValueError("Invalid ObjectId")
-        return ObjectId(v)
-
-
-class AccountBase(BaseModel):
+    user_id: PyObjectId
     name: str
     bank_name: str
     type: str
     balance: float
 
-
-class AccountInDB(AccountBase):
-    id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
-    user_id: PyObjectId
     created_at: datetime
-    updated_at: datetime
+    updated_at: datetime | None = None
+    deleted_at: datetime | None = None
 
     class Config:
         populate_by_name = True
         arbitrary_types_allowed = True
         json_encoders = {ObjectId: str}
-
-class AccountCreate(BaseModel):
-    bank_name: str
-    type: str
-    balance: float
-    name: Optional[str] = None
-
-
-class AccountUpdate(BaseModel):
-    name: str
-    bank_name: str
-    type: str
-    balance: float

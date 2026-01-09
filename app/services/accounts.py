@@ -1,3 +1,17 @@
+"""
+Business logic for account management.
+
+Responsibilities:
+- Create, update, delete accounts
+- Balance normalization
+- Safety checks
+- Audit logging
+
+Must NOT:
+- Render templates
+- Redirect responses
+"""
+
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from bson import ObjectId
@@ -41,7 +55,7 @@ async def get_accounts(user_id: str):
 async def create_account(
     *,
     user_id: str,
-    name: str,
+    name: str | None,
     bank_name: str,
     acc_type: str,
     balance: float,
@@ -51,7 +65,7 @@ async def create_account(
 
     doc = {
         "user_id": ObjectId(user_id),
-        "name": name,
+        "name": name or bank_name,
         "bank_name": bank_name,
         "type": acc_type,
         "balance": balance,
@@ -121,59 +135,6 @@ async def update_account_name(
 
 
 # ======================================================
-# MANUAL BALANCE ADJUSTMENT (RARE, EXPLICIT)
-# ======================================================
-
-async def adjust_account_balance(
-    *,
-    user_id: str,
-    account_id: str,
-    new_balance: float,
-    reason: str,
-    request: Request | None = None,
-):
-    """
-    Use ONLY for reconciliation / correction.
-    Transactions must NOT call this directly.
-    """
-
-    new_balance = normalize_amount(new_balance)
-
-    account_oid = ObjectId(account_id)
-    user_oid = ObjectId(user_id)
-
-    account = await db.accounts.find_one(
-        {"_id": account_oid, "user_id": user_oid, "deleted_at": None}
-    )
-    if not account:
-        raise Exception("Account not found")
-
-    old_balance = account["balance"]
-    delta = new_balance - old_balance
-
-    if delta == 0:
-        return
-
-    await db.accounts.update_one(
-        {"_id": account_oid},
-        {"$set": {"balance": new_balance, "updated_at": _now()}}
-    )
-
-    await audit_log(
-        action="ACCOUNT_BALANCE_ADJUSTED",
-        request=request,
-        user={"user_id": user_id},
-        meta={
-            "account_id": str(account_oid),
-            "old_balance": old_balance,
-            "new_balance": new_balance,
-            "delta": delta,
-            "reason": reason,
-        },
-    )
-
-
-# ======================================================
 # SOFT DELETE ACCOUNT
 # ======================================================
 
@@ -192,7 +153,6 @@ async def delete_account(
     if not account:
         raise Exception("Account not found or access denied")
 
-    # Safety: do not delete if transactions exist
     tx_exists = await db.transactions.find_one(
         {"account_id": account_oid, "deleted_at": None}
     )
@@ -215,29 +175,4 @@ async def delete_account(
             "account_type": account["type"],
             "balance_at_delete": account["balance"],
         },
-    )
-
-
-# ======================================================
-# BALANCE DELTA (USED BY TRANSACTIONS SERVICE ONLY)
-# ======================================================
-
-async def apply_balance_delta(
-    *,
-    account_id: ObjectId,
-    amount: float,
-    tx_type: str,
-    rollback: bool = False,
-):
-    """
-    THIS IS THE ONLY FUNCTION transactions are allowed to use
-    """
-
-    multiplier = 1 if tx_type == "credit" else -1
-    if rollback:
-        multiplier *= -1
-
-    await db.accounts.update_one(
-        {"_id": account_id},
-        {"$inc": {"balance": amount * multiplier}}
     )
