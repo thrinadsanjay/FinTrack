@@ -4,11 +4,18 @@ Handles forms, templates, redirects.
 """
 
 from datetime import datetime, timedelta, timezone
+<<<<<<< HEAD
 from typing import Optional
 from fastapi import APIRouter, Request, Form, Query
 from fastapi.responses import RedirectResponse, HTMLResponse
 from app.web.templates import templates
 from app.services.recurring_deposit import RecurringDepositService
+=======
+from fastapi import APIRouter, Request, Form, Query
+from fastapi.responses import RedirectResponse, HTMLResponse
+
+from app.web.templates import templates
+>>>>>>> 8266f8b43a3760f7716449025947c72b4e670271
 from app.services.accounts import get_accounts
 from app.services.transactions import (
     create_transaction,
@@ -22,7 +29,10 @@ from app.core.guards import is_within_edit_window, can_restore_today
 router = APIRouter()
 
 EDIT_WINDOW_DAYS = 2
+<<<<<<< HEAD
 is_recurring = None
+=======
+>>>>>>> 8266f8b43a3760f7716449025947c72b4e670271
 
 
 @router.get("", response_class=HTMLResponse)
@@ -64,12 +74,29 @@ async def add_transaction(
     if not user:
         return RedirectResponse("/login", status_code=303)
 
+<<<<<<< HEAD
     if is_recurring:
         if not frequency:
             raise Exception("Recurring frequency is required")
 
     if type == "transfer" and not target_account_id:
         raise Exception("Target account is required for transfers")
+=======
+    recurring = None
+    if is_recurring:
+        recurring = {
+            "frequency": frequency,
+            "interval": interval,
+            "start_date": (
+                datetime.fromisoformat(start_date).date()
+                if start_date else None
+            ),
+            "end_date": (
+                datetime.fromisoformat(end_date).date()
+                if end_date else None
+            ),
+        }
+>>>>>>> 8266f8b43a3760f7716449025947c72b4e670271
 
     await create_transaction(
         user_id=user["user_id"],
@@ -80,11 +107,15 @@ async def add_transaction(
         category_code=category_code,
         subcategory_code=subcategory_code,
         description=description,
+<<<<<<< HEAD
         is_recurring=is_recurring,
         frequency=frequency,
         interval=interval,
         start_date=start_date,
         end_date=end_date,
+=======
+        recurring=recurring,
+>>>>>>> 8266f8b43a3760f7716449025947c72b4e670271
         request=request,
     )
 

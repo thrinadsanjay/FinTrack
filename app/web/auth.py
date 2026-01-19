@@ -63,6 +63,7 @@ async def local_login(
 @router.get("/login/oauth")
 async def login_oauth(request: Request):
     params = {
+<<<<<<< HEAD
         "client_id": settings.FT_CLIENT_ID,
         "response_type": "code",
         "scope": "openid profile email",
@@ -71,6 +72,16 @@ async def login_oauth(request: Request):
 
     url = (
         f"{settings.FT_KEYCLOAK_URL}/realms/{settings.FT_KEYCLOAK_REALM}"
+=======
+        "client_id": settings.KEYCLOAK_CLIENT_ID,
+        "response_type": "code",
+        "scope": "openid profile email",
+        "redirect_uri": f"{settings.APP_BASE_URL}/callback",
+    }
+
+    url = (
+        f"{settings.KEYCLOAK_URL}/realms/{settings.KEYCLOAK_REALM}"
+>>>>>>> 8266f8b43a3760f7716449025947c72b4e670271
         "/protocol/openid-connect/auth?"
         + urllib.parse.urlencode(params)
     )
@@ -81,7 +92,11 @@ async def login_oauth(request: Request):
 @router.get("/callback")
 async def callback(request: Request, code: str):
     token_url = (
+<<<<<<< HEAD
         f"{settings.FT_KEYCLOAK_URL}/realms/{settings.FT_KEYCLOAK_REALM}/"
+=======
+        f"{settings.KEYCLOAK_URL}/realms/{settings.KEYCLOAK_REALM}/"
+>>>>>>> 8266f8b43a3760f7716449025947c72b4e670271
         "protocol/openid-connect/token"
     )
 
@@ -90,9 +105,15 @@ async def callback(request: Request, code: str):
             token_url,
             data={
                 "grant_type": "authorization_code",
+<<<<<<< HEAD
                 "client_id": settings.FT_CLIENT_ID,
                 "code": code,
                 "redirect_uri": f"{settings.FT_BASE_URL}/callback",
+=======
+                "client_id": settings.KEYCLOAK_CLIENT_ID,
+                "code": code,
+                "redirect_uri": f"{settings.APP_BASE_URL}/callback",
+>>>>>>> 8266f8b43a3760f7716449025947c72b4e670271
             },
         )
         token = resp.json()
@@ -176,10 +197,17 @@ async def logout(request: Request):
     # ---- Redirect logic ----
     if auth_provider == "keycloak":
         logout_url = (
+<<<<<<< HEAD
             f"{settings.FT_KEYCLOAK_URL}/realms/{settings.FT_KEYCLOAK_REALM}"
             "/protocol/openid-connect/logout"
             f"?client_id={settings.FT_CLIENT_ID}"
             f"&post_logout_redirect_uri={settings.FT_BASE_URL}/login"
+=======
+            f"{settings.KEYCLOAK_URL}/realms/{settings.KEYCLOAK_REALM}"
+            "/protocol/openid-connect/logout"
+            f"?client_id={settings.KEYCLOAK_CLIENT_ID}"
+            f"&post_logout_redirect_uri={settings.APP_BASE_URL}/login"
+>>>>>>> 8266f8b43a3760f7716449025947c72b4e670271
         )
         return RedirectResponse(logout_url, status_code=302)
 

@@ -36,12 +36,21 @@ class KeycloakService:
 
     def __init__(self):
         self.realm_url = (
+<<<<<<< HEAD
             f"{settings.FT_KEYCLOAK_URL}/realms/{settings.FT_KEYCLOAK_REALM}"
         )
         self.jwks_url = f"{self.realm_url}/protocol/openid-connect/certs"
         self.issuer = self.realm_url
         self.audience = settings.FT_CLIENT_ID
         self.is_prod = settings.FT_ENV.lower() in ("prod", "production")
+=======
+            f"{settings.KEYCLOAK_URL}/realms/{settings.KEYCLOAK_REALM}"
+        )
+        self.jwks_url = f"{self.realm_url}/protocol/openid-connect/certs"
+        self.issuer = self.realm_url
+        self.audience = settings.KEYCLOAK_CLIENT_ID
+        self.is_prod = settings.ENV.lower() in ("prod", "production")
+>>>>>>> 8266f8b43a3760f7716449025947c72b4e670271
 
     # ======================================================
     # JWKS (CACHED)
@@ -76,7 +85,11 @@ class KeycloakService:
     def _decode_dev(self, id_token: str) -> Dict:
         """
         Decode token without verification.
+<<<<<<< HEAD
         STRICTLY for non-production FT_ENVironments.
+=======
+        STRICTLY for non-production environments.
+>>>>>>> 8266f8b43a3760f7716449025947c72b4e670271
         """
         if self.is_prod:
             raise RuntimeError("DEV token decoder used in PROD")

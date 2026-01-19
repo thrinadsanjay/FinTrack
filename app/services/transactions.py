@@ -24,12 +24,15 @@ from app.core.guards import (
     can_restore_today,
     RESTORE_WINDOW_HOURS,
 )
+<<<<<<< HEAD
 from app.core.guards import (
     is_within_edit_window,
     can_restore_today,
     RESTORE_WINDOW_HOURS,
 )
 from app.services.recurring_deposit import RecurringDepositService
+=======
+>>>>>>> 8266f8b43a3760f7716449025947c72b4e670271
 
 UTC = timezone.utc
 
@@ -37,6 +40,7 @@ UTC = timezone.utc
 # ======================================================
 # CREATE TRANSACTION
 # ======================================================
+<<<<<<< HEAD
 # async def create_transaction(
 #     *,
 #     user_id: str,
@@ -50,6 +54,8 @@ UTC = timezone.utc
 #     recurring: dict | None = None,
 #     request=None,
 # ):
+=======
+>>>>>>> 8266f8b43a3760f7716449025947c72b4e670271
 async def create_transaction(
     *,
     user_id: str,
@@ -60,11 +66,15 @@ async def create_transaction(
     subcategory_code: str,
     description: str,
     target_account_id: str | None = None,
+<<<<<<< HEAD
     is_recurring: bool = False,
     frequency: str | None = None,
     interval: int = 1,
     start_date: date | None = None,
     end_date: date | None = None,
+=======
+    recurring: dict | None = None,  # 👈 NEW (optional)
+>>>>>>> 8266f8b43a3760f7716449025947c72b4e670271
     request=None,
 ):
     """
@@ -77,8 +87,11 @@ async def create_transaction(
     if amount <= 0:
         raise Exception("Amount must be positive")
 
+<<<<<<< HEAD
     # is_recurring = recurring is not None
 
+=======
+>>>>>>> 8266f8b43a3760f7716449025947c72b4e670271
     user_oid = ObjectId(user_id)
     source_oid = ObjectId(account_id)
     now = datetime.now(UTC)
@@ -109,7 +122,11 @@ async def create_transaction(
         raise Exception("Account not found")
 
     # ======================================================
+<<<<<<< HEAD
     # TRANSFER (UNCHANGED)
+=======
+    # TRANSFER
+>>>>>>> 8266f8b43a3760f7716449025947c72b4e670271
     # ======================================================
     if tx_type == "transfer":
         if not target_account_id:
@@ -170,7 +187,11 @@ async def create_transaction(
         return transfer_id
 
     # ======================================================
+<<<<<<< HEAD
     # CREDIT / DEBIT (UNCHANGED CORE LOGIC)
+=======
+    # CREDIT / DEBIT
+>>>>>>> 8266f8b43a3760f7716449025947c72b4e670271
     # ======================================================
     delta = amount if tx_type == "credit" else -amount
 
@@ -190,6 +211,7 @@ async def create_transaction(
 
     await db.accounts.update_one({"_id": source_oid}, {"$inc": {"balance": delta}})
 
+<<<<<<< HEAD
     # ======================================================
     # 🆕 NEW: CREATE RECURRING RULE (IF CHECKED)
     # ======================================================
@@ -222,6 +244,22 @@ async def create_transaction(
             #source_transaction_id=result.inserted_id,
         )
 
+=======
+    # -----------------------------
+    # OPTIONAL: RECURRING METADATA
+    # -----------------------------
+    if recurring:
+        start = recurring.get("start_date", date.today())
+        await db.recurring_transactions.insert_one({
+            "user_id": user_oid,
+            "transaction_id": result.inserted_id,
+            "account_id": source_oid,
+            **recurring,
+            "next_run": start,
+            "is_active": True,
+            "created_at": now,
+        })
+>>>>>>> 8266f8b43a3760f7716449025947c72b4e670271
 
     await audit_log(
         action="TRANSACTION_CREATED",

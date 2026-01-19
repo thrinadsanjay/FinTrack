@@ -179,10 +179,44 @@ SYSTEM_CATEGORIES = [
         "is_system": True,
         "categories": [
             {
+<<<<<<< HEAD
                 "code": "transfer",
                 "name": "Bank Transfers",
                 "subcategories": [
                     {"code": "transfer", "name": "Self Transfer"},
+=======
+                "code": "bank_transfer",
+                "name": "Bank Transfers",
+                "subcategories": [
+                    {"code": "to_savings", "name": "To Savings"},
+                    {"code": "to_current", "name": "To Current"},
+                ],
+            },
+            {
+                "code": "wallet_transfer",
+                "name": "Wallet Transfers",
+                "subcategories": [
+                    {"code": "paytm", "name": "To Paytm"},
+                    {"code": "phonepe", "name": "To PhonePe"},
+                    {"code": "gpay", "name": "To Google Pay"},
+                ],
+            },
+            {
+                "code": "investment_transfer",
+                "name": "Investment",
+                "subcategories": [
+                    {"code": "sip", "name": "SIP"},
+                    {"code": "lumpsum", "name": "Lumpsum"},
+                    {"code": "emi_payment", "name": "EMI Payment"},
+                ],
+            },
+            {
+                "code": "loan_transfer",
+                "name": "Loan",
+                "subcategories": [
+                    {"code": "emi_payment", "name": "EMI Payment"},
+                    {"code": "loan_disbursement", "name": "Loan Disbursement"},
+>>>>>>> 8266f8b43a3760f7716449025947c72b4e670271
                 ],
             },
         ],

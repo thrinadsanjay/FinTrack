@@ -231,6 +231,7 @@ ENV=development
 MONGO_URI=mongodb://localhost:27017
 MONGO_DB_NAME=finance
 
+<<<<<<< HEAD
 FT_SESSION_SECRET=supersecret
 
 FT_KEYCLOAK_URL=https://keycloak.example.com
@@ -240,6 +241,17 @@ FT_CLIENT_ID=finance-app
 FT_APP_NAME=FinanceApp
 FT_APP_VERSION=1.0.0
 FT_BASE_URL=http://localhost:8000
+=======
+SESSION_SECRET=supersecret
+
+KEYCLOAK_URL=https://keycloak.example.com
+KEYCLOAK_REALM=myrealm
+KEYCLOAK_CLIENT_ID=finance-app
+
+APP_NAME=FinanceApp
+APP_VERSION=1.0.0
+APP_BASE_URL=http://localhost:8000
+>>>>>>> 8266f8b43a3760f7716449025947c72b4e670271
 
 ▶️ Running the App
 pip install -r requirements.txt

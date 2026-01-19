@@ -13,7 +13,11 @@ from app.core.startup import ensure_admin_exists, define_categories
 
 from app.db.init_db import init_indexes
 
+<<<<<<< HEAD
 from app.routers import health, auth, accounts, transactions, categories, recurring_deposit
+=======
+from app.routers import health, auth, accounts, transactions, categories
+>>>>>>> 8266f8b43a3760f7716449025947c72b4e670271
 from app.web.home import router as web_router
 from app.web.auth import router as web_auth_router
 from app.web.accounts import router as web_accounts_router
@@ -29,7 +33,11 @@ from app.schedulers.recurring_scheduler import run_recurring_transactions
 setup_logging()
 logger = logging.getLogger(__name__)
 
+<<<<<<< HEAD
 if settings.FT_ENV.lower() in ("dev", "development"):
+=======
+if settings.ENV.lower() in ("dev", "development"):
+>>>>>>> 8266f8b43a3760f7716449025947c72b4e670271
     logging.getLogger("httpx").setLevel(logging.DEBUG)
 
 
@@ -38,16 +46,28 @@ if settings.FT_ENV.lower() in ("dev", "development"):
 # ======================================================
 
 app = FastAPI(
+<<<<<<< HEAD
     title=settings.FT_APP_NAME,
     version=settings.FT_APP_VERSION,
     FT_ENVironments=settings.FT_ENV,
+=======
+    title=settings.APP_NAME,
+    version=settings.APP_VERSION,
+    environments=settings.ENV,
+>>>>>>> 8266f8b43a3760f7716449025947c72b4e670271
 )
 
 logger.info(
     "🚀 Starting %s v%s [%s]",
+<<<<<<< HEAD
     settings.FT_APP_NAME,
     settings.FT_APP_VERSION,
     settings.FT_ENV,
+=======
+    settings.APP_NAME,
+    settings.APP_VERSION,
+    settings.ENV,
+>>>>>>> 8266f8b43a3760f7716449025947c72b4e670271
 )
 
 
@@ -78,7 +98,10 @@ app.include_router(auth.router, prefix="/api", tags=["Auth"])
 app.include_router(accounts.router, prefix="/api/accounts", tags=["Accounts"])
 app.include_router(transactions.router, prefix="/api/transactions", tags=["Transactions"])
 app.include_router(categories.router, prefix="/api/categories", tags=["Categories"])
+<<<<<<< HEAD
 app.include_router(recurring_deposit.router, prefix="/api/recurring-deposits", tags=["Recurring Deposits"])
+=======
+>>>>>>> 8266f8b43a3760f7716449025947c72b4e670271
 
 
 # ======================================================

@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+<<<<<<< HEAD
 from pydantic import ConfigDict
 
 class Settings(BaseSettings):
@@ -18,5 +19,22 @@ class Settings(BaseSettings):
         extra="ignore",   # 👈 THIS fixes your error
         FT_ENV_prefix="FT_",
     )
+=======
+
+class Settings(BaseSettings):
+    MONGO_URI: str
+    MONGO_DB_NAME: str
+    ENV: str 
+    KEYCLOAK_URL: str 
+    KEYCLOAK_REALM: str 
+    KEYCLOAK_CLIENT_ID: str
+    SESSION_SECRET: str
+    APP_NAME: str
+    APP_VERSION: str
+    APP_BASE_URL: str
+
+    class Config:
+        env_file = ".env"
+>>>>>>> 8266f8b43a3760f7716449025947c72b4e670271
 
 settings = Settings()
