@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>{% block title %}FinTracker{% endblock %}</title>
+  <!-- <link rel="icon" type="image/x-icon" href="/static/icons/favicon.ico"> -->
+  <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/static/icons/favicon-16x16.png">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
+
+  <link rel="manifest" href="/static/site.webmanifest">
+  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="stylesheet" href="/static/css/navbar.css">
+  <link rel="stylesheet" href="/static/css/dash.css">
+  <link rel="stylesheet" href="/static/css/accounts.css">
+  <link rel="stylesheet" href="/static/css/transactions.css">
+  <link rel="manifest" href="/static/manifest.json">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<script>
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/static/sw.js");
+  }
+</script>
+<body>
+  {% if request.session.user %}
+    {% include "partials/navbar.html" %}
+  {% endif %}
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+{% include "partials/footer.html" %}
+</html>

@@ -1,0 +1,20 @@
+[Unit]
+Description=FinTracker Service
+After=network.target
+Wants=network.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=/home/sanjay/Application/FinTrack/.env
+ExecStart=podman compose up -d
+ExecStop=podman compose stop
+WorkingDirectory=/home/sanjay/Application/FinTrack/docker
+TimeoutStartSec=0
+Restart=no
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
+

@@ -1,0 +1,54 @@
+name: fin_tracker 
+
+volumes:
+  mongodb_data:
+
+networks:
+  ft-net:
+    driver: bridge
+
+x-common: &common
+  env_file: 
+      - ../.env
+  networks:
+      - ft-net
+
+services:
+  mongodb:
+    <<: *common
+    image: mongo:7
+    hostname: mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+
+  mongo-express:
+    <<: *common
+    image: mongo-express:latest
+    hostname: mongo-express
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    depends_on:
+      - mongodb
+
+  backend:
+    <<: *common
+    build:
+      context: ../
+      dockerfile: Dockerfile
+    hostname: ft_app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../app:/fintracker/app
+    depends_on:
+     - mongodb
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+
+
+  

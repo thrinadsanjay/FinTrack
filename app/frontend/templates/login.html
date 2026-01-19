@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Login ¦ FinTracker{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>Sign in</h2>
+
+  {% if request.query_params.get('error') %}
+    <p style="color:red">Invalid credentials</p>
+  {% endif %}
+
+  <form method="post" action="/login/local">
+    <input name="username" placeholder="Username" required>
+    <input type="password" name="password" placeholder="Password" required>
+    <button type="submit">Login</button>
+  </form>
+
+  <hr>
+
+  <a href="/login/oauth">
+    <button style="background:#2c2c2c;color:white">
+      Login with Keycloak
+    </button>
+  </a>
+</div>
+{% endblock %}

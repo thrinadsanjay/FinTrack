@@ -1,0 +1,53 @@
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: #f8fafc;
+}
+
+.header {
+  background: #0f172a;
+  color: white;
+  padding: 1rem;
+}
+
+.header nav a {
+  color: white;
+  margin-right: 1rem;
+  text-decoration: none;
+}
+
+main {
+  padding: 1rem;
+}
+
+.card {
+  background: white;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.submit-button {
+  border-radius: 5px;
+  padding: 5px 15px;
+  background-color: #2563eb;
+  color: white;
+  border: 1px solid #062e83;
+  cursor: pointer;
+}
+
+/* Mobile improvements */
+@media (max-width: 768px) {
+  table {
+    font-size: 0.9rem;
+  }
+
+  .card {
+    padding: 0.75rem;
+  }
+
+  button {
+    padding: 8px 12px;
+  }
+}
+
