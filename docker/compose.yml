@@ -19,11 +19,8 @@ services:
     image: mongo:7
     hostname: mongodb
     restart: unless-stopped
-<<<<<<< HEAD
     ports:
       - "27017:27017"
-=======
->>>>>>> 8266f8b43a3760f7716449025947c72b4e670271
     volumes:
       - mongodb_data:/data/db
 
@@ -34,11 +31,6 @@ services:
     restart: unless-stopped
     ports:
       - "8081:8081"
-<<<<<<< HEAD
-=======
-    volumes:
-      - ../db/certs:/certs:ro
->>>>>>> 8266f8b43a3760f7716449025947c72b4e670271
     depends_on:
       - mongodb
 

@@ -1,7 +1,16 @@
+html {
+  box-sizing: border-box;
+  overflow: hidden ;
+}
+
 body {
   margin: 0;
   font-family: system-ui, sans-serif;
-  background: #f8fafc;
+  background: #a8cef3;
+}
+
+main {
+  padding: 1rem;
 }
 
 .header {
@@ -16,25 +25,68 @@ body {
   text-decoration: none;
 }
 
-main {
-  padding: 1rem;
+.footer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 10px 20px;
+  background-color: #131a2b;
+  color: #ffffff;
+  position: fixed;
+  bottom: 0;
+  width: 100%;
+  box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.page-container {
+  max-width: 90vw;
+  margin: 0 auto;
+  padding: 16px;
+  overflow: hidden;
 }
 
 .card {
-  background: white;
+  background: rgb(173, 151, 151);
   padding: 1rem;
   border-radius: 8px;
   margin-bottom: 1rem;
+  overflow: auto;
+  scroll-behavior: smooth;
+  nav-down: nav-down 0.3s ease-in-out;
 }
 
-.submit-button {
+.card-title {
+  margin-bottom: 16px;
+  font-size: 1.4rem;
+  font-weight: 600;
+}
+
+/* .submit-button {
   border-radius: 5px;
   padding: 5px 15px;
   background-color: #2563eb;
   color: white;
   border: 1px solid #062e83;
   cursor: pointer;
+} */
+
+/* ---------- Buttons ---------- */
+button[type="submit"] {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 10px;
+  border: none;
+  background: #014e05;
+  color: white;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
 }
+
+button[type="submit"]:hover {
+  background: #4338ca;
+}
+
 
 /* Mobile improvements */
 @media (max-width: 768px) {
@@ -51,3 +103,15 @@ main {
   }
 }
 
+/* Hide Arrows in Numer Input */
+
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* Hide spin buttons in Firefox */
+input[type="number"] {
+    -moz-appearance: textfield;
+}

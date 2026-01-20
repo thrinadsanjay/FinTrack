@@ -14,7 +14,7 @@ router = APIRouter()
 
 @router.get("")
 async def list_categories(
-    type: str = Query(..., regex="^(credit|debit|transfer)$"),
+    type: str = Query(..., pattern="^(credit|debit|transfer)$"),
 ):
     categories = await get_categories_by_type(type)
 
@@ -27,7 +27,7 @@ async def list_categories(
 @router.get("/{category_code}/subcategories")
 async def list_subcategories(
     category_code: str,
-    type: str = Query(..., regex="^(credit|debit|transfer)$"),
+    type: str = Query(..., pattern="^(credit|debit|transfer)$"),
 ):
     subcategories = await get_subcategories(
         category_code=category_code,

@@ -107,15 +107,8 @@
       {% endif %}
 
       <!-- CATEGORY -->
-
-      
-    <td>{{ tx.category_display or "—" }}</td>
-    {% if tx.category_display %}
-      <td>{{ tx.subcategory_display or "-" }}</td>
-    {% endif %}
-    
-      {# <td>{{ tx.category.name }} </td>
-      <td>{{ tx.subcategory.name }}</td> #}
+      <td>{{ tx.category_display or "—" }}</td>
+      <td>{{ tx.subcategory_display or "-" if tx.category_display else "" }}</td>
 
       <!-- AMOUNT -->
       <td>
