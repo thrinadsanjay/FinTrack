@@ -120,3 +120,50 @@
     grid-template-columns: 1fr;
   }
 }
+
+.floating-field {
+  position: relative;
+  margin-top: 12px;
+}
+
+/* Inputs */
+.floating-field input,
+.floating-field select {
+  width: 100%;
+  padding: 14px 12px;
+  font-size: 1rem;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  background: transparent;
+  outline: none;
+}
+
+/* Label (inside input) */
+.floating-field label {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.95rem;
+  color: #777;
+  pointer-events: none;
+  transition: all 0.2s ease;
+  background: white;
+  padding: 0 4px;
+}
+
+/* On focus OR filled */
+.floating-field input:focus + label,
+.floating-field input:not(:placeholder-shown) + label,
+.floating-field select:focus + label,
+.floating-field select:not([value=""]) + label {
+  top: -6px;
+  font-size: 0.75rem;
+  color: #4f46e5;
+}
+
+/* Focus style */
+.floating-field input:focus,
+.floating-field select:focus {
+  border-color: #4f46e5;
+}
