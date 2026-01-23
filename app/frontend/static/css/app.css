@@ -1,6 +1,6 @@
 html {
   box-sizing: border-box;
-  overflow: hidden ;
+  /* overflow: hidden ; */
 }
 
 body {
@@ -41,8 +41,8 @@ main {
 .page-container {
   max-width: 90vw;
   margin: 0 auto;
-  padding: 16px;
-  overflow: hidden;
+  background: #f4f6f9;
+  padding: 32px 16px;
 }
 
 .card {
@@ -56,9 +56,9 @@ main {
 }
 
 .card-title {
-  margin-bottom: 16px;
   font-size: 1.4rem;
   font-weight: 600;
+  margin-bottom: 12px;
 }
 
 /* .submit-button {
@@ -72,20 +72,26 @@ main {
 
 /* ---------- Buttons ---------- */
 button[type="submit"] {
-  margin-top: 12px;
-  padding: 12px;
+  background: #166534; /* deep green */
+  color: white;
+  padding: 14px;
+  font-size: 1rem;
   border-radius: 10px;
   border: none;
-  background: #014e05;
-  color: white;
-  font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
+  transition: background 0.2s ease, transform 0.1s ease;
+  margin-top: 12px;
 }
 
 button[type="submit"]:hover {
-  background: #4338ca;
+  background: #15803d;
 }
+
+button[type="submit"]:active {
+  transform: scale(0.98);
+}
+
 
 
 /* Mobile improvements */
@@ -109,9 +115,9 @@ input::-webkit-outer-spin-button,
 input::-webkit-inner-spin-button {
     -webkit-appearance: none;
     margin: 0;
-}
+} 
 
 /* Hide spin buttons in Firefox */
 input[type="number"] {
     -moz-appearance: textfield;
-}
+} 

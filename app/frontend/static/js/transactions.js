@@ -35,8 +35,8 @@ document.addEventListener("DOMContentLoaded", () => {
   txType.addEventListener("change", async () => {
     const type = txType.value;
 
-    resetSelect(category, "-- Select Category --");
-    resetSelect(subcategory, "-- Select Subcategory --");
+    resetSelect(category, "");
+    resetSelect(subcategory, "");
 
     // if (!type || type === "transfer") {
     //   category.required = type !== "transfer";
@@ -75,7 +75,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const categoryCode = category.value;
     const type = txType.value;
 
-    resetSelect(subcategory, "-- Select Subcategory --");
+    resetSelect(subcategory, "");
 
     if (!categoryCode || !type) return;
 
@@ -174,4 +174,43 @@ document.addEventListener("DOMContentLoaded", () => {
       disableRecurring();
     }
   });
+});
+
+// --------------------------------------------------
+// Input box floating labels
+// --------------------------------------------------
+
+document.addEventListener("DOMContentLoaded", () => {
+  document.querySelectorAll(".form-field input, .form-field select")
+    .forEach(field => {
+      const wrapper = field.closest(".form-field");
+
+      // Focus → activate
+      field.addEventListener("focus", () => {
+        wrapper.classList.remove("field--idle");
+        wrapper.classList.add("field--active");
+      });
+
+      // Blur → decide state
+      field.addEventListener("blur", () => {
+        if (!field.value) {
+          wrapper.classList.remove("field--active");
+          wrapper.classList.add("field--idle");
+        }
+      });
+
+      // Change → lock active state
+      field.addEventListener("change", () => {
+        if (field.value) {
+          wrapper.classList.remove("field--idle");
+          wrapper.classList.add("field--active");
+        }
+      });
+
+      // On load (autofill / edit)
+      if (field.value) {
+        wrapper.classList.remove("field--idle");
+        wrapper.classList.add("field--active");
+      }
+    });
 });
