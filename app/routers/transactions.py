@@ -16,6 +16,7 @@ async def add_transaction(
     account_id: str,
     amount: int,
     tx_type: str,
+    mode: str,
     category_code: str,
     subcategory_code: str,
     description: str = "",

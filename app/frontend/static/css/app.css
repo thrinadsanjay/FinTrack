@@ -61,14 +61,6 @@ main {
   margin-bottom: 12px;
 }
 
-/* .submit-button {
-  border-radius: 5px;
-  padding: 5px 15px;
-  background-color: #2563eb;
-  color: white;
-  border: 1px solid #062e83;
-  cursor: pointer;
-} */
 
 /* ---------- Buttons ---------- */
 button[type="submit"] {

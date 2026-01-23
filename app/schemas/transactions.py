@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 from pydantic import BaseModel
 from datetime import date
 from typing import Optional, Literal
@@ -20,7 +19,6 @@ class TransactionCreate(BaseModel):
 
     is_recurring: bool = False
     recurring: Optional[RecurringOptions] = None
-=======
 """
 Transaction-related API schemas.
 
@@ -58,4 +56,3 @@ class RecurringTransactionCreate(BaseModel):
     end_date: Optional[date] = None
 
     auto_post: bool = True
->>>>>>> 8266f8b43a3760f7716449025947c72b4e670271

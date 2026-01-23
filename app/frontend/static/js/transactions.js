@@ -1,8 +1,8 @@
 document.addEventListener("DOMContentLoaded", () => {
 
-  // --------------------------------------------------
-  // Elements
-  // --------------------------------------------------
+  /* ==================================================
+     ELEMENTS
+  ================================================== */
   const txType = document.getElementById("tx_type");
   const account = document.getElementById("account");
   const targetWrapper = document.getElementById("target-account-wrapper");
@@ -18,36 +18,62 @@ document.addEventListener("DOMContentLoaded", () => {
   const recurringStartDate = document.getElementById("recurringStartDate");
   const recurringEndDate = document.getElementById("recurringEndDate");
 
-  // --------------------------------------------------
-  // Helpers
-  // --------------------------------------------------
-  function resetSelect(select, placeholder) {
-    select.innerHTML = `<option value="">${placeholder}</option>`;
+  /* ==================================================
+     HELPERS
+  ================================================== */
+  function resetSelect(select, placeholder = "") {
+    select.innerHTML = `<option value="" hidden>${placeholder}</option>`;
   }
 
   function todayISO() {
     return new Date().toISOString().split("T")[0];
   }
 
-  // --------------------------------------------------
-  // Type → Categories
-  // --------------------------------------------------
+  function isFilled(el) {
+    return el.value !== null && el.value !== "";
+  }
+
+  /* ==================================================
+     FLOATING LABELS (single source of truth)
+  ================================================== */
+  document.querySelectorAll(".form-field input, .form-field select")
+    .forEach(field => {
+      const wrapper = field.closest(".form-field");
+
+      const updateState = () => {
+        if (isFilled(field)) {
+          wrapper.classList.add("field--active");
+          wrapper.classList.remove("field--idle");
+        } else {
+          wrapper.classList.add("field--idle");
+          wrapper.classList.remove("field--active");
+        }
+      };
+
+      field.addEventListener("focus", () => {
+        wrapper.classList.add("field--active");
+        wrapper.classList.remove("field--idle");
+      });
+
+      field.addEventListener("blur", updateState);
+      field.addEventListener("change", updateState);
+
+      if (field.value) updateState(); // initial load
+    });
+
+  /* ==================================================
+     TYPE → CATEGORIES
+  ================================================== */
   txType.addEventListener("change", async () => {
     const type = txType.value;
 
-    resetSelect(category, "");
-    resetSelect(subcategory, "");
-
-    // if (!type || type === "transfer") {
-    //   category.required = type !== "transfer";
-    //   subcategory.required = type !== "transfer";
-    //   return;
-    // }
+    resetSelect(category);
+    resetSelect(subcategory);
 
     if (!type) return;
 
     category.required = type !== "transfer";
-    subcategory.required = type !== "transfer";    
+    subcategory.required = type !== "transfer";
 
     try {
       const res = await fetch(`/api/categories?type=${type}`);
@@ -59,8 +85,9 @@ document.addEventListener("DOMContentLoaded", () => {
         opt.textContent = cat.name;
         category.appendChild(opt);
       });
-      if (type === "transfer" && data.categories.length > 0) {
-        category.selectedIndex = 1; // index 0 is placeholder
+
+      if (type === "transfer" && data.categories.length) {
+        category.selectedIndex = 1;
         category.dispatchEvent(new Event("change"));
       }
     } catch (err) {
@@ -68,15 +95,14 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // --------------------------------------------------
-  // Category → Subcategories
-  // --------------------------------------------------
+  /* ==================================================
+     CATEGORY → SUBCATEGORY
+  ================================================== */
   category.addEventListener("change", async () => {
     const categoryCode = category.value;
     const type = txType.value;
 
-    resetSelect(subcategory, "");
-
+    resetSelect(subcategory);
     if (!categoryCode || !type) return;
 
     try {
@@ -91,24 +117,24 @@ document.addEventListener("DOMContentLoaded", () => {
         opt.textContent = sub.name;
         subcategory.appendChild(opt);
       });
-      if (type === "transfer" && data.subcategories.length > 0) {
-        subcategory.selectedIndex = 1; // skip placeholder
+
+      if (type === "transfer" && data.subcategories.length) {
+        subcategory.selectedIndex = 1;
       }
     } catch (err) {
       console.error("Failed to load subcategories", err);
     }
   });
 
-  // --------------------------------------------------
-  // Transfer Mode
-  // --------------------------------------------------
+  /* ==================================================
+     TRANSFER MODE
+  ================================================== */
   function updateTransferUI() {
     if (txType.value === "transfer") {
       targetWrapper.classList.remove("tohidden");
       targetAccount.required = true;
 
       catwrapper.style.display = "none";
-
       category.required = false;
       subcategory.required = false;
 
@@ -117,12 +143,12 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!opt.value) return;
         opt.hidden = opt.value === fromValue;
       });
-
     } else {
       targetWrapper.classList.add("tohidden");
       targetAccount.required = false;
       targetAccount.value = "";
 
+      catwrapper.style.display = "";
       category.required = true;
       subcategory.required = true;
     }
@@ -131,16 +157,16 @@ document.addEventListener("DOMContentLoaded", () => {
   txType.addEventListener("change", updateTransferUI);
   account.addEventListener("change", updateTransferUI);
 
-  targetAccount.addEventListener("change", () => {
+  targetAccount?.addEventListener("change", () => {
     if (targetAccount.value === account.value) {
       alert("From and To accounts cannot be the same");
       targetAccount.value = "";
     }
   });
 
-  // --------------------------------------------------
-  // Recurring Toggle
-  // --------------------------------------------------
+  /* ==================================================
+     RECURRING TOGGLE
+  ================================================== */
   function enableRecurring() {
     recurringSection.style.display = "block";
     recurringFrequency.required = true;
@@ -168,49 +194,6 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   recurringCheckbox.addEventListener("change", () => {
-    if (recurringCheckbox.checked) {
-      enableRecurring();
-    } else {
-      disableRecurring();
-    }
+    recurringCheckbox.checked ? enableRecurring() : disableRecurring();
   });
-});
-
-// --------------------------------------------------
-// Input box floating labels
-// --------------------------------------------------
-
-document.addEventListener("DOMContentLoaded", () => {
-  document.querySelectorAll(".form-field input, .form-field select")
-    .forEach(field => {
-      const wrapper = field.closest(".form-field");
-
-      // Focus → activate
-      field.addEventListener("focus", () => {
-        wrapper.classList.remove("field--idle");
-        wrapper.classList.add("field--active");
-      });
-
-      // Blur → decide state
-      field.addEventListener("blur", () => {
-        if (!field.value) {
-          wrapper.classList.remove("field--active");
-          wrapper.classList.add("field--idle");
-        }
-      });
-
-      // Change → lock active state
-      field.addEventListener("change", () => {
-        if (field.value) {
-          wrapper.classList.remove("field--idle");
-          wrapper.classList.add("field--active");
-        }
-      });
-
-      // On load (autofill / edit)
-      if (field.value) {
-        wrapper.classList.remove("field--idle");
-        wrapper.classList.add("field--active");
-      }
-    });
 });
