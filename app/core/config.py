@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     FT_BASE_URL: str
 
     model_config = ConfigDict(
-        FT_ENV_file=".FT_ENV",
+        env_file=".FT_ENV",
         extra="ignore",   # 👈 THIS fixes your error
         FT_ENV_prefix="FT_",
     )

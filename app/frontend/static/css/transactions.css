@@ -66,13 +66,13 @@
 
 .form-field label {
   display: flex;
-  flex: 0 0 110px; 
+  flex: 0 0 80px; 
   height: 100%;
-  min-width: 80px;
+  min-width: 50px;
   display: flex;
   align-items: center;
   justify-content: left;
-  padding: 0 12px;
+  padding: 0 10px;
   font-size: 0.85rem;
   font-weight: 600;
   background-color: transparent; 
@@ -81,7 +81,19 @@
   pointer-events: none;
 }
 
+ .field--idle label {
+  display:block;
+  position: absolute;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  font-size: large;
+  justify-content: center;
+  transition: all 0.2s ease;
+ }
+
 .field--active label {
+  transition: all 0.2s ease;
   background-color: #e0e7ff; /* lighter blue pill */
 }
 
