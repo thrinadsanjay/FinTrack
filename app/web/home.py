@@ -9,15 +9,14 @@ from app.services.dashboard import (
     get_dashboard_summary,
     get_recent_transactions,
 )
-
+from app.core.guards import login_required
 router = APIRouter()
 
 
 @router.get("/")
+@login_required
 async def dashboard(request: Request):
     user = request.session.get("user")
-    if not user:
-        return RedirectResponse("/login", status_code=303)
 
     if request.session.get("force_pwd_reset"):
         return RedirectResponse("/reset-password", status_code=303)

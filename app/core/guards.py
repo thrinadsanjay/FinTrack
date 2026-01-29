@@ -13,6 +13,8 @@ Must remain:
 """
 
 from datetime import datetime, timedelta, timezone
+from fastapi.responses import RedirectResponse
+from functools import wraps
 
 # ======================================================
 # CONFIGURABLE WINDOWS
@@ -21,6 +23,18 @@ from datetime import datetime, timedelta, timezone
 EDIT_WINDOW_DAYS = 2        # today + yesterday
 RESTORE_WINDOW_HOURS = 24  # rolling window
 
+# ======================================================
+# LOGIN REQUIRED DECORATOR
+# ======================================================
+
+def login_required(f):
+    @wraps(f)
+    async def decorated_function(request, *args, **kwargs):
+        user = request.session.get("user")
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+        return await f(request, *args, **kwargs)
+    return decorated_function
 
 # ======================================================
 # EDIT WINDOW

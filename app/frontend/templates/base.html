@@ -24,12 +24,14 @@
   }
 </script>
 <body>
-  {% if request.session.user %}
-    {% include "partials/navbar.html" %}
-  {% endif %}
-  <main>
-    {% block content %}{% endblock %}
-  </main>
+  <div class="app-shell">
+    {% if request.session.user %}
+      {% include "partials/navbar.html" %}
+    {% endif %}
+    <main class="app-content">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
 </body>
 {% include "partials/footer.html" %}
 </html>

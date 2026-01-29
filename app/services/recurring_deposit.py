@@ -46,14 +46,21 @@ class RecurringDepositService:
     @staticmethod
     async def create(
         *,
-        user_id: str,
+        user_id: ObjectId,
         account_id: str,
         amount: float,
+        tx_type: str,
+        mode: str,
+        description: str,
+        category: dict,
+        subcategory: dict,
         frequency: str,
         interval: int,
         start_date: date,
         end_date: date | None,
+        source_transaction_id: ObjectId,
     ):
+
         start_dt = datetime.combine(start_date, time.min)
 
         end_dt = (
@@ -62,20 +69,41 @@ class RecurringDepositService:
         )
 
         doc = {
+            # -----------------------------
+            # Ownership
+            # -----------------------------
             "user_id": ObjectId(user_id),
             "account_id": ObjectId(account_id),
+
+            # -----------------------------
+            # TRANSACTION TEMPLATE ✅
+            # -----------------------------
+            "type": tx_type,
+            "mode": mode,
             "amount": amount,
+            "description": description,
+            "category": category,           # { code, name }
+            "subcategory": subcategory,     # { code, name }
+
+            # -----------------------------
+            # SCHEDULE
+            # -----------------------------
             "frequency": frequency,
             "interval": interval,
-            "start_date": start_dt,         # ✅ datetime
-            "end_date": end_dt,             # ✅ datetime | None
+            "start_date": start_dt,
+            "end_date": end_dt,
             "next_run": calculate_next_run(
                 last_run=None,
                 start_date=start_date,
                 frequency=frequency,
             ),
+
+            # -----------------------------
+            # META
+            # -----------------------------
+            "source_transaction_id": source_transaction_id,
             "is_active": True,
-            "created_at": datetime.utcnow(),  # ✅ datetime
+            "created_at": datetime.utcnow(),
         }
 
         await db.recurring_deposits.insert_one(doc)

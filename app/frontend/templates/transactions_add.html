@@ -102,7 +102,21 @@
       </div>
 
       <div class="form-section mt-3" id="recurringSection" style="display: none;">
-        <!-- Row 1 -->
+        
+        <!-- Row  -->
+        <div class="field-group">
+          <div class="form-field field--idle" id="recurringStartDate">
+            <label class="mt-2">Start Date</label>
+            <input type="date" name="start_date" id="recurringStartDate">
+          </div>
+          <div class="form-field field--idle" id="recurringEndDate">
+            <label class="mt-2">End Date</label>
+            <input type="text" onfocus="(this.type='date')" onblur="if(!this.value) this.type='text'" name="end_date" id="recurringEndDate">
+          </div>
+        </div>
+        
+      
+        <!-- Row 2 -->
         <div class="field-group">
           <div class="form-field field--idle" id="recurringFrequency">
             <label>Frequency</label>
@@ -116,17 +130,6 @@
               <option value="halfyearly">Half Yearly</option>
               <option value="yearly">Yearly</option>
             </select>
-          </div>
-        </div>
-        <!-- Row 2 -->
-        <div class="field-group">
-          <div class="form-field field--idle" id="recurringStartDate">
-            <label class="mt-2">Start Date</label>
-            <input type="date" name="start_date" id="recurringStartDate">
-          </div>
-          <div class="form-field field--idle" id="recurringEndDate">
-            <label class="mt-2">End Date</label>
-            <input type="text" onfocus="(this.type='date')" onblur="if(!this.value) this.type='text'" name="end_date" id="recurringEndDate">
           </div>
         </div>
         <input type="hidden" name="interval" value="1">

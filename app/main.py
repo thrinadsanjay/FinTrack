@@ -5,6 +5,8 @@ from fastapi.responses import PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
 
 from app.core.config import settings
 from app.core.logging import setup_logging
@@ -20,6 +22,7 @@ from app.web.accounts import router as web_accounts_router
 from app.web.transactions import router as web_transactions_router
 
 from app.schedulers.recurring_scheduler import run_recurring_transactions
+
 
 
 # ======================================================
@@ -92,7 +95,7 @@ app.include_router(web_transactions_router, prefix="/transactions")
 # SCHEDULER
 # ======================================================
 
-scheduler = BackgroundScheduler(timezone="UTC")
+scheduler = AsyncIOScheduler(timezone="UTC")
 
 
 # ======================================================
@@ -110,7 +113,8 @@ async def on_startup():
     scheduler.add_job(
         run_recurring_transactions,
         trigger="cron",
-        hour=1,
+        hour=2,
+        minute=30, # Run daily at 12:10 PM UTC
         id="recurring-transactions",
         replace_existing=True,
     )

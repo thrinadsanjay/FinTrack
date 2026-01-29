@@ -33,7 +33,6 @@ from app.services.recurring_deposit import RecurringDepositService
 
 UTC = timezone.utc
 
-
 # ======================================================
 # CREATE TRANSACTION
 # ======================================================
@@ -50,6 +49,196 @@ UTC = timezone.utc
 #     recurring: dict | None = None,
 #     request=None,
 # ):
+# async def create_transaction(
+#     *,
+#     user_id: str,
+#     account_id: str,
+#     amount: float,
+#     tx_type: str,
+#     mode: str,
+#     category_code: str,
+#     subcategory_code: str,
+#     description: str,
+#     target_account_id: str | None = None,
+#     is_recurring: bool = False,
+#     frequency: str | None = None,
+#     interval: int = 1,
+#     start_date: date | None = None,
+#     end_date: date | None = None,
+#     request=None,
+# ):
+#     """
+#     Creates a transaction and optionally a recurring rule.
+
+#     Returns:
+#     - ObjectId (transaction_id OR transfer_id)
+#     """
+
+#     if amount <= 0:
+#         raise Exception("Amount must be positive")
+
+#     # is_recurring = recurring is not None
+
+#     user_oid = ObjectId(user_id)
+#     source_oid = ObjectId(account_id)
+#     now = datetime.now(UTC)
+
+#     # -----------------------------
+#     # Validate category
+#     # -----------------------------
+#     category = await db.categories.find_one(
+#         {"code": category_code, "type": tx_type, "is_system": True}
+#     )
+#     if not category:
+#         raise Exception("Invalid category")
+
+#     sub = next(
+#         (s for s in category["subcategories"] if s["code"] == subcategory_code),
+#         None,
+#     )
+#     if not sub:
+#         raise Exception("Invalid subcategory")
+
+#     # -----------------------------
+#     # Fetch source account
+#     # -----------------------------
+#     source = await db.accounts.find_one(
+#         {"_id": source_oid, "user_id": user_oid, "deleted_at": None}
+#     )
+#     if not source:
+#         raise Exception("Account not found")
+
+#     # ======================================================
+#     # TRANSFER (UNCHANGED)
+#     # ======================================================
+#     if tx_type == "transfer":
+#         if not target_account_id:
+#             raise Exception("Target account required")
+
+#         target_oid = ObjectId(target_account_id)
+#         if target_oid == source_oid:
+#             raise Exception("Source and target cannot be same")
+
+#         target = await db.accounts.find_one(
+#             {"_id": target_oid, "user_id": user_oid, "deleted_at": None}
+#         )
+#         if not target:
+#             raise Exception("Target account not found")
+
+#         if source["balance"] < amount:
+#             raise Exception("Insufficient balance")
+
+#         transfer_id = ObjectId()
+
+#         await db.transactions.insert_many([
+#             {
+#                 "transfer_id": transfer_id,
+#                 "user_id": user_oid,
+#                 "account_id": source_oid,
+#                 "type": "transfer_out",
+#                 "mode": mode,
+#                 "amount": amount,
+#                 "description": description,
+#                 "category": {"code": category["code"], "name": category["name"]},
+#                 "subcategory": {"code": sub["code"], "name": sub["name"]},
+#                 "created_at": now,
+#                 "deleted_at": None,
+#             },
+#             {
+#                 "transfer_id": transfer_id,
+#                 "user_id": user_oid,
+#                 "account_id": target_oid,
+#                 "type": "transfer_in",
+#                 "mode": mode,
+#                 "amount": amount,
+#                 "description": description,
+#                 "category": {"code": category["code"], "name": category["name"]},
+#                 "subcategory": {"code": sub["code"], "name": sub["name"]},
+#                 "created_at": now,
+#                 "deleted_at": None,
+#             },
+#         ])
+
+#         await db.accounts.update_one({"_id": source_oid}, {"$inc": {"balance": -amount}})
+#         await db.accounts.update_one({"_id": target_oid}, {"$inc": {"balance": amount}})
+
+#         await audit_log(
+#             action="TRANSFER_CREATED",
+#             request=request,
+#             user={"user_id": user_id},
+#             meta={"transfer_id": str(transfer_id), "amount": amount},
+#         )
+
+#         return transfer_id
+
+#     # ======================================================
+#     # CREDIT / DEBIT (UNCHANGED CORE LOGIC)
+#     # ======================================================
+#     delta = amount if tx_type == "credit" else -amount
+
+#     tx_doc = {
+#         "user_id": user_oid,
+#         "account_id": source_oid,
+#         "type": tx_type,
+#         "mode": mode,
+#         "amount": amount,
+#         "description": description,
+#         "category": {"code": category["code"], "name": category["name"]},
+#         "subcategory": {"code": sub["code"], "name": sub["name"]},
+#         "created_at": now,
+#         "deleted_at": None,
+#     }
+
+#     result = await db.transactions.insert_one(tx_doc)
+
+#     await db.accounts.update_one({"_id": source_oid}, {"$inc": {"balance": delta}})
+
+#     # ======================================================
+#     # 🆕 NEW: CREATE RECURRING RULE (IF CHECKED)
+#     # ======================================================
+#     if is_recurring:
+#         """
+#         recurring = {
+#             "frequency": "monthly",
+#             "start_date": date
+#         }
+#         """
+
+#         start_date_value = (
+#             datetime.fromisoformat(start_date).date()
+#             if start_date else date.today()
+#         )
+
+#         end_date_value = (
+#             datetime.fromisoformat(end_date).date()
+#             if end_date else None
+#         )
+
+#         await RecurringDepositService.create(
+#             user_id=user_oid,
+#             account_id=account_id,
+#             amount=amount,
+#             # mode=mode,
+#             # tx_type=tx_type,
+#             # category_code=category_code,
+#             # subcategory_code=subcategory_code,
+#             # description=description,
+#             frequency=frequency,
+#             interval=interval,
+#             start_date=start_date_value,
+#             end_date=end_date_value,
+#             #source_transaction_id=result.inserted_id,
+#         )
+
+
+#     await audit_log(
+#         action="TRANSACTION_CREATED",
+#         request=request,
+#         user={"user_id": user_id},
+#         meta={"transaction_id": str(result.inserted_id), "amount": amount},
+#     )
+
+#     return result.inserted_id
 async def create_transaction(
     *,
     user_id: str,
@@ -69,24 +258,79 @@ async def create_transaction(
     request=None,
 ):
     """
-    Creates a transaction and optionally a recurring rule.
-
-    Returns:
-    - ObjectId (transaction_id OR transfer_id)
+    High-level transaction creator.
+    - Always creates a real transaction immediately
+    - Optionally creates a recurring rule
     """
 
     if amount <= 0:
         raise Exception("Amount must be positive")
 
-    # is_recurring = recurring is not None
-
     user_oid = ObjectId(user_id)
-    source_oid = ObjectId(account_id)
-    now = datetime.now(UTC)
 
     # -----------------------------
-    # Validate category
+    # Validate category & subcategory
     # -----------------------------
+    category, subcategory = await _validate_category(
+        category_code=category_code,
+        subcategory_code=subcategory_code,
+        tx_type=tx_type,
+    )
+
+    # -----------------------------
+    # Create transaction (now)
+    # -----------------------------
+    if tx_type == "transfer":
+        tx_id = await _add_transfer_transaction(
+            user_oid=user_oid,
+            source_account_id=account_id,
+            target_account_id=target_account_id,
+            amount=amount,
+            mode=mode,
+            description=description,
+            category=category,
+            subcategory=subcategory,
+            request=request,
+        )
+    else:
+        tx_id = await _add_single_transaction(
+            user_oid=user_oid,
+            account_id=account_id,
+            amount=amount,
+            tx_type=tx_type,
+            mode=mode,
+            description=description,
+            category=category,
+            subcategory=subcategory,
+            request=request,
+        )
+
+    # -----------------------------
+    # Create recurring rule (if needed)
+    # -----------------------------
+    if is_recurring:
+        if not frequency:
+            raise Exception("Recurring frequency is required")
+
+        await _add_recurring_transaction(
+            user_oid=user_oid,
+            account_id=account_id,
+            amount=amount,
+            tx_type=tx_type,
+            mode=mode,
+            description=description,
+            category=category,
+            subcategory=subcategory,
+            frequency=frequency,
+            interval=interval,
+            start_date=start_date,
+            end_date=end_date,
+            source_transaction_id=tx_id,
+        )
+
+    return tx_id
+
+async def _validate_category(*, category_code: str, subcategory_code: str, tx_type: str):
     category = await db.categories.find_one(
         {"code": category_code, "type": tx_type, "is_system": True}
     )
@@ -100,146 +344,155 @@ async def create_transaction(
     if not sub:
         raise Exception("Invalid subcategory")
 
-    # -----------------------------
-    # Fetch source account
-    # -----------------------------
-    source = await db.accounts.find_one(
-        {"_id": source_oid, "user_id": user_oid, "deleted_at": None}
+    return (
+        {"code": category["code"], "name": category["name"]},
+        {"code": sub["code"], "name": sub["name"]},
     )
-    if not source:
-        raise Exception("Account not found")
 
-    # ======================================================
-    # TRANSFER (UNCHANGED)
-    # ======================================================
-    if tx_type == "transfer":
-        if not target_account_id:
-            raise Exception("Target account required")
+async def _add_single_transaction(
+    *,
+    user_oid: ObjectId,
+    account_id: str,
+    amount: float,
+    tx_type: str,
+    mode: str,
+    description: str,
+    category: dict,
+    subcategory: dict,
+    request=None,
+):
+    now = datetime.now(UTC)
+    account_oid = ObjectId(account_id)
 
-        target_oid = ObjectId(target_account_id)
-        if target_oid == source_oid:
-            raise Exception("Source and target cannot be same")
-
-        target = await db.accounts.find_one(
-            {"_id": target_oid, "user_id": user_oid, "deleted_at": None}
-        )
-        if not target:
-            raise Exception("Target account not found")
-
-        if source["balance"] < amount:
-            raise Exception("Insufficient balance")
-
-        transfer_id = ObjectId()
-
-        await db.transactions.insert_many([
-            {
-                "transfer_id": transfer_id,
-                "user_id": user_oid,
-                "account_id": source_oid,
-                "type": "transfer_out",
-                "mode": mode,
-                "amount": amount,
-                "description": description,
-                "category": {"code": category["code"], "name": category["name"]},
-                "subcategory": {"code": sub["code"], "name": sub["name"]},
-                "created_at": now,
-                "deleted_at": None,
-            },
-            {
-                "transfer_id": transfer_id,
-                "user_id": user_oid,
-                "account_id": target_oid,
-                "type": "transfer_in",
-                "mode": mode,
-                "amount": amount,
-                "description": description,
-                "category": {"code": category["code"], "name": category["name"]},
-                "subcategory": {"code": sub["code"], "name": sub["name"]},
-                "created_at": now,
-                "deleted_at": None,
-            },
-        ])
-
-        await db.accounts.update_one({"_id": source_oid}, {"$inc": {"balance": -amount}})
-        await db.accounts.update_one({"_id": target_oid}, {"$inc": {"balance": amount}})
-
-        await audit_log(
-            action="TRANSFER_CREATED",
-            request=request,
-            user={"user_id": user_id},
-            meta={"transfer_id": str(transfer_id), "amount": amount},
-        )
-
-        return transfer_id
-
-    # ======================================================
-    # CREDIT / DEBIT (UNCHANGED CORE LOGIC)
-    # ======================================================
     delta = amount if tx_type == "credit" else -amount
 
     tx_doc = {
         "user_id": user_oid,
-        "account_id": source_oid,
+        "account_id": account_oid,
         "type": tx_type,
         "mode": mode,
         "amount": amount,
         "description": description,
-        "category": {"code": category["code"], "name": category["name"]},
-        "subcategory": {"code": sub["code"], "name": sub["name"]},
+        "category": category,
+        "subcategory": subcategory,
         "created_at": now,
         "deleted_at": None,
     }
 
     result = await db.transactions.insert_one(tx_doc)
-
-    await db.accounts.update_one({"_id": source_oid}, {"$inc": {"balance": delta}})
-
-    # ======================================================
-    # 🆕 NEW: CREATE RECURRING RULE (IF CHECKED)
-    # ======================================================
-    if is_recurring:
-        """
-        recurring = {
-            "frequency": "monthly",
-            "start_date": date
-        }
-        """
-
-        start_date_value = (
-            datetime.fromisoformat(start_date).date()
-            if start_date else date.today()
-        )
-
-        end_date_value = (
-            datetime.fromisoformat(end_date).date()
-            if end_date else None
-        )
-
-        await RecurringDepositService.create(
-            user_id=user_oid,
-            account_id=account_id,
-            amount=amount,
-            # mode=mode,
-            # tx_type=tx_type,
-            # category_code=category_code,
-            # subcategory_code=subcategory_code,
-            # description=description,
-            frequency=frequency,
-            interval=interval,
-            start_date=start_date_value,
-            end_date=end_date_value,
-            #source_transaction_id=result.inserted_id,
-        )
-
+    await db.accounts.update_one({"_id": account_oid}, {"$inc": {"balance": delta}})
 
     await audit_log(
         action="TRANSACTION_CREATED",
         request=request,
-        user={"user_id": user_id},
+        user={"user_id": str(user_oid)},
         meta={"transaction_id": str(result.inserted_id), "amount": amount},
     )
 
     return result.inserted_id
+
+
+async def _add_transfer_transaction(
+    *,
+    user_oid: ObjectId,
+    source_account_id: str,
+    target_account_id: str | None,
+    amount: float,
+    mode: str,
+    description: str,
+    category: dict,
+    subcategory: dict,
+    request=None,
+):
+    if not target_account_id:
+        raise Exception("Target account required")
+
+    source_oid = ObjectId(source_account_id)
+    target_oid = ObjectId(target_account_id)
+
+    if source_oid == target_oid:
+        raise Exception("Source and target cannot be same")
+
+    transfer_id = ObjectId()
+    now = datetime.now(UTC)
+
+    await db.transactions.insert_many([
+        {
+            "transfer_id": transfer_id,
+            "user_id": user_oid,
+            "account_id": source_oid,
+            "type": "transfer_out",
+            "mode": mode,
+            "amount": amount,
+            "description": description,
+            "category": category,
+            "subcategory": subcategory,
+            "created_at": now,
+            "deleted_at": None,
+        },
+        {
+            "transfer_id": transfer_id,
+            "user_id": user_oid,
+            "account_id": target_oid,
+            "type": "transfer_in",
+            "mode": mode,
+            "amount": amount,
+            "description": description,
+            "category": category,
+            "subcategory": subcategory,
+            "created_at": now,
+            "deleted_at": None,
+        },
+    ])
+
+    await db.accounts.update_one({"_id": source_oid}, {"$inc": {"balance": -amount}})
+    await db.accounts.update_one({"_id": target_oid}, {"$inc": {"balance": amount}})
+
+    return transfer_id
+
+async def _add_recurring_transaction(
+    *,
+    user_oid: ObjectId,
+    account_id: str,
+    amount: float,
+    tx_type: str,
+    mode: str,
+    description: str,
+    category: dict,
+    subcategory: dict,
+    frequency: str,
+    interval: int,
+    start_date: date | None,
+    end_date: date | None,
+    source_transaction_id: ObjectId,
+):
+    start_date_value = (
+    datetime.fromisoformat(start_date).date()
+    if start_date else date.today()
+    )
+
+    end_date_value = (
+        datetime.fromisoformat(end_date).date()
+        if end_date else None
+    )
+
+
+    await RecurringDepositService.create(
+        user_id=user_oid,
+        account_id=account_id,
+        amount=amount,
+        tx_type=tx_type,
+        mode=mode,
+        description=description,
+        category=category,
+        subcategory=subcategory,
+        frequency=frequency,
+        interval=interval,
+        start_date=start_date_value,
+        end_date=end_date_value,
+        source_transaction_id=source_transaction_id,
+    )
+
 
 # ======================================================
 # READ TRANSACTIONS (USED BY WEB)
@@ -263,9 +516,7 @@ async def get_user_transactions(
     - Handles soft-deletes and restore window
     """
 
-    from bson import ObjectId
-    from datetime import datetime, timedelta, timezone
-    from app.core.guards import RESTORE_WINDOW_HOURS
+
 
     user_oid = ObjectId(user_id)
     now = datetime.now(timezone.utc)

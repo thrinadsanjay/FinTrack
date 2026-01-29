@@ -1,27 +1,51 @@
-<header class="navbar">
-    <div class="nav-left">
-        <span class="logo head">FinTracker</span>
+<!-- DESKTOP NAVBAR -->
+<header class="navbar desktop-nav">
+  <div class="nav-left">
+    <span class="logo head">FinTracker</span>
 
-        <a href="/" class="{% if active_page == 'dashboard' %}active{% endif %}">
-            Dashboard
-        </a>
-        <a href="/transactions" class="{% if active_page == 'addtransaction' %}active{% endif %}">
-            New Transaction
-        </a>
-        <a href="/transactions/list" class="{% if active_page == 'listtransactions' %}active{% endif %}">
-            Transactions
-        </a>
-        <a href="/accounts" class="{% if active_page == 'accounts' %}active{% endif %}">
-            Accounts
-        </a>
-    </div>
+    <a href="/" class="{% if active_page == 'dashboard' %}active{% endif %}">
+      Dashboard
+    </a>
+    <a href="/transactions" class="{% if active_page == 'addtransaction' %}active{% endif %}">
+      New
+    </a>
+    <a href="/transactions/list" class="{% if active_page == 'listtransactions' %}active{% endif %}">
+      Transactions
+    </a>
+    <a href="/accounts" class="{% if active_page == 'accounts' %}active{% endif %}">
+      Accounts
+    </a>
+  </div>
 
-    <div class="nav-right">
-        <!-- {% if user %} -->
-        <span class="user">
-            <h4>Welcome {{ user.username }}</h4>
-        </span>
-        <a href="/logout" class="logout">Logout</a>
-        <!-- {% endif %} -->
-    </div>
+  <div class="nav-right">
+    <span class="user">Welcome {{ user.username }}</span>
+    <a href="/logout" class="logout">Logout</a>
+  </div>
 </header>
+
+<!-- MOBILE BOTTOM NAV -->
+<nav class="mobile-nav" data-mobile-nav>
+  <a href="/" class="{% if active_page == 'dashboard' %}active{% endif %}">
+    <i class="fa fa-home"></i>
+    <span>Home</span>
+  </a>
+
+  <a href="/transactions/list" class="{% if active_page == 'listtransactions' %}active{% endif %}">
+    <i class="fa fa-list"></i>
+    <span>Txns</span>
+  </a>
+
+  <a href="/transactions" class="add-btn {% if active_page == 'addtransaction' %}active{% endif %}">
+    <i class="fa fa-plus"></i>
+  </a>
+
+  <a href="/accounts" class="{% if active_page == 'accounts' %}active{% endif %}">
+    <i class="fa fa-credit-card"></i>
+    <span>Accounts</span>
+  </a>
+
+  <a href="/logout">
+    <i class="fa fa-user"></i>
+    <span>Me</span>
+  </a>
+</nav>

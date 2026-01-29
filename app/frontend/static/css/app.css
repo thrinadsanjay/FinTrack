@@ -1,16 +1,25 @@
-html {
-  box-sizing: border-box;
-  /* overflow: hidden ; */
+html, body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
 }
 
 body {
-  margin: 0;
   font-family: system-ui, sans-serif;
   background: #a8cef3;
 }
 
-main {
-  padding: 1rem;
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.app-content {
+  min-height: calc(100vh - 72px);
+  flex: 1;
+  overflow: hidden;
+  padding: 16px;
 }
 
 .header {
@@ -46,19 +55,28 @@ main {
 }
 
 .card {
-  background: rgb(173, 151, 151);
+  display: flex;
+  flex-direction: column;
+  background: rgb(151, 168, 173);
   padding: 1rem;
   border-radius: 8px;
   margin-bottom: 1rem;
   overflow: auto;
   scroll-behavior: smooth;
   nav-down: nav-down 0.3s ease-in-out;
+  max-height: 100%;
 }
 
 .card-title {
+  padding: 12px;
   font-size: 1.4rem;
   font-weight: 600;
   margin-bottom: 12px;
+}
+
+.table-scroll {
+  overflow-y: auto;   /* ✅ ONLY THIS SCROLLS */
+  max-height: 320px;  /* desktop default */
 }
 
 
@@ -84,23 +102,6 @@ button[type="submit"]:active {
   transform: scale(0.98);
 }
 
-
-
-/* Mobile improvements */
-@media (max-width: 768px) {
-  table {
-    font-size: 0.9rem;
-  }
-
-  .card {
-    padding: 0.75rem;
-  }
-
-  button {
-    padding: 8px 12px;
-  }
-}
-
 /* Hide Arrows in Numer Input */
 
 input::-webkit-outer-spin-button,
@@ -113,3 +114,19 @@ input::-webkit-inner-spin-button {
 input[type="number"] {
     -moz-appearance: textfield;
 } 
+
+.table-wrapper {
+  max-height: calc(100vh - 160px);
+  overflow-y: auto;
+}
+
+/* ---------- Mobile Design ---------- */
+
+@media (max-width: 768px) {
+  .app-content {
+    padding-bottom: 88px;
+  }
+  .table-scroll {
+    max-height: 50vh;
+  }
+}

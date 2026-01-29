@@ -1,12 +1,14 @@
 from fastapi import APIRouter, Request, Form
 from fastapi.responses import RedirectResponse
 from app.web.templates import templates
+from app.core.guards import login_required
 from app.services.accounts import (
     get_accounts,
     create_account,
     update_account_name,
     delete_account,
 )
+
 
 router = APIRouter()
 
@@ -21,27 +23,15 @@ ACCOUNT_TYPES = [
 ]
 
 
-# ======================================================
-# AUTH GUARD
-# ======================================================
-
-def require_user(request: Request):
-    user = request.session.get("user")
-    if not user:
-        return RedirectResponse("/login", status_code=303)
-    return user
-
 
 # ======================================================
 # LIST ACCOUNTS
 # ======================================================
 
 @router.get("")
+@login_required
 async def accounts_page(request: Request):
-    user = require_user(request)
-    if isinstance(user, RedirectResponse):
-        return user
-
+    user = request.session.get("user")
     accounts = await get_accounts(user["user_id"])
 
     return templates.TemplateResponse(
@@ -61,6 +51,7 @@ async def accounts_page(request: Request):
 # ======================================================
 
 @router.post("/add")
+@login_required
 async def add_account(
     request: Request,
     bank_name: str = Form(...),
@@ -68,10 +59,7 @@ async def add_account(
     balance: float = Form(...),
     name: str | None = Form(None),
 ):
-    user = require_user(request)
-    if isinstance(user, RedirectResponse):
-        return user
-
+    user = request.session.get("user")
     try:
         await create_account(
             user_id=user["user_id"],
@@ -101,15 +89,13 @@ async def add_account(
 # ======================================================
 
 @router.post("/rename")
+@login_required
 async def rename_account(
     request: Request,
     account_id: str = Form(...),
     name: str = Form(...),
 ):
-    user = require_user(request)
-    if isinstance(user, RedirectResponse):
-        return user
-
+    user = request.session.get("user")
     await update_account_name(
         user_id=user["user_id"],
         account_id=account_id,
@@ -125,14 +111,12 @@ async def rename_account(
 # ======================================================
 
 @router.post("/delete")
+@login_required
 async def remove_account(
     request: Request,
     account_id: str = Form(...),
 ):
-    user = require_user(request)
-    if isinstance(user, RedirectResponse):
-        return user
-
+    user = request.session.get("user")
     try:
         await delete_account(
             user_id=user["user_id"],

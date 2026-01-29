@@ -1,42 +1,123 @@
+/* =======================
+   BASE RESET
+======================= */
+
 body {
-    margin: 0;
-    font-family: system-ui, sans-serif;
+  margin: 0;
+  font-family: system-ui, sans-serif;
 }
 
-.navbar {
-    display: flex;
-    justify-content: space-between;
-    padding: 12px 20px;
-    background: #1f2937;
-    color: white;
+/* =======================
+   DEFAULT VISIBILITY
+   (DESKTOP FIRST)
+======================= */
+
+/* Desktop default */
+[data-mobile-nav] {
+  display: none !important;
 }
 
-.navbar a {
-    color: #d1d5db;
-    margin-right: 15px;
-    text-decoration: none;
+/* Desktop navbar always visible */
+.desktop-nav {
+  display: flex;
 }
 
-.navbar a.active {
-    color: white;
-    font-weight: bold;
+
+/* =======================
+   DESKTOP NAVBAR
+======================= */
+
+.desktop-nav {
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 24px;
+  background: #1f2937;
+  color: white;
 }
 
-.logo {
-    font-weight: bold;
-    margin-right: 25px;
+.nav-left a {
+  color: #d1d5db;
+  margin-right: 18px;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.nav-left a.active {
+  color: #ffffff;
+  border-bottom: 2px solid #60a5fa;
 }
 
 .logo.head {
-    font-weight: bolder;
-    font-size: xx-large;
-    text-transform: uppercase;
+  font-weight: 800;
+  font-size: 22px;
+  margin-right: 30px;
+  text-transform: uppercase;
 }
 
-.container {
-    padding: 20px;
+.nav-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
 .logout {
-    color: #fca5a5;
+  color: #fca5a5;
+  text-decoration: none;
+}
+
+/* =======================
+   MOBILE OVERRIDE
+======================= */
+@media screen and (max-width: 768px) {
+
+  .desktop-nav {
+    display: none !important;
+  }
+
+  [data-mobile-nav] {
+    display: flex !important;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 62px;
+    background: #0f172a;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    justify-content: space-around;
+    align-items: center;
+    z-index: 1000;
+  }
+
+  [data-mobile-nav] a {
+    color: #94a3b8;
+    font-size: 11px;
+    text-decoration: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  [data-mobile-nav] a i {
+    font-size: 18px;
+  }
+
+  [data-mobile-nav] a.active {
+    color: #60a5fa;
+  }
+
+  [data-mobile-nav] .add-btn {
+    background: #60a5fa;
+    color: #0f172a;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    margin-top: -24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  body {
+    padding-bottom: 72px;
+  }
 }

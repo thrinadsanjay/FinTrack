@@ -17,7 +17,7 @@ from app.services.transactions import (
     restore_transaction,
     edit_transaction,
 )
-from app.core.guards import is_within_edit_window, can_restore_today
+from app.core.guards import is_within_edit_window, can_restore_today, is_month_closed, login_required
 
 router = APIRouter()
 
@@ -45,6 +45,7 @@ async def transactions_page(request: Request):
 
 
 @router.post("/add")
+@login_required
 async def add_transaction(
     request: Request,
     account_id: str = Form(...),
@@ -62,8 +63,6 @@ async def add_transaction(
     end_date: str | None = Form(None),
 ):
     user = request.session.get("user")
-    if not user:
-        return RedirectResponse("/login", status_code=303)
 
     if is_recurring:
         if not frequency:
@@ -97,6 +96,7 @@ async def add_transaction(
 # ======================================================
 
 @router.get("/list", response_class=HTMLResponse)
+@login_required
 async def transactions_list_page(
     request: Request,
     account_id: str | None = Query(None),
@@ -107,8 +107,6 @@ async def transactions_list_page(
     subcategory_code: str | None = Query(None),
 ):
     user = request.session.get("user")
-    if not user:
-        return RedirectResponse("/login", status_code=303)
 
     transactions = await get_user_transactions(
         user_id=user["user_id"],
@@ -136,6 +134,7 @@ async def transactions_list_page(
             tx["created_at"] = created_at
 
         tx["is_deleted"] = tx.get("deleted_at") is not None
+
         tx["can_modify"] = (
             not tx["is_deleted"]
             and created_at
@@ -174,6 +173,38 @@ async def transactions_list_page(
         },
     )
 
+@router.post("/delete")
+@login_required
+async def delete_transaction_ui(
+    request: Request,
+    transaction_id: str = Form(...),
+):
+    user = request.session.get("user")
+    print("Deleting TX ID:", transaction_id)
+    await delete_transaction(
+        user_id=user["user_id"],
+        transaction_id=transaction_id,
+        request=request,
+    )
+
+    return RedirectResponse("/transactions/list", status_code=303)
+
+@router.post("/restore")
+@login_required
+async def restore_transaction_ui(
+    request: Request,
+    transaction_id: str = Form(...),
+):
+    user = request.session.get("user")
+    await restore_transaction(
+        user_id=user["user_id"],
+        transaction_id=transaction_id,
+        request=request,
+    )
+
+    return RedirectResponse("/transactions/list", status_code=303)
+
 @router.get("", response_class=HTMLResponse)
+@login_required
 async def transactions_default(request: Request):
     return await transactions_list_page(request)
