@@ -77,3 +77,42 @@ document.addEventListener("DOMContentLoaded", () => {
     loadSubcategories(typeSelect.value, categorySelect.value);
   });
 });
+
+
+// Toggle filter panel
+
+document.addEventListener("DOMContentLoaded", () => {
+  const toggle = document.getElementById("filterToggle");
+  const wrapper = document.getElementById("filterWrapper");
+  const arrow = document.getElementById("filterArrow");
+  const form = document.getElementById("filterForm");
+
+  if (!toggle || !wrapper || !form) return;
+
+  toggle.addEventListener("click", () => {
+    wrapper.classList.toggle("collapsed");
+    wrapper.classList.toggle("expanded");
+    toggle.classList.toggle("active");
+  });
+
+  toggle.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      toggle.click();
+    }
+  });
+
+  // Auto-open if filters are active
+  if (window.location.search.length > 1) {
+    wrapper.classList.remove("collapsed");
+    wrapper.classList.add("expanded");
+    toggle.classList.add("active");
+  }
+
+  // Auto-close after submit
+  form.addEventListener("submit", () => {
+    wrapper.classList.remove("expanded");
+    wrapper.classList.add("collapsed");
+    toggle.classList.remove("active");
+  });
+});

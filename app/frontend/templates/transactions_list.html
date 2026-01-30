@@ -21,203 +21,234 @@
 <!-- =========================
      FILTERS
 ========================= -->
-<form method="get" class="card" style="margin-bottom:1rem">
-  <h3>Filters</h3>
+<div class="filter-toggle" id="filterToggle" tabindex="0" role="button">
+  <span class="filter-title">Filters
+    {% if active_filter_count %}
+      <span class="filter-badge">{{ active_filter_count }}</span>
+    {% endif %}</span>
+  <span class="filter-arrow" id="filterArrow">▼</span>
+</div>
 
-  <label>Account</label>
-  <select name="account_id">
-    <option value="">All</option>
-    {% for acc in accounts %}
-      <option value="{{ acc._id }}"
-        {% if filters.account_id == acc._id|string %}selected{% endif %}>
-        {{ acc.name }}
-      </option>
-    {% endfor %}
-  </select>
+<div class="filter-wrapper collapsed" id="filterWrapper">
+  <form method="get" class="card filter-card" id="filterForm">
+    <h3 class="card-title">Filters</h3>
 
-  <label>Type</label>
-  <select name="tx_type">
-    <option value="">All</option>
-    <option value="credit" {% if filters.tx_type == "credit" %}selected{% endif %}>Income</option>
-    <option value="debit" {% if filters.tx_type == "debit" %}selected{% endif %}>Expense</option>
-    <option value="transfer" {% if filters.tx_type == "transfer" %}selected{% endif %}>Transfer</option>
-  </select>
+    <div class="filter-grid">
 
-  <label>Category</label>
-  <select name="category_code"
-          id="filter-category"
-          data-selected="{{ filters.category_code or '' }}">
-    <option value="">All</option>
-  </select>
+      <div class="form-field field--idle">
+        <label>Account</label>
+        <select name="account_id">
+          <option value="">All</option>
+          {% for acc in accounts %}
+            <option value="{{ acc._id }}"
+              {% if filters.account_id == acc._id|string %}selected{% endif %}>
+              {{ acc.name }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
 
-  <label>Subcategory</label>
-  <select name="subcategory_code"
-          id="filter-subcategory"
-          data-selected="{{ filters.subcategory_code or '' }}"
-          disabled>
-    <option value="">All</option>
-  </select>
+      <div class="form-field field--idle">
+        <label>Type</label>
+        <select name="tx_type">
+          <option value="">All</option>
+          <option value="credit" {% if filters.tx_type == "credit" %}selected{% endif %}>Income</option>
+          <option value="debit" {% if filters.tx_type == "debit" %}selected{% endif %}>Expense</option>
+          <option value="transfer" {% if filters.tx_type == "transfer" %}selected{% endif %}>Transfer</option>
+        </select>
+      </div>
 
-  <label>From</label>
-  <input type="date" name="date_from" value="{{ filters.date_from or '' }}">
+      <div class="form-field field--idle">
+        <label>Category</label>
+        <select name="category_code"
+                id="filter-category"
+                data-selected="{{ filters.category_code or '' }}">
+          <option value="">All</option>
+        </select>
+      </div>
 
-  <label>To</label>
-  <input type="date" name="date_to" value="{{ filters.date_to or '' }}">
+      <div class="form-field field--idle">
+        <label>Subcategory</label>
+        <select name="subcategory_code"
+                id="filter-subcategory"
+                data-selected="{{ filters.subcategory_code or '' }}"
+                disabled>
+          <option value="">All</option>
+        </select>
+      </div>
 
-  <button type="submit">Apply</button>
-  <a href="/transactions/list">Reset</a>
-</form>
+      <div class="form-field field--idle">
+        <label>From</label>
+        <input type="date" name="date_from" value="{{ filters.date_from or '' }}">
+      </div>
+
+      <div class="form-field field--idle">
+        <label>To</label>
+        <input type="date" name="date_to" value="{{ filters.date_to or '' }}">
+      </div>
+
+    </div>
+
+    <div class="filter-actions">
+      <button type="submit">Apply</button>
+      <a href="/transactions/list" class="filter-reset">Reset</a>
+    </div>
+  </form>
+</div>
+
 
 <!-- =========================
      TRANSACTIONS TABLE
 ========================= -->
-<div class="table-scroll">
-  <table>
-    <thead>
-      <tr>
-        <th>Date</th>
-        <th>Type</th>
-        <th>Account</th>
-        <th>Category</th>
-        <th>SubCategory</th>
-        <th>Amount</th>
-        <th></th>
-      </tr>
-    </thead>
+<div class="card table-card">
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Type</th>
+          <th>Account</th>
+          <th>Category</th>
+          <th>SubCategory</th>
+          <th>Amount</th>
+          <th></th>
+        </tr>
+      </thead>
 
-    <tbody>
-      {% for tx in transactions %}
-      <tr>
+      <tbody>
+        {% for tx in transactions %}
+        <tr>
 
-        <!-- DATE -->
-        <td>
-          {{ tx.created_at | localtime(request) | datetimeformat }}
-        </td>
-
-        <!-- TYPE / ACCOUNT -->
-        {% if tx.type == "transfer" %}
-          <td>Transfer</td>
+          <!-- DATE -->
           <td>
-            {{ account_map[tx.from_account|string] }}
-            →
-            {{ account_map[tx.to_account|string] }}
+            {{ tx.created_at | localtime(request) | datetimeformat }}
           </td>
-        {% else %}
-          <td>{{ tx.type|capitalize }}</td>
-          <td>{{ account_map[tx.account_id|string] }}</td>
-        {% endif %}
 
-        <!-- CATEGORY -->
-        <td>{{ tx.category.name or "—" }}</td>
-        <td>{{ tx.subcategory.name if tx.subcategory else "-" }}</td>
-
-        <!-- AMOUNT -->
-        <td>
-          {% if tx.type == "debit" %}
-            <span style="color:red">- ₹{{ tx.amount }}</span>         
-          {% elif tx.type == "credit" %}
-            <span style="color:green">+ ₹{{ tx.amount }}</span>
-          {% elif tx.type == "transfer" %}
-            <span style="color:blue">₹{{ tx.amount }}</span>
+          <!-- TYPE / ACCOUNT -->
+          {% if tx.type == "transfer" %}
+            <td>Transfer</td>
+            <td>
+              {{ account_map[tx.from_account|string] }}
+              →
+              {{ account_map[tx.to_account|string] }}
+            </td>
+          {% else %}
+            <td>{{ tx.type|capitalize }}</td>
+            <td>{{ account_map[tx.account_id|string] }}</td>
           {% endif %}
-        </td>
 
-        <!-- ACTIONS -->
-        <td class="action-btns">
-          <span class="info-icon"
-            title="
-            {% if tx.description %}
-              {{ tx.description | e }}
-            {% else %}
-              Not available
+          <!-- CATEGORY -->
+          <td>{{ tx.category.name or "—" }}</td>
+          <td>{{ tx.subcategory.name if tx.subcategory else "-" }}</td>
+
+          <!-- AMOUNT -->
+          <td>
+            {% if tx.type == "debit" %}
+              <span style="color:red">- ₹{{ tx.amount }}</span>         
+            {% elif tx.type == "credit" %}
+              <span style="color:green">+ ₹{{ tx.amount }}</span>
+            {% elif tx.type == "transfer" %}
+              <span style="color:blue">₹{{ tx.amount }}</span>
             {% endif %}
-            {% if tx.restored_at %}
-              &#10;♻ Restored
-            {% endif %}
-            ">ℹ️
-          </span>
+          </td>
 
-          {# -----------------------------
-            CASE 1: MONTH CLOSED
-          ----------------------------- #}
-          {% if tx.is_month_closed %}
-            <span title="Month closed">📕</span>
+          <!-- ACTIONS -->
+          <td class="action-btns">
+            <span class="info-icon"
+              title="
+              {% if tx.description %}
+                {{ tx.description | e }}
+              {% else %}
+                Not available
+              {% endif %}
+              {% if tx.restored_at %}
+                &#10;♻ Restored
+              {% endif %}
+              ">ℹ️
+            </span>
 
-          {# -----------------------------
-            CASE 2: SOFT-DELETED
-          ----------------------------- #}
-          {% elif tx.is_deleted %}
-            {% if tx.can_restore %}
+            {# -----------------------------
+              CASE 1: MONTH CLOSED
+            ----------------------------- #}
+            {% if tx.is_month_closed %}
+              <span title="Month closed">📕</span>
+
+            {# -----------------------------
+              CASE 2: SOFT-DELETED
+            ----------------------------- #}
+            {% elif tx.is_deleted %}
+              {% if tx.can_restore %}
+                <form method="post"
+                      action="/transactions/restore"
+                      style="display:inline"
+                      onsubmit="return confirm('Restore this transaction? This will rollback balance.')">
+                  <input type="hidden"
+                        name="transaction_id"
+                        value="{{ tx._id }}">
+                  <button class="icon-btn"
+                          title="Restore transaction"
+                          >
+                    ♻
+                  </button>
+                </form>
+              {% else %}
+                <span title="Restore window expired">⛔</span>
+              {% endif %}
+
+            {# -----------------------------
+              CASE 3: ACTIVE + EDITABLE
+            ----------------------------- #}
+            {% elif tx.can_modify %}
+
+              {% if tx.type != "transfer" %}
+                <button type="button"
+                  class="edit-transaction-btn"
+                  data-id="{{ tx._id }}"
+                  data-account="{{ tx.account_id }}"
+                  data-amount="{{ tx.amount }}"
+                  data-category="{{ tx.category.code }}"
+                  data-subcategory="{{ tx.subcategory.code }}"
+                  data-type="{{ tx.type }}"
+                  data-description="{{ tx.description | e }}"
+                  title="Edit transaction">✏️
+                </button>
+              {% endif %}
+
               <form method="post"
-                    action="/transactions/restore"
+                    action="/transactions/delete"
                     style="display:inline"
-                    onsubmit="return confirm('Restore this transaction? This will rollback balance.')">
-                <input type="hidden"
-                      name="transaction_id"
-                      value="{{ tx._id }}">
-                <button class="icon-btn"
-                        title="Restore transaction"
-                        >
-                  ♻
+                    onsubmit="return confirm('Delete this transaction? This will rollback balance.')">
+                {% if tx.type == "transfer" %}
+                  <input type="hidden" name="transfer_id" value="{{ tx.transfer_id }}">
+                {% else %}
+                  <input type="hidden" name="transaction_id" value="{{ tx._id }}">
+                {% endif %}
+                <button class="icon-btn tr-del"
+                        type="submit"
+                        title="Delete transaction">
+                  🗑️
                 </button>
               </form>
+
+            {# -----------------------------
+              CASE 4: LOCKED (AGE EXCEEDED)
+            ----------------------------- #}
             {% else %}
-              <span title="Restore window expired">⛔</span>
+              <span title="Locked since {{ tx.lock_time | localtime(request) | datetimeformat }}">
+                🔒
+              </span>
             {% endif %}
 
-          {# -----------------------------
-            CASE 3: ACTIVE + EDITABLE
-          ----------------------------- #}
-          {% elif tx.can_modify %}
-
-            {% if tx.type != "transfer" %}
-              <button type="button"
-                class="edit-transaction-btn"
-                data-id="{{ tx._id }}"
-                data-account="{{ tx.account_id }}"
-                data-amount="{{ tx.amount }}"
-                data-category="{{ tx.category.code }}"
-                data-subcategory="{{ tx.subcategory.code }}"
-                data-type="{{ tx.type }}"
-                data-description="{{ tx.description | e }}"
-                title="Edit transaction">✏️
-              </button>
-            {% endif %}
-
-            <form method="post"
-                  action="/transactions/delete"
-                  style="display:inline"
-                  onsubmit="return confirm('Delete this transaction? This will rollback balance.')">
-              {% if tx.type == "transfer" %}
-                <input type="hidden" name="transfer_id" value="{{ tx.transfer_id }}">
-              {% else %}
-                <input type="hidden" name="transaction_id" value="{{ tx._id }}">
-              {% endif %}
-              <button class="icon-btn tr-del"
-                      type="submit"
-                      title="Delete transaction">
-                🗑️
-              </button>
-            </form>
-
-          {# -----------------------------
-            CASE 4: LOCKED (AGE EXCEEDED)
-          ----------------------------- #}
-          {% else %}
-            <span title="Locked since {{ tx.lock_time | localtime(request) | datetimeformat }}">
-              🔒
-            </span>
-          {% endif %}
-
-        </td>
-      </tr>
-      {% else %}
-        <tr>
-          <td colspan="6">No transactions yet</td>
+          </td>
         </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+        {% else %}
+          <tr>
+            <td colspan="6">No transactions yet</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 
 <!-- =========================

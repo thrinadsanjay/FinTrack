@@ -1,25 +1,62 @@
 {% extends "base.html" %}
 {% block title %}Login ¦ FinTracker{% endblock %}
+
 {% block content %}
-<div class="card">
-  <h2>Sign in</h2>
+<div class="login-bg">
+  <div class="login-card animate-in">
+    <h2 class="login-title">Welcome Back 👋</h2>
+    <p class="login-subtitle">Sign in to continue tracking your finances</p>
 
-  {% if request.query_params.get('error') %}
-    <p style="color:red">Invalid credentials</p>
-  {% endif %}
+    {% if request.query_params.get('error') %}
+      <p class="login-error">Invalid credentials</p>
+    {% endif %}
 
-  <form method="post" action="/login/local">
-    <input name="username" placeholder="Username" required>
-    <input type="password" name="password" placeholder="Password" required>
-    <button type="submit">Login</button>
-  </form>
+    <form method="post" action="/login/local" class="login-form">
+      <div class="form-group">
+        <label>Username</label>
+        <input name="username" placeholder="Enter your username" required>
+      </div>
 
-  <hr>
+      <div class="form-group password-group">
+        <label>Password</label>
+        <input
+          type="password"
+          name="password"
+          id="password"
+          placeholder="Enter your password"
+          required
+        >
+        <span class="toggle-password" onclick="togglePassword()">👁️</span>
+      </div>
 
-  <a href="/login/oauth">
-    <button style="background:#2c2c2c;color:white">
+      <div class="login-options">
+        <label class="remember-me">
+          <input type="checkbox" name="remember">
+          Remember me
+        </label>
+
+        <a href="/forgot-password" class="forgot-link">
+          Forgot password?
+        </a>
+      </div>
+
+      <button type="submit" class="btn-primary">Login</button>
+    </form>
+
+    <div class="divider">
+      <span>OR</span>
+    </div>
+
+    <a href="/login/oauth" class="btn-secondary">
       Login with Keycloak
-    </button>
-  </a>
+    </a>
+  </div>
 </div>
+
+<script>
+function togglePassword() {
+  const input = document.getElementById("password");
+  input.type = input.type === "password" ? "text" : "password";
+}
+</script>
 {% endblock %}
