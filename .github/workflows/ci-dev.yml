@@ -1,0 +1,50 @@
+name: CI - Build & Push Image (Dev)
+
+on:
+  push:
+    branches:
+      - dev
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Load app version
+        run: |
+          set -e
+          FULL_VERSION=$(grep FT_APP_VERSION .env | cut -d '=' -f2)
+
+          if [ -z "$FULL_VERSION" ]; then
+            echo "FT_APP_VERSION not found in .env"
+            exit 1
+          fi
+
+          echo "FULL_VERSION=$FULL_VERSION" >> $GITHUB_ENV
+
+      - name: Set short commit SHA
+        run: echo "SHORT_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t ghcr.io/${{ github.repository_owner }}/fintracker-backend:${FULL_VERSION}-${SHORT_SHA} \
+            .
+
+      - name: Push Docker image
+        run: |
+          docker push ghcr.io/${{ github.repository_owner }}/fintracker-backend:${FULL_VERSION}-${SHORT_SHA}

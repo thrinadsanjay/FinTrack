@@ -1,0 +1,82 @@
+name: Release - Deploy to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_notes:
+        description: "Release notes (optional)"
+        required: false
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release-prod:
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Load versions
+        run: |
+          set -e
+          FULL_VERSION=$(grep FT_APP_VERSION .env | cut -d '=' -f2)
+          PROD_VERSION=$(echo "$FULL_VERSION" | cut -d '.' -f1,2)
+
+          if [ -z "$FULL_VERSION" ]; then
+            echo "FT_APP_VERSION missing"
+            exit 1
+          fi
+
+          echo "FULL_VERSION=$FULL_VERSION" >> $GITHUB_ENV
+          echo "PROD_VERSION=$PROD_VERSION" >> $GITHUB_ENV
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Retag image for production
+        run: |
+          IMAGE_BASE=ghcr.io/${{ github.repository_owner }}/fintracker-backend
+
+          docker pull $IMAGE_BASE:${FULL_VERSION}-${GITHUB_SHA::7}
+          docker tag  $IMAGE_BASE:${FULL_VERSION}-${GITHUB_SHA::7} $IMAGE_BASE:${PROD_VERSION}
+          docker push $IMAGE_BASE:${PROD_VERSION}
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.PROD_SERVER_SSH_KEY }}
+
+      - name: Deploy to Production
+        run: |
+          ssh -o StrictHostKeyChecking=no \
+            ${{ secrets.PROD_SERVER_USER }}@${{ secrets.PROD_SERVER_HOST }} << EOF
+              set -e
+              cd ${{ secrets.PROD_APP_PATH }}
+
+              sed -i "s/^FT_APP_VERSION=.*/FT_APP_VERSION=${PROD_VERSION}/" .env
+
+              docker compose pull
+              docker compose up -d
+          EOF
+
+      - name: Health check
+        run: |
+          echo "Waiting for app to stabilize..."
+          sleep 20
+
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" ${{ secrets.PROD_HEALTH_URL }})
+
+          if [ "$STATUS" != "200" ]; then
+            echo "❌ Production health check failed ($STATUS)"
+            exit 1
+          fi
+
+          echo "✅ Production deployment successful"

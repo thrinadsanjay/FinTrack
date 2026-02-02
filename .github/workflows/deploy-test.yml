@@ -1,0 +1,65 @@
+name: CD - Deploy to Test
+
+on:
+  workflow_run:
+    workflows: ["CI - Build & Push Image (Dev)"]
+    types:
+      - completed
+
+jobs:
+  deploy-test:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Load app version
+        run: |
+          set -e
+          FULL_VERSION=$(grep FT_APP_VERSION .env | cut -d '=' -f2)
+
+          if [ -z "$FULL_VERSION" ]; then
+            echo "FT_APP_VERSION not found"
+            exit 1
+          fi
+
+          echo "FULL_VERSION=$FULL_VERSION" >> $GITHUB_ENV
+          echo "SHORT_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.TEST_SERVER_KEY }}
+
+      - name: Deploy to Test Server
+        run: |
+          ssh -o StrictHostKeyChecking=no \
+            ${{ secrets.TEST_SERVER_USER }}@${{ secrets.TEST_SERVER_HOST }} << EOF
+              set -e
+              cd ${{ secrets.TEST_APP_PATH }}
+
+              echo "Updating version in .env"
+              sed -i "s/^FT_APP_VERSION=.*/FT_APP_VERSION=${FULL_VERSION}/" .env
+
+              echo "Pulling latest image"
+              docker compose pull
+
+              echo "Restarting containers"
+              docker compose up -d
+          EOF
+
+      - name: Health check
+        run: |
+          echo "Waiting for app to start..."
+          sleep 15
+
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" ${{ secrets.TEST_HEALTH_URL }})
+
+          if [ "$STATUS" != "200" ]; then
+            echo "Health check failed with status $STATUS"
+            exit 1
+          fi
+
+          echo "Health check passed ✅"
