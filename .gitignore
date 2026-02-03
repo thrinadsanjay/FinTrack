@@ -243,6 +243,7 @@ Thumbs.db
 # Old Files backup
 *.old
 *.bkp
+*_BAK
 default.conf
 __*_disabled
 

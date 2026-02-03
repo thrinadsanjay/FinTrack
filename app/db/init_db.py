@@ -18,6 +18,10 @@ async def init_indexes():
     await db.transactions.create_index([("account_id", 1)])
     await db.transactions.create_index([("created_at", -1)])
 
+    # Notifications
+    await db.notifications.create_index([("user_id", 1)])
+    await db.notifications.create_index([("user_id", 1), ("is_read", 1)])
+    await db.notifications.create_index([("user_id", 1), ("key", 1)], unique=True)
 
     
     

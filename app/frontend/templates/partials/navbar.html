@@ -1,5 +1,7 @@
 <!-- DESKTOP NAVBAR -->
 <header class="navbar desktop-nav">
+  {% set notifications = notifications | default([]) %}
+  {% set notif_count = notifications | length %}
   <div class="nav-left">
     <span class="logo head">FinTracker</span>
 
@@ -18,10 +20,39 @@
   </div>
 
   <div class="nav-right">
+    <div class="notif">
+      <button type="button" class="notif-btn" data-notif-toggle aria-expanded="false">
+        <i class="fa fa-bell"></i>
+        {% if notif_count > 0 %}
+          <span class="notif-count">{{ notif_count }}</span>
+        {% endif %}
+      </button>
+    </div>
     <span class="user">Welcome {{ user.username }}</span>
     <a href="/logout" class="logout">Logout</a>
   </div>
 </header>
+
+<div class="notif-panel" data-notif-panel data-count="{{ notif_count }}">
+  <div class="notif-header">
+    <span>Notifications</span>
+    {% if notif_count > 0 %}
+      <button type="button" class="notif-read-all" data-notif-read-all>Mark all read</button>
+    {% endif %}
+  </div>
+  {% if notif_count > 0 %}
+    <ul class="notif-list">
+      {% for n in notifications %}
+        <li class="notif-item notif-{{ n.type | default('info') }}" data-notif-id="{{ n.id }}">
+          <div class="notif-title">{{ n.title }}</div>
+          <div class="notif-message">{{ n.message }}</div>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <div class="notif-empty">You're all caught up.</div>
+  {% endif %}
+</div>
 
 <!-- MOBILE BOTTOM NAV -->
 <nav class="mobile-nav" data-mobile-nav>
@@ -44,8 +75,85 @@
     <span>Accounts</span>
   </a>
 
+  <button type="button" class="mobile-notif" data-notif-toggle aria-expanded="false">
+    <i class="fa fa-bell"></i>
+    <span>Alerts</span>
+    {% if notif_count > 0 %}
+      <span class="notif-count">{{ notif_count }}</span>
+    {% endif %}
+  </button>
+
   <a href="/logout">
     <i class="fa fa-user"></i>
     <span>Me</span>
   </a>
 </nav>
+
+<script>
+  (function () {
+    const toggles = document.querySelectorAll("[data-notif-toggle]");
+    const panel = document.querySelector("[data-notif-panel]");
+    const readAllBtn = document.querySelector("[data-notif-read-all]");
+    if (!panel || toggles.length === 0) return;
+
+    function closePanel() {
+      panel.classList.remove("open");
+      toggles.forEach((t) => t.setAttribute("aria-expanded", "false"));
+    }
+
+    function setPanelHeight() {
+      const count = parseInt(panel.dataset.count || "0", 10);
+      const base = 140;
+      const perItem = 72;
+      const max = Math.floor(window.innerHeight * 0.5);
+      const target = Math.min(Math.max(base, base + count * perItem), max);
+      panel.style.setProperty("--notif-max", `${target}px`);
+    }
+
+    toggles.forEach((toggle) => {
+      toggle.addEventListener("click", (e) => {
+        e.stopPropagation();
+        setPanelHeight();
+        const isOpen = panel.classList.toggle("open");
+        toggles.forEach((t) => t.setAttribute("aria-expanded", String(isOpen)));
+      });
+    });
+
+    if (readAllBtn) {
+      readAllBtn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        try {
+          await fetch("/notifications/read", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ all: true }),
+          });
+          closePanel();
+          window.location.reload();
+        } catch (err) {
+          console.error(err);
+        }
+      });
+    }
+
+    window.addEventListener("resize", setPanelHeight);
+    document.addEventListener("click", closePanel);
+    panel.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const item = e.target.closest("[data-notif-id]");
+      if (!item) return;
+      const notifId = item.dataset.notifId;
+      if (!notifId) return;
+      try {
+        await fetch("/notifications/read", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids: [notifId] }),
+        });
+        window.location.reload();
+      } catch (err) {
+        console.error(err);
+      }
+    });
+  })();
+</script>

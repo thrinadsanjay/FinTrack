@@ -10,6 +10,7 @@ from fastapi.responses import RedirectResponse, HTMLResponse
 from app.web.templates import templates
 from app.services.recurring_deposit import RecurringDepositService
 from app.services.accounts import get_accounts
+from app.services.dashboard import get_user_notifications
 from app.services.transactions import (
     create_transaction,
     get_user_transactions,
@@ -32,6 +33,7 @@ async def transactions_page(request: Request):
         return RedirectResponse("/login", status_code=303)
 
     accounts = await get_accounts(user["user_id"])
+    notifications = await get_user_notifications(user["user_id"])
 
     return templates.TemplateResponse(
         "transactions_add.html",
@@ -39,6 +41,7 @@ async def transactions_page(request: Request):
             "request": request,
             "user": user,
             "accounts": accounts,
+            "notifications": notifications,
             "active_page": "addtransaction",
         },
     )
@@ -119,6 +122,7 @@ async def transactions_list_page(
     )
 
     accounts = await get_accounts(user["user_id"])
+    notifications = await get_user_notifications(user["user_id"])
     account_map = {str(acc["_id"]): acc["name"] for acc in accounts}
 
     # --------------------------------------------------
@@ -161,6 +165,7 @@ async def transactions_list_page(
             "transactions": transactions,
             "accounts": accounts,
             "account_map": account_map,
+            "notifications": notifications,
             "filters": {
                 "account_id": account_id,
                 "tx_type": tx_type,

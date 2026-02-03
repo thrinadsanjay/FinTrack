@@ -20,6 +20,7 @@ from app.web.home import router as web_router
 from app.web.auth import router as web_auth_router
 from app.web.accounts import router as web_accounts_router
 from app.web.transactions import router as web_transactions_router
+from app.web.notifications import router as web_notifications_router
 
 from app.schedulers.recurring_scheduler import run_recurring_transactions
 
@@ -89,6 +90,7 @@ app.include_router(web_router)
 app.include_router(web_auth_router)
 app.include_router(web_accounts_router, prefix="/accounts")
 app.include_router(web_transactions_router, prefix="/transactions")
+app.include_router(web_notifications_router, prefix="/notifications")
 
 
 # ======================================================

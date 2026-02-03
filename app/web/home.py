@@ -31,6 +31,7 @@ async def dashboard(request: Request):
             "user": user,
             "summary": summary,
             "transactions": transactions,
+            "notifications": summary.get("notifications", []),
             "active_page": "dashboard",
         },
     )

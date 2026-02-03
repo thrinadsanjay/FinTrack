@@ -8,6 +8,7 @@ from app.services.accounts import (
     update_account_name,
     delete_account,
 )
+from app.services.dashboard import get_user_notifications
 
 
 router = APIRouter()
@@ -33,6 +34,7 @@ ACCOUNT_TYPES = [
 async def accounts_page(request: Request):
     user = request.session.get("user")
     accounts = await get_accounts(user["user_id"])
+    notifications = await get_user_notifications(user["user_id"])
 
     return templates.TemplateResponse(
         "accounts.html",
@@ -41,6 +43,7 @@ async def accounts_page(request: Request):
             "user": user,
             "accounts": accounts,
             "account_types": ACCOUNT_TYPES,
+            "notifications": notifications,
             "active_page": "accounts",
         },
     )
@@ -74,9 +77,12 @@ async def add_account(
             "accounts.html",
             {
                 "request": request,
+                "user": user,
                 "error": str(e),
                 "accounts": await get_accounts(user["user_id"]),
                 "account_types": ACCOUNT_TYPES,
+                "notifications": await get_user_notifications(user["user_id"]),
+                "active_page": "accounts",
             },
             status_code=400,
         )
@@ -128,9 +134,12 @@ async def remove_account(
             "accounts.html",
             {
                 "request": request,
+                "user": user,
                 "error": str(e),
                 "accounts": await get_accounts(user["user_id"]),
                 "account_types": ACCOUNT_TYPES,
+                "notifications": await get_user_notifications(user["user_id"]),
+                "active_page": "accounts",
             },
             status_code=400,
         )

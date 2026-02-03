@@ -1,60 +1,267 @@
 {% extends "base.html" %}
 {% block title %}FinTracker{% endblock %}
 {% block content %}
-<h1>Dashboard</h1>
+<section class="dashboard-container">
+  <section class="dashboard-header">
+    <div class="title-row">
+      <div>
+        <h1>Dashboard</h1>
+        <p class="muted">Balance, trends, and activity in one view.</p>
+      </div>
+      <div class="header-balance">
+        <div class="panel panel-compact">
+          <div class="panel-header">
+            <h3>Total Balance</h3>
+            <span class="pill">All accounts</span>
+          </div>
+          <div class="balance-amount">₹ {{ summary.balance }}</div>
+          {% set today_net = (summary.today_income | default(0)) - (summary.today_expense | default(0)) %}
+          <div class="balance-sub">
+            <span class="metric green">Today Income: ₹ {{ summary.today_income }}</span>
+            <span class="metric red">Today Expense: ₹ {{ summary.today_expense }}</span>
+            <span class="metric {% if today_net < 0 %}red{% else %}green{% endif %}">
+              Today Net: ₹ {{ today_net }}
+            </span>
+            <span class="metric">Month Net: ₹ {{ summary.month_net }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
 
-<div class="cards">
-  <div class="card">
-    <h3>Total Balance</h3>
-    <p>₹ {{ summary.balance }}</p>
-  </div>
+  <section class="panel-grid">
+    <div class="panel">
+      <div class="panel-header">
+        <h3>Balance per Account</h3>
+        <span class="pill">Top accounts</span>
+      </div>
+      {% if summary.account_balances %}
+        <ul class="account-list">
+          {% for account in summary.account_balances %}
+            <li>
+              <div>
+                <span class="account-name">{{ account.name }}</span>
+                {% if account.bank_name %}
+                  <span class="muted">({{ account.bank_name }})</span>
+                {% endif %}
+              </div>
+              <span class="account-balance">₹ {{ account.balance }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="empty-state">No accounts yet.</p>
+      {% endif %}
+    </div>
 
-  <div class="card">
-    <h3>Today Income</h3>
-    <p class="green">₹ {{ summary.today_income }}</p>
-  </div>
-
-  <div class="card">
-    <h3>Today Expense</h3>
-    <p class="red">₹ {{ summary.today_expense }}</p>
-  </div>
-
-  <div class="card">
-    <h3>This Month</h3>
-    <p>₹ {{ summary.month_net }}</p>
-  </div>
-</div>
-
-<h2>Recent Transactions</h2>
-
-<table>
-  <thead>
-    <tr>
-      <th>Date</th>
-      <th>Description</th>
-      <th>Type</th>
-      <th>Amount</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for tx in transactions %}
-      <tr>
-        <td>{{ tx.created_at | localtime(request) | datetimeformat }}</td>
-        <td>{{ tx.description }}</td>
-        <td>{{ tx.type }}</td>
-        <td>
-          {% if tx.type in ["debit", "transfer_out"] %}
-            <span style="color:red">- ₹{{ tx.amount }}</span>
-          {% elif tx.type in ["credit", "transfer_in"] %}
-            <span style="color:green">+ ₹{{ tx.amount }}</span>
+    <div class="panel">
+      <div class="panel-header">
+        <h3>Upcoming Bills</h3>
+        <span class="pill">Next 7 / 30 days</span>
+      </div>
+      <div class="bill-columns">
+        <div class="bill-column">
+          <h4>Next 7 days</h4>
+          {% if summary.upcoming_bills_7 %}
+            <ul class="bill-list">
+              {% for bill in summary.upcoming_bills_7 %}
+                <li>
+                  <div>
+                    <span class="bill-title">{{ bill.description }}</span>
+                    <span class="muted">({{ bill.account_name }})</span>
+                  </div>
+                  <div class="bill-meta">
+                    <span class="bill-date">{{ bill.due_at | localtime(request) | dateformat }}</span>
+                    <span class="bill-amount">₹ {{ bill.amount }}</span>
+                  </div>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="empty-state">No bills due in the next 7 days.</p>
           {% endif %}
-        </td>
-      </tr>
-    {% else %}
-      <tr>
-        <td colspan="4">No transactions yet</td>
-      </tr>
-    {% endfor %}
-  </tbody>
-</table>
+        </div>
+        <div class="bill-column">
+          <h4>Next 30 days</h4>
+          {% if summary.upcoming_bills_30 %}
+            <ul class="bill-list">
+              {% for bill in summary.upcoming_bills_30 %}
+                <li>
+                  <div>
+                    <span class="bill-title">{{ bill.description }}</span>
+                    <span class="muted">({{ bill.account_name }})</span>
+                  </div>
+                  <div class="bill-meta">
+                    <span class="bill-date">{{ bill.due_at | localtime(request) | dateformat }}</span>
+                    <span class="bill-amount">₹ {{ bill.amount }}</span>
+                  </div>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="empty-state">No bills due in the next 30 days.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel-grid charts">
+    <div class="panel">
+      <div class="panel-header">
+        <h3>Cash Flow Trend (14 days)</h3>
+        <span class="pill">Net daily</span>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="cashflowChart" height="160"></canvas>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <h3>Income vs Expense (6 months)</h3>
+        <span class="pill">Monthly totals</span>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="incomeExpenseChart" height="160"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel transactions">
+    <div class="panel-header">
+      <h3>Recent Transactions</h3>
+      <span class="pill">Merged transfers</span>
+    </div>
+    <div class="table-scroll">
+      <table class="tx-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Description</th>
+            <th>Type</th>
+            <th>Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for tx in transactions %}
+            <tr>
+            <td>{{ tx.created_at | localtime(request) | dateformat }}</td>
+              <td>
+                {% if tx.type == "transfer" %}
+                  {{ tx.description }} — {{ tx.transfer.source }} → {{ tx.transfer.target }}
+                {% else %}
+                  {{ tx.description }}
+                {% endif %}
+              </td>
+              <td>
+                <span class="badge badge-{{ tx.type }}">{{ tx.type }}</span>
+              </td>
+              <td>
+                {% if tx.type == "debit" %}
+                  <span class="amount red">- ₹{{ tx.amount }}</span>
+                {% elif tx.type == "credit" %}
+                  <span class="amount green">+ ₹{{ tx.amount }}</span>
+                {% elif tx.type == "transfer" %}
+                  <span class="amount">₹{{ tx.amount }}</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="4" class="empty-state">No transactions yet</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+  const dailyLabels = [{% for d in summary.trend_daily %}"{{ d.date }}"{% if not loop.last %}, {% endif %}{% endfor %}];
+  const dailyNet = [{% for d in summary.trend_daily %}{{ d.net }}{% if not loop.last %}, {% endif %}{% endfor %}];
+  const dailyIncome = [{% for d in summary.trend_daily %}{{ d.income }}{% if not loop.last %}, {% endif %}{% endfor %}];
+  const dailyExpense = [{% for d in summary.trend_daily %}{{ d.expense }}{% if not loop.last %}, {% endif %}{% endfor %}];
+
+  const monthlyLabels = [{% for d in summary.trend_monthly %}"{{ d.month }}"{% if not loop.last %}, {% endif %}{% endfor %}];
+  const monthlyIncome = [{% for d in summary.trend_monthly %}{{ d.income }}{% if not loop.last %}, {% endif %}{% endfor %}];
+  const monthlyExpense = [{% for d in summary.trend_monthly %}{{ d.expense }}{% if not loop.last %}, {% endif %}{% endfor %}];
+
+  const cashflowCtx = document.getElementById("cashflowChart");
+  if (cashflowCtx) {
+    new Chart(cashflowCtx, {
+      type: "line",
+      data: {
+        labels: dailyLabels,
+        datasets: [
+          {
+            label: "Net",
+            data: dailyNet,
+            borderColor: "#0f766e",
+            backgroundColor: "rgba(15, 118, 110, 0.15)",
+            tension: 0.35,
+            fill: true,
+          },
+          {
+            label: "Income",
+            data: dailyIncome,
+            borderColor: "#16a34a",
+            backgroundColor: "rgba(22, 163, 74, 0.08)",
+            tension: 0.35,
+            fill: false,
+          },
+          {
+            label: "Expense",
+            data: dailyExpense,
+            borderColor: "#dc2626",
+            backgroundColor: "rgba(220, 38, 38, 0.08)",
+            tension: 0.35,
+            fill: false,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { position: "top" },
+        },
+        scales: {
+          y: { beginAtZero: true },
+        },
+      },
+    });
+  }
+
+  const incomeExpenseCtx = document.getElementById("incomeExpenseChart");
+  if (incomeExpenseCtx) {
+    new Chart(incomeExpenseCtx, {
+      type: "bar",
+      data: {
+        labels: monthlyLabels,
+        datasets: [
+          {
+            label: "Income",
+            data: monthlyIncome,
+            backgroundColor: "rgba(22, 163, 74, 0.6)",
+          },
+          {
+            label: "Expense",
+            data: monthlyExpense,
+            backgroundColor: "rgba(220, 38, 38, 0.6)",
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { position: "top" },
+        },
+        scales: {
+          y: { beginAtZero: true },
+        },
+      },
+    });
+  }
+</script>
 {% endblock %}
