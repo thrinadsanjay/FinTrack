@@ -5,6 +5,7 @@ from app.db.mongo import db
 from app.models.recurring_deposit import RecurringDeposit
 from app.schemas.recurring_deposit import RecurringDepositCreate
 from app.repositories.recurring_deposit import RecurringDepositRepository
+from app.services.audit import audit_log
 
 
 def calculate_next_run(
@@ -107,3 +108,15 @@ class RecurringDepositService:
         }
 
         await db.recurring_deposits.insert_one(doc)
+        await audit_log(
+            action="RECURRING_CREATED",
+            user={"user_id": str(user_id)},
+            meta={
+                "account_id": account_id,
+                "amount": amount,
+                "type": tx_type,
+                "frequency": frequency,
+                "interval": interval,
+                "source_transaction_id": str(source_transaction_id),
+            },
+        )

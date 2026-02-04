@@ -6,6 +6,7 @@ from app.services.accounts import (
     get_accounts,
     create_account,
     update_account_name,
+    update_account_balance,
     delete_account,
 )
 from app.services.dashboard import get_user_notifications
@@ -111,6 +112,27 @@ async def rename_account(
 
     return RedirectResponse("/accounts", status_code=303)
 
+
+# ======================================================
+# EDIT ACCOUNT (BALANCE ONLY)
+# ======================================================
+
+@router.post("/edit")
+@login_required
+async def edit_account(
+    request: Request,
+    account_id: str = Form(...),
+    balance: float = Form(...),
+):
+    user = request.session.get("user")
+    await update_account_balance(
+        user_id=user["user_id"],
+        account_id=account_id,
+        balance=balance,
+        request=request,
+    )
+
+    return RedirectResponse("/accounts", status_code=303)
 
 # ======================================================
 # DELETE ACCOUNT (SOFT DELETE)

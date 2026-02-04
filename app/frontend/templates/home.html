@@ -6,9 +6,10 @@
     <div class="title-row">
       <div>
         <h1>Dashboard</h1>
-        <p class="muted">Balance, trends, and activity in one view.</p>
       </div>
-      <div class="header-balance">
+    </div>
+    <div class="header-panels">
+      <div class="header-panels-left">
         <div class="panel panel-compact">
           <div class="panel-header">
             <h3>Total Balance</h3>
@@ -25,7 +26,30 @@
             <span class="metric">Month Net: ₹ {{ summary.month_net }}</span>
           </div>
         </div>
+        <div class="panel panel-compact panel-mini">
+          <div class="panel-header">
+            <h3>Savings Rate</h3>
+            <span class="pill">This month</span>
+          </div>
+          {% if summary.savings_rate is not none %}
+            <div class="savings-rate">
+              <span class="rate">{{ summary.savings_rate }}%</span>
+              {% if summary.savings_rate_change is not none %}
+                <span class="trend {% if summary.savings_rate_change < 0 %}red{% else %}green{% endif %}">
+                  {% if summary.savings_rate_change < 0 %}Down{% else %}Up{% endif %}
+                  {{ summary.savings_rate_change | abs }}%
+                </span>
+              {% endif %}
+            </div>
+            <div class="muted">
+              Income: ₹ {{ summary.month_income }} - Expense: ₹ {{ summary.month_expense }}
+            </div>
+          {% else %}
+            <p class="empty-state">No income recorded this month.</p>
+          {% endif %}
+        </div>
       </div>
+      <div class="header-panels-right"></div>
     </div>
   </section>
 
@@ -36,7 +60,7 @@
         <span class="pill">Top accounts</span>
       </div>
       {% if summary.account_balances %}
-        <ul class="account-list">
+        <ul class="account-list scroll-list">
           {% for account in summary.account_balances %}
             <li>
               <div>
@@ -63,7 +87,7 @@
         <div class="bill-column">
           <h4>Next 7 days</h4>
           {% if summary.upcoming_bills_7 %}
-            <ul class="bill-list">
+            <ul class="bill-list scroll-list">
               {% for bill in summary.upcoming_bills_7 %}
                 <li>
                   <div>
@@ -84,7 +108,7 @@
         <div class="bill-column">
           <h4>Next 30 days</h4>
           {% if summary.upcoming_bills_30 %}
-            <ul class="bill-list">
+            <ul class="bill-list scroll-list">
               {% for bill in summary.upcoming_bills_30 %}
                 <li>
                   <div>
@@ -106,13 +130,69 @@
     </div>
   </section>
 
+  <section class="panel-grid insights">
+    <div class="panel">
+      <div class="panel-header">
+        <h3>Largest Transactions</h3>
+        <span class="pill">This month</span>
+      </div>
+      {% if summary.largest_transactions %}
+        <ul class="insight-list">
+          {% for tx in summary.largest_transactions %}
+            <li>
+              <div>
+                <span class="insight-title">{{ tx.description }}</span>
+                <span class="muted">{{ tx.account_name }} - {{ tx.created_at | localtime(request) | dateformat }}</span>
+              </div>
+              <span class="insight-amount red">₹ {{ tx.amount }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="empty-state">No big transactions yet.</p>
+      {% endif %}
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <h3>Account Alerts</h3>
+        <span class="pill">Low balance / limits</span>
+      </div>
+      {% if summary.account_alerts %}
+        <ul class="alert-list">
+          {% for alert in summary.account_alerts %}
+            <li class="alert-item alert-{{ alert.level }}">
+              <span class="alert-title">{{ alert.title }}</span>
+              <span class="muted">{{ alert.message }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="empty-state">No alerts right now.</p>
+      {% endif %}
+    </div>
+  </section>
+
   <section class="panel-grid charts">
+    <div class="panel">
+      <div class="panel-header">
+        <h3>Top Spending Categories</h3>
+        <span class="pill">This month</span>
+      </div>
+      {% if summary.top_spending_categories %}
+        <div class="chart-wrap chart-square">
+          <canvas id="spendingCategoryChart" height="160"></canvas>
+        </div>
+      {% else %}
+        <p class="empty-state">No spending yet this month.</p>
+      {% endif %}
+    </div>
     <div class="panel">
       <div class="panel-header">
         <h3>Cash Flow Trend (14 days)</h3>
         <span class="pill">Net daily</span>
       </div>
-      <div class="chart-wrap">
+      <div class="chart-wrap chart-square">
         <canvas id="cashflowChart" height="160"></canvas>
       </div>
     </div>
@@ -121,7 +201,7 @@
         <h3>Income vs Expense (6 months)</h3>
         <span class="pill">Monthly totals</span>
       </div>
-      <div class="chart-wrap">
+      <div class="chart-wrap chart-square">
         <canvas id="incomeExpenseChart" height="160"></canvas>
       </div>
     </div>
@@ -177,91 +257,20 @@
   </section>
 </section>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script>
-  const dailyLabels = [{% for d in summary.trend_daily %}"{{ d.date }}"{% if not loop.last %}, {% endif %}{% endfor %}];
-  const dailyNet = [{% for d in summary.trend_daily %}{{ d.net }}{% if not loop.last %}, {% endif %}{% endfor %}];
-  const dailyIncome = [{% for d in summary.trend_daily %}{{ d.income }}{% if not loop.last %}, {% endif %}{% endfor %}];
-  const dailyExpense = [{% for d in summary.trend_daily %}{{ d.expense }}{% if not loop.last %}, {% endif %}{% endfor %}];
+<div
+  id="dashboard-data"
+  class="visually-hidden"
+  data-daily-labels="{% for d in summary.trend_daily %}{{ d.date }}{% if not loop.last %}|{% endif %}{% endfor %}"
+  data-daily-net="{% for d in summary.trend_daily %}{{ d.net }}{% if not loop.last %}|{% endif %}{% endfor %}"
+  data-daily-income="{% for d in summary.trend_daily %}{{ d.income }}{% if not loop.last %}|{% endif %}{% endfor %}"
+  data-daily-expense="{% for d in summary.trend_daily %}{{ d.expense }}{% if not loop.last %}|{% endif %}{% endfor %}"
+  data-monthly-labels="{% for d in summary.trend_monthly %}{{ d.month }}{% if not loop.last %}|{% endif %}{% endfor %}"
+  data-monthly-income="{% for d in summary.trend_monthly %}{{ d.income }}{% if not loop.last %}|{% endif %}{% endfor %}"
+  data-monthly-expense="{% for d in summary.trend_monthly %}{{ d.expense }}{% if not loop.last %}|{% endif %}{% endfor %}"
+  data-category-labels="{% for c in summary.top_spending_categories %}{{ c.name }}{% if not loop.last %}|{% endif %}{% endfor %}"
+  data-category-totals="{% for c in summary.top_spending_categories %}{{ c.total }}{% if not loop.last %}|{% endif %}{% endfor %}"
+></div>
 
-  const monthlyLabels = [{% for d in summary.trend_monthly %}"{{ d.month }}"{% if not loop.last %}, {% endif %}{% endfor %}];
-  const monthlyIncome = [{% for d in summary.trend_monthly %}{{ d.income }}{% if not loop.last %}, {% endif %}{% endfor %}];
-  const monthlyExpense = [{% for d in summary.trend_monthly %}{{ d.expense }}{% if not loop.last %}, {% endif %}{% endfor %}];
-
-  const cashflowCtx = document.getElementById("cashflowChart");
-  if (cashflowCtx) {
-    new Chart(cashflowCtx, {
-      type: "line",
-      data: {
-        labels: dailyLabels,
-        datasets: [
-          {
-            label: "Net",
-            data: dailyNet,
-            borderColor: "#0f766e",
-            backgroundColor: "rgba(15, 118, 110, 0.15)",
-            tension: 0.35,
-            fill: true,
-          },
-          {
-            label: "Income",
-            data: dailyIncome,
-            borderColor: "#16a34a",
-            backgroundColor: "rgba(22, 163, 74, 0.08)",
-            tension: 0.35,
-            fill: false,
-          },
-          {
-            label: "Expense",
-            data: dailyExpense,
-            borderColor: "#dc2626",
-            backgroundColor: "rgba(220, 38, 38, 0.08)",
-            tension: 0.35,
-            fill: false,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          legend: { position: "top" },
-        },
-        scales: {
-          y: { beginAtZero: true },
-        },
-      },
-    });
-  }
-
-  const incomeExpenseCtx = document.getElementById("incomeExpenseChart");
-  if (incomeExpenseCtx) {
-    new Chart(incomeExpenseCtx, {
-      type: "bar",
-      data: {
-        labels: monthlyLabels,
-        datasets: [
-          {
-            label: "Income",
-            data: monthlyIncome,
-            backgroundColor: "rgba(22, 163, 74, 0.6)",
-          },
-          {
-            label: "Expense",
-            data: monthlyExpense,
-            backgroundColor: "rgba(220, 38, 38, 0.6)",
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          legend: { position: "top" },
-        },
-        scales: {
-          y: { beginAtZero: true },
-        },
-      },
-    });
-  }
-</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+<script src="/static/js/dashboard_charts.js" defer></script>
 {% endblock %}

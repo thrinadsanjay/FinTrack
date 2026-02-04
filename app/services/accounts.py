@@ -135,6 +135,44 @@ async def update_account_name(
 
 
 # ======================================================
+# UPDATE (BALANCE ONLY)
+# ======================================================
+
+async def update_account_balance(
+    *,
+    user_id: str,
+    account_id: str,
+    balance: float,
+    request: Request | None = None,
+):
+    account_oid = ObjectId(account_id)
+    user_oid = ObjectId(user_id)
+
+    account = await db.accounts.find_one(
+        {"_id": account_oid, "user_id": user_oid, "deleted_at": None}
+    )
+    if not account:
+        raise Exception("Account not found or access denied")
+
+    balance = normalize_amount(balance)
+
+    await db.accounts.update_one(
+        {"_id": account_oid},
+        {"$set": {"balance": balance, "updated_at": _now()}}
+    )
+
+    await audit_log(
+        action="ACCOUNT_BALANCE_UPDATED",
+        request=request,
+        user={"user_id": user_id},
+        meta={
+            "account_id": str(account_oid),
+            "old_balance": account.get("balance", 0),
+            "new_balance": balance,
+        },
+    )
+
+# ======================================================
 # SOFT DELETE ACCOUNT
 # ======================================================
 

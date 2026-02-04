@@ -9,6 +9,23 @@
   gap: 16px;
 }
 
+.header-panels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.header-panels-left {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.header-panels-right {
+  min-height: 1px;
+}
+
 .title-row h1 {
   margin: 0;
   font-size: 1.8rem;
@@ -37,7 +54,7 @@
 }
 
 .panel-grid.charts {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .panel {
@@ -57,6 +74,28 @@
 
 .panel-compact {
   padding: 12px;
+}
+
+.panel-mini .balance-sub {
+  gap: 8px;
+}
+
+.panel-mini .metric {
+  font-size: 0.72rem;
+  padding: 4px 6px;
+}
+
+.panel-mini .savings-rate .rate {
+  font-size: 1.2rem;
+}
+
+.panel-mini .trend {
+  font-size: 0.75rem;
+  padding: 3px 6px;
+}
+
+.panel-mini .muted {
+  font-size: 0.8rem;
 }
 
 .panel-header {
@@ -149,6 +188,16 @@
   min-height: 180px;
 }
 
+.chart-square {
+  height: 220px;
+  min-height: 220px;
+}
+
+.chart-square canvas {
+  height: 100% !important;
+  width: 100% !important;
+}
+
 .bill-columns {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -168,6 +217,25 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.scroll-list {
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.scroll-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scroll-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scroll-list::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.6);
+  border-radius: 999px;
 }
 
 .bill-list li {
@@ -195,6 +263,82 @@
 .bill-amount {
   font-weight: 700;
   color: #0f172a;
+}
+
+.insight-list,
+.alert-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.insight-list li,
+.alert-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+.insight-title,
+.alert-title {
+  font-weight: 600;
+  color: #0f172a;
+  display: block;
+}
+
+.insight-amount {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.savings-rate {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.savings-rate .rate {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.trend {
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(226, 232, 240, 0.7);
+  color: #334155;
+}
+
+.alert-item {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.alert-info {
+  border-color: rgba(59, 130, 246, 0.3);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.alert-warning {
+  border-color: rgba(249, 115, 22, 0.3);
+  background: rgba(249, 115, 22, 0.08);
+}
+
+.alert-success {
+  border-color: rgba(22, 163, 74, 0.3);
+  background: rgba(22, 163, 74, 0.08);
 }
 
 .transactions {
@@ -261,10 +405,32 @@
     align-items: flex-start;
   }
 
-  .header-balance {
-    width: 100%;
-    min-width: auto;
-    max-width: none;
+  .title-row h1 {
+    display: hidden;
+    /* position: fixed;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.95rem;
+    color: #e2e8f0;
+    z-index: 950;
+    margin: 0;
+    white-space: nowrap;
+    max-width: 46vw;
+    overflow: hidden;
+    text-overflow: ellipsis; */
+  }
+
+  .header-panels {
+    grid-template-columns: 1fr;
+  }
+
+  .header-panels-left {
+    grid-template-columns: 1fr;
+  }
+
+  .header-panels-right {
+    display: none;
   }
 
   .panel-grid,
@@ -293,6 +459,10 @@
     padding: 8px;
   }
 
+  .tx-table {
+    min-width: 480px;
+  }
+
   .bill-columns {
     grid-template-columns: 1fr;
   }
@@ -315,5 +485,26 @@
 
   .chart-wrap {
     min-height: 160px;
+  }
+
+  .chart-square {
+    height: 200px;
+    min-height: 200px;
+  }
+
+  .tx-table {
+    width: 100%;
+    min-width: 0;
+    table-layout: fixed;
+  }
+
+  .tx-table th,
+  .tx-table td {
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  .table-scroll {
+    overflow-x: hidden;
   }
 }

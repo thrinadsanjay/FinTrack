@@ -18,20 +18,22 @@
   <meta name="theme-color" content="#0f172a">
   <meta name="viewport" content="width=device-width, initial-scale=1">
 </head>
-<script>
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("/static/sw.js");
-  }
-</script>
+{% if request.session.user %}
+  {% include "partials/navbar.html" %}
+{% endif %}
 <body>
   <div class="app-shell">
-    {% if request.session.user %}
-      {% include "partials/navbar.html" %}
-    {% endif %}
+    <div class="toast" id="toast" data-error="{{ error | default('') }}">
+      <span class="toast-icon">!</span>
+      <span class="toast-message"></span>
+      <button type="button" class="toast-close" aria-label="Close">×</button>
+    </div>
     <main class="app-content">
       {% block content %}{% endblock %}
     </main>
   </div>
+  <script src="/static/js/navbar.js" defer></script>
+  <script src="/static/js/app_shell.js" defer></script>
 </body>
 {% include "partials/footer.html" %}
 </html>

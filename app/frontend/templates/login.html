@@ -35,7 +35,7 @@
           Remember me
         </label>
 
-        <a href="/forgot-password" class="forgot-link">
+        <a href="/reset-password" class="forgot-link">
           Forgot password?
         </a>
       </div>
@@ -53,10 +53,5 @@
   </div>
 </div>
 
-<script>
-function togglePassword() {
-  const input = document.getElementById("password");
-  input.type = input.type === "password" ? "text" : "password";
-}
-</script>
+<script src="/static/js/login.js" defer></script>
 {% endblock %}

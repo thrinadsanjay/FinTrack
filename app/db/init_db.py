@@ -5,7 +5,15 @@ async def init_indexes():
     await db.users.create_index("email", unique=True)
     # Accounts
     await db.accounts.create_index([("user_id", 1)])
-    await db.accounts.create_index([("user_id", 1), ("name", 1)], unique=True, name="unique_account_name_per_user")
+    # Drop legacy unique index on name (if exists) to avoid cross-user collisions
+    existing = await db.accounts.index_information()
+    if "name_1" in existing:
+        await db.accounts.drop_index("name_1")
+    await db.accounts.create_index(
+        [("user_id", 1), ("name", 1)],
+        unique=True,
+        name="unique_account_name_per_user",
+    )
     # Audit Logs
     await db.audit_logs.create_index([("user_id", 1)])
     await db.audit_logs.create_index({ "action": 1 })

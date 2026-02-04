@@ -5,18 +5,20 @@
   <div class="nav-left">
     <span class="logo head">FinTracker</span>
 
-    <a href="/" class="{% if active_page == 'dashboard' %}active{% endif %}">
-      Dashboard
-    </a>
-    <a href="/transactions" class="{% if active_page == 'addtransaction' %}active{% endif %}">
-      New
-    </a>
-    <a href="/transactions/list" class="{% if active_page == 'listtransactions' %}active{% endif %}">
-      Transactions
-    </a>
-    <a href="/accounts" class="{% if active_page == 'accounts' %}active{% endif %}">
-      Accounts
-    </a>
+    <nav class="nav-links">
+      <a href="/" class="{% if active_page == 'dashboard' %}active{% endif %}">
+        Dashboard
+      </a>
+      <a href="/transactions" class="{% if active_page == 'addtransaction' %}active{% endif %}">
+        New
+      </a>
+      <a href="/transactions/list" class="{% if active_page == 'listtransactions' %}active{% endif %}">
+        Transactions
+      </a>
+      <a href="/accounts" class="{% if active_page == 'accounts' %}active{% endif %}">
+        Accounts
+      </a>
+    </nav>
   </div>
 
   <div class="nav-right">
@@ -28,8 +30,35 @@
         {% endif %}
       </button>
     </div>
-    <span class="user">Welcome {{ user.username }}</span>
-    <a href="/logout" class="logout">Logout</a>
+    <div class="profile">
+      <button type="button" class="profile-btn" data-profile-toggle aria-expanded="false">
+        <span class="avatar">{{ user.username | default("U") | first | upper }}</span>
+        <span class="profile-name">{{ user.username | default("User") }}</span>
+        <i class="fa fa-chevron-down"></i>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- MOBILE TOP BAR -->
+<header class="navbar mobile-top">
+  <div class="nav-left">
+    <span class="logo head">FinTracker</span>
+  </div>
+  <div class="nav-right">
+    <div class="notif">
+      <button type="button" class="notif-btn" data-notif-toggle aria-expanded="false">
+        <i class="fa fa-bell"></i>
+        {% if notif_count > 0 %}
+          <span class="notif-count">{{ notif_count }}</span>
+        {% endif %}
+      </button>
+    </div>
+    <div class="profile">
+      <button type="button" class="profile-btn icon-only" data-profile-toggle aria-expanded="false">
+        <span class="avatar">{{ user.username | default("U") | first | upper }}</span>
+      </button>
+    </div>
   </div>
 </header>
 
@@ -54,6 +83,23 @@
   {% endif %}
 </div>
 
+<div class="profile-menu" data-profile-menu>
+  <div class="profile-header">
+    <div class="avatar avatar-lg">{{ user.username | default("U") | first | upper }}</div>
+    <div>
+      <div class="profile-title">{{ user.username | default("User") }}</div>
+      <div class="profile-subtitle">Signed in</div>
+    </div>
+  </div>
+  <div class="profile-links">
+    <a href="#" class="profile-link disabled" aria-disabled="true">Edit profile</a>
+    <a href="#" class="profile-link">Preferences</a>
+    <a href="#" class="profile-link">Security</a>
+    <a href="#" class="profile-link">Help & support</a>
+    <a href="/logout" class="profile-link danger">Logout</a>
+  </div>
+</div>
+
 <!-- MOBILE BOTTOM NAV -->
 <nav class="mobile-nav" data-mobile-nav>
   <a href="/" class="{% if active_page == 'dashboard' %}active{% endif %}">
@@ -61,13 +107,14 @@
     <span>Home</span>
   </a>
 
-  <a href="/transactions/list" class="{% if active_page == 'listtransactions' %}active{% endif %}">
-    <i class="fa fa-list"></i>
-    <span>Txns</span>
+  <a href="/transactions" class="{% if active_page == 'addtransaction' %}active{% endif %}">
+    <i class="fa fa-plus"></i>
+    <span>Add</span>
   </a>
 
-  <a href="/transactions" class="add-btn {% if active_page == 'addtransaction' %}active{% endif %}">
-    <i class="fa fa-plus"></i>
+  <a href="/transactions/list" class="{% if active_page == 'listtransactions' %}active{% endif %}">
+    <i class="fa fa-list"></i>
+    <span>Transactions</span>
   </a>
 
   <a href="/accounts" class="{% if active_page == 'accounts' %}active{% endif %}">
@@ -75,85 +122,8 @@
     <span>Accounts</span>
   </a>
 
-  <button type="button" class="mobile-notif" data-notif-toggle aria-expanded="false">
-    <i class="fa fa-bell"></i>
-    <span>Alerts</span>
-    {% if notif_count > 0 %}
-      <span class="notif-count">{{ notif_count }}</span>
-    {% endif %}
-  </button>
-
-  <a href="/logout">
+  <!-- <button type="button" class="mobile-profile" data-profile-toggle aria-expanded="false">
     <i class="fa fa-user"></i>
-    <span>Me</span>
-  </a>
+    <span>Profile</span>
+  </button> -->
 </nav>
-
-<script>
-  (function () {
-    const toggles = document.querySelectorAll("[data-notif-toggle]");
-    const panel = document.querySelector("[data-notif-panel]");
-    const readAllBtn = document.querySelector("[data-notif-read-all]");
-    if (!panel || toggles.length === 0) return;
-
-    function closePanel() {
-      panel.classList.remove("open");
-      toggles.forEach((t) => t.setAttribute("aria-expanded", "false"));
-    }
-
-    function setPanelHeight() {
-      const count = parseInt(panel.dataset.count || "0", 10);
-      const base = 140;
-      const perItem = 72;
-      const max = Math.floor(window.innerHeight * 0.5);
-      const target = Math.min(Math.max(base, base + count * perItem), max);
-      panel.style.setProperty("--notif-max", `${target}px`);
-    }
-
-    toggles.forEach((toggle) => {
-      toggle.addEventListener("click", (e) => {
-        e.stopPropagation();
-        setPanelHeight();
-        const isOpen = panel.classList.toggle("open");
-        toggles.forEach((t) => t.setAttribute("aria-expanded", String(isOpen)));
-      });
-    });
-
-    if (readAllBtn) {
-      readAllBtn.addEventListener("click", async (e) => {
-        e.stopPropagation();
-        try {
-          await fetch("/notifications/read", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ all: true }),
-          });
-          closePanel();
-          window.location.reload();
-        } catch (err) {
-          console.error(err);
-        }
-      });
-    }
-
-    window.addEventListener("resize", setPanelHeight);
-    document.addEventListener("click", closePanel);
-    panel.addEventListener("click", async (e) => {
-      e.stopPropagation();
-      const item = e.target.closest("[data-notif-id]");
-      if (!item) return;
-      const notifId = item.dataset.notifId;
-      if (!notifId) return;
-      try {
-        await fetch("/notifications/read", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ids: [notifId] }),
-        });
-        window.location.reload();
-      } catch (err) {
-        console.error(err);
-      }
-    });
-  })();
-</script>

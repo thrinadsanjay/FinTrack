@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     FT_APP_NAME: str
     FT_APP_VERSION: str
     FT_BASE_URL: str
+    FT_LOG_LEVEL: str = "INFO"
+    FT_DEBUG_LOG: bool = False
+    FT_LOG_DIR: str = "logs"
+    FT_LOG_FILE: str = "logs/app.log"
 
     model_config = ConfigDict(
         env_file=".FT_ENV",

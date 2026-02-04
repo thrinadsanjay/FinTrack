@@ -12,6 +12,13 @@ body {
    (DESKTOP FIRST)
 ======================= */
 
+.navbar {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid rgb(97, 93, 93);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
 /* Desktop default */
 [data-mobile-nav] {
   display: none !important;
@@ -22,6 +29,10 @@ body {
   display: flex;
 }
 
+/* Mobile top bar hidden by default */
+.mobile-top {
+  display: none;
+}
 
 /* =======================
    DESKTOP NAVBAR
@@ -31,26 +42,49 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 14px 24px;
-  background: #1f2937;
+  background: linear-gradient(120deg, #0f172a, #1e293b);
   color: white;
+  position: sticky;
+  top: 0;
+  z-index: 900;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
 }
 
-.nav-left a {
-  color: #d1d5db;
-  margin-right: 18px;
+.nav-left {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.nav-links a {
+  color: #cbd5f5;
   text-decoration: none;
-  font-weight: 500;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 999px;
+  transition: background 0.2s ease, color 0.2s ease;
 }
 
-.nav-left a.active {
+.nav-links a:hover {
+  background: rgba(148, 163, 184, 0.2);
   color: #ffffff;
-  border-bottom: 2px solid #60a5fa;
+}
+
+.nav-links a.active {
+  color: #0f172a;
+  background: #e2e8f0;
 }
 
 .logo.head {
   font-weight: 800;
   font-size: 22px;
-  margin-right: 30px;
+  letter-spacing: 0.5px;
   text-transform: uppercase;
 }
 
@@ -87,7 +121,7 @@ body {
 
 .notif-panel {
   position: fixed;
-  top: 64px;
+  top: 68px;
   right: 24px;
   width: 320px;
   max-height: 0;
@@ -160,9 +194,120 @@ body {
   color: #94a3b8;
 }
 
-.logout {
-  color: #fca5a5;
+.profile {
+  position: relative;
+}
+
+.profile-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(148, 163, 184, 0.15);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  color: #f8fafc;
+  padding: 6px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.profile-btn.icon-only {
+  padding: 6px;
+}
+
+.profile-name {
+  font-size: 0.9rem;
+}
+
+.avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #0f172a;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.avatar.avatar-lg {
+  width: 40px;
+  height: 40px;
+  font-size: 1rem;
+}
+
+.profile-menu {
+  position: fixed;
+  top: 68px;
+  right: 24px;
+  width: 240px;
+  background: #0f172a;
+  color: #e2e8f0;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.35);
+  opacity: 0;
+  transform: translateY(-8px);
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: 1200;
+}
+
+.profile-menu.open {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.profile-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.profile-title {
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.profile-subtitle {
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.profile-links {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.profile-link {
+  color: #cbd5f5;
   text-decoration: none;
+  font-weight: 600;
+  padding: 8px 10px;
+  border-radius: 8px;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.profile-link:hover {
+  background: rgba(148, 163, 184, 0.2);
+  color: #ffffff;
+}
+
+.profile-link.danger {
+  color: #fca5a5;
+}
+
+.profile-link.disabled {
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 /* =======================
@@ -174,6 +319,23 @@ body {
     display: none !important;
   }
 
+  .mobile-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: linear-gradient(120deg, #0f172a, #1e293b);
+    color: white;
+    position: sticky;
+    top: 0;
+    z-index: 900;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  }
+
+  .mobile-top .nav-right {
+    gap: 10px;
+  }
+
   [data-mobile-nav] {
     display: flex !important;
     position: fixed;
@@ -181,11 +343,14 @@ body {
     left: 0;
     right: 0;
     height: 62px;
-    background: #0f172a;
+    background: #0b1220;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
     justify-content: space-around;
     align-items: center;
     z-index: 1000;
+    width: 100vw;
+    max-width: 100%;
+    box-sizing: border-box;
   }
 
   [data-mobile-nav] a {
@@ -205,7 +370,11 @@ body {
     color: #60a5fa;
   }
 
-  .mobile-notif {
+  [data-mobile-nav] a.active i {
+    color: #60a5fa;
+  }
+
+  .mobile-profile {
     background: transparent;
     border: none;
     color: #94a3b8;
@@ -217,21 +386,22 @@ body {
     cursor: pointer;
   }
 
-  .mobile-notif i {
+  .mobile-profile i {
     font-size: 18px;
   }
 
-  .mobile-notif .notif-count {
-    top: -4px;
-    right: -4px;
-  }
-
   .notif-panel {
-    top: auto;
-    bottom: 76px;
+    top: 68px;
     right: 12px;
     left: 12px;
     width: auto;
+  }
+
+  .profile-menu {
+    top: 68px;
+    right: 12px;
+    left: auto;
+    width: 220px;
   }
 
   [data-mobile-nav] .add-btn {
@@ -244,6 +414,12 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+
+  [data-mobile-nav] .add-btn.active {
+    background: #1d4ed8;
+    color: #ffffff;
+    box-shadow: 0 8px 18px rgba(37, 99, 235, 0.35);
   }
 
   body {

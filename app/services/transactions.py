@@ -15,6 +15,7 @@ This module MUST NOT:
 - Access session directly
 """
 
+import re
 from bson import ObjectId
 from datetime import datetime, timedelta, timezone, date
 from app.db.mongo import db
@@ -507,6 +508,10 @@ async def get_user_transactions(
     date_to: str | None = None,
     category_code: str | None = None,
     subcategory_code: str | None = None,
+    search: str | None = None,
+    amount: float | None = None,
+    sort_by: str | None = None,
+    sort_dir: str | None = None,
 ):
     """
     Fetch user transactions for UI listing.
@@ -544,6 +549,12 @@ async def get_user_transactions(
     if subcategory_code:
         query["subcategory.code"] = subcategory_code
 
+    if amount is not None:
+        query["amount"] = amount
+
+    if search:
+        query["description"] = {"$regex": re.escape(search), "$options": "i"}
+
     if date_from or date_to:
         query["created_at"] = {}
         if date_from:
@@ -555,10 +566,22 @@ async def get_user_transactions(
                 tzinfo=timezone.utc
             )
 
+    sort_field = "created_at"
+    if sort_by == "amount":
+        sort_field = "amount"
+    elif sort_by == "account":
+        sort_field = "account_id"
+    elif sort_by == "category":
+        sort_field = "category.name"
+    elif sort_by == "subcategory":
+        sort_field = "subcategory.name"
+
+    direction = -1 if (sort_dir or "desc").lower() == "desc" else 1
+
     cursor = (
         db.transactions
         .find(query)
-        .sort("created_at", -1)
+        .sort(sort_field, direction)
     )
 
     transactions = []

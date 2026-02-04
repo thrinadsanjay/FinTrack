@@ -5,6 +5,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const typeSelect = document.getElementById("acc_type");
   const nameInput = document.getElementById("account_name");
 
+  if (!bankInput || !typeSelect || !nameInput) {
+    return;
+  }
+
   let userEdited = false;
 
   function generateName() {
@@ -32,6 +36,17 @@ document.addEventListener("DOMContentLoaded", () => {
   // Re-generate on change
   bankInput.addEventListener("input", generateName);
   typeSelect.addEventListener("change", generateName);
+});
+
+// Toggle Add Account Form
+document.addEventListener("DOMContentLoaded", () => {
+  const toggle = document.getElementById("accountToggle");
+  const form = document.getElementById("accountForm");
+  if (!toggle || !form) return;
+  toggle.addEventListener("click", () => {
+    form.classList.toggle("account-form-collapsed");
+    toggle.classList.toggle("open");
+  });
 });
 
 
