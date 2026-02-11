@@ -254,6 +254,7 @@ async def get_dashboard_summary(user_id: str):
                 "deleted_at": None,
                 "created_at": {"$gte": month_start},
                 "type": "debit",
+                "amount": {"$gt": 10000},
             },
             {"description": 1, "amount": 1, "created_at": 1, "account_id": 1},
         )
