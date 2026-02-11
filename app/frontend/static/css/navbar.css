@@ -176,7 +176,25 @@ body {
   background: rgba(30, 41, 59, 0.9);
   border-radius: 10px;
   border: 1px solid rgba(148, 163, 184, 0.2);
-  cursor: pointer;
+  cursor: default;
+}
+
+.notif-unread {
+  background: rgba(30, 41, 59, 1);
+  border-color: rgba(96, 165, 250, 0.45);
+}
+
+.notif-unread .notif-title,
+.notif-unread .notif-message {
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.notif-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .notif-title {
@@ -187,6 +205,16 @@ body {
 .notif-message {
   font-size: 0.82rem;
   color: #cbd5f5;
+}
+
+.notif-mark-read {
+  background: transparent;
+  border: none;
+  color: #93c5fd;
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 0;
+  white-space: nowrap;
 }
 
 .notif-empty {

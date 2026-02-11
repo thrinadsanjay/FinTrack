@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     FT_LOG_FILE: str = "logs/app.log"
 
     model_config = ConfigDict(
-        env_file=".FT_ENV",
+        env_file=".env",
         extra="ignore",   # 👈 THIS fixes your error
         FT_ENV_prefix="FT_",
     )

@@ -47,7 +47,7 @@
   gap: 20px;
   max-width: 800px;
   margin: 0 auto;
-  padding-bottom: 2vh
+  padding-bottom: 1vh
 }
 
 
@@ -259,7 +259,7 @@
 
   .field--active input,
   .field--active select {
-    padding-left: 100px;
+    padding-left: 122421440px;
   }
 
   .field-group {
@@ -833,7 +833,7 @@ tbody td span {
 }
 
 .form-scroll {
-  height: 65vh;
+  height: auto;
   max-height: 65vh;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
@@ -1129,5 +1129,252 @@ table {
 
   .more-btn {
     display: none;
+  }
+}
+
+/* ---------- Recurring Transactions ---------- */
+.recurring-page {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.recurring-header {
+  margin-bottom: 10px;
+}
+
+.active-chip {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+
+.recurring-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.recurring-stat-card {
+  background: rgba(248, 250, 252, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.recurring-stat-card .label {
+  display: block;
+  font-size: 0.78rem;
+  color: #475569;
+  margin-bottom: 4px;
+}
+
+.recurring-stat-card strong {
+  font-size: 1rem;
+  color: #0f172a;
+}
+
+.recurring-filter-bar {
+  margin-bottom: 10px;
+}
+
+.recurring-edit-card {
+  max-width: 1100px;
+  margin: 0 auto 12px;
+  padding: 12px;
+}
+
+.recurring-edit-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.recurring-edit-desc {
+  grid-column: 1 / -1;
+}
+
+.recurring-edit-actions {
+  margin-top: 12px;
+}
+
+.recurring-table-card {
+  max-width: 1100px;
+}
+
+.recurring-table-scroll {
+  max-height: 64vh;
+}
+
+.recurring-table {
+  min-width: 860px;
+}
+
+.recurring-table .rule-main {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.recurring-table .rule-sub {
+  font-size: 0.78rem;
+  margin-top: 2px;
+}
+
+.recurring-type {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
+.recurring-type-debit {
+  background: rgba(239, 68, 68, 0.15);
+  color: #b91c1c;
+}
+
+.recurring-type-credit {
+  background: rgba(34, 197, 94, 0.15);
+  color: #15803d;
+}
+
+.recurring-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: capitalize;
+  padding: 4px 8px;
+  border-radius: 999px;
+}
+
+.recurring-badge-active {
+  background: rgba(34, 197, 94, 0.15);
+  color: #15803d;
+}
+
+.recurring-badge-paused {
+  background: rgba(234, 179, 8, 0.2);
+  color: #92400e;
+}
+
+.recurring-badge-ended {
+  background: rgba(100, 116, 139, 0.2);
+  color: #334155;
+}
+
+.recurring-col-actions .row-menu {
+  gap: 6px;
+}
+
+@media (max-width: 900px) {
+  .recurring-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .recurring-edit-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .recurring-page {
+    max-width: 100%;
+  }
+
+  .recurring-stats {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .recurring-table {
+    min-width: 0;
+    width: 100%;
+    table-layout: fixed;
+  }
+
+  .recurring-table thead {
+    display: none;
+  }
+
+  .recurring-table .recurring-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto auto auto auto;
+    gap: 6px 8px;
+    padding: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 12px;
+    margin-bottom: 10px;
+    background: #f8fafc;
+  }
+
+  .recurring-table .recurring-row td {
+    border: none;
+    padding: 0;
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  .recurring-col-title {
+    grid-column: 1 / 2;
+    grid-row: 1 / 2;
+  }
+
+  .recurring-col-actions {
+    grid-column: 2 / 3;
+    grid-row: 1 / 2;
+    justify-content: flex-end;
+  }
+
+  .recurring-col-account {
+    grid-column: 1 / 2;
+    grid-row: 2 / 3;
+    font-size: 0.84rem;
+  }
+
+  .recurring-col-type {
+    grid-column: 2 / 3;
+    grid-row: 2 / 3;
+    text-align: right;
+  }
+
+  .recurring-col-amount {
+    grid-column: 1 / 2;
+    grid-row: 3 / 4;
+    font-weight: 700;
+    font-size: 0.95rem;
+  }
+
+  .recurring-col-frequency {
+    grid-column: 2 / 3;
+    grid-row: 3 / 4;
+    text-align: right;
+    font-size: 0.8rem;
+    color: #64748b;
+    text-transform: capitalize;
+  }
+
+  .recurring-col-next {
+    grid-column: 1 / 2;
+    grid-row: 4 / 5;
+    font-size: 0.8rem;
+    color: #475569;
+  }
+
+  .recurring-col-end {
+    display: none;
+  }
+
+  .recurring-col-status {
+    grid-column: 2 / 3;
+    grid-row: 4 / 5;
+    text-align: right;
+  }
+
+  .recurring-col-actions .row-menu {
+    display: inline-flex;
+    position: static;
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 0;
   }
 }

@@ -122,7 +122,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  transition: transform 0.25s ease, opacity 0.25s ease;
+  transition: transform 0.22s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.22s ease;
   will-change: transform, opacity;
 }
 
@@ -141,14 +141,8 @@ body {
   }
 }
 
-body.page-swipe-left .app-shell {
-  transform: translateX(-20%);
-  opacity: 0.9;
-}
-
-body.page-swipe-right .app-shell {
-  transform: translateX(20%);
-  opacity: 0.9;
+.app-shell.swipe-dragging {
+  transition: none !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

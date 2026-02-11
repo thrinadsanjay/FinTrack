@@ -79,9 +79,9 @@
     </div>
 
     <div class="panel">
-      <div class="panel-header">
+    <div class="panel-header">
         <h3>Upcoming Bills</h3>
-        <span class="pill">Next 7 / 30 days</span>
+        <span class="pill">Next 7 days + This month</span>
       </div>
       <div class="bill-columns">
         <div class="bill-column">
@@ -106,10 +106,10 @@
           {% endif %}
         </div>
         <div class="bill-column">
-          <h4>Next 30 days</h4>
-          {% if summary.upcoming_bills_30 %}
+          <h4>This Month</h4>
+          {% if summary.upcoming_bills_month %}
             <ul class="bill-list scroll-list">
-              {% for bill in summary.upcoming_bills_30 %}
+              {% for bill in summary.upcoming_bills_month %}
                 <li>
                   <div>
                     <span class="bill-title">{{ bill.description }}</span>
@@ -123,53 +123,10 @@
               {% endfor %}
             </ul>
           {% else %}
-            <p class="empty-state">No bills due in the next 30 days.</p>
+            <p class="empty-state">No bills due from tomorrow to month end.</p>
           {% endif %}
         </div>
       </div>
-    </div>
-  </section>
-
-  <section class="panel-grid insights">
-    <div class="panel">
-      <div class="panel-header">
-        <h3>Largest Transactions</h3>
-        <span class="pill">This month</span>
-      </div>
-      {% if summary.largest_transactions %}
-        <ul class="insight-list">
-          {% for tx in summary.largest_transactions %}
-            <li>
-              <div>
-                <span class="insight-title">{{ tx.description }}</span>
-                <span class="muted">{{ tx.account_name }} - {{ tx.created_at | localtime(request) | dateformat }}</span>
-              </div>
-              <span class="insight-amount red">₹ {{ tx.amount }}</span>
-            </li>
-          {% endfor %}
-        </ul>
-      {% else %}
-        <p class="empty-state">No big transactions yet.</p>
-      {% endif %}
-    </div>
-
-    <div class="panel">
-      <div class="panel-header">
-        <h3>Account Alerts</h3>
-        <span class="pill">Low balance / limits</span>
-      </div>
-      {% if summary.account_alerts %}
-        <ul class="alert-list">
-          {% for alert in summary.account_alerts %}
-            <li class="alert-item alert-{{ alert.level }}">
-              <span class="alert-title">{{ alert.title }}</span>
-              <span class="muted">{{ alert.message }}</span>
-            </li>
-          {% endfor %}
-        </ul>
-      {% else %}
-        <p class="empty-state">No alerts right now.</p>
-      {% endif %}
     </div>
   </section>
 
@@ -205,14 +162,33 @@
         <canvas id="incomeExpenseChart" height="160"></canvas>
       </div>
     </div>
-  </section>
-
-  <section class="panel transactions">
-    <div class="panel-header">
-      <h3>Recent Transactions</h3>
-      <span class="pill">Merged transfers</span>
+    <div class="panel panel-largest">
+      <div class="panel-header">
+        <h3>Largest Transactions</h3>
+        <span class="pill">This month</span>
+      </div>
+      {% if summary.largest_transactions %}
+        <ul class="insight-list">
+          {% for tx in summary.largest_transactions %}
+            <li>
+              <div>
+                <span class="insight-title">{{ tx.description }}</span>
+                <span class="muted">{{ tx.account_name }} - {{ tx.created_at | localtime(request) | dateformat }}</span>
+              </div>
+              <span class="insight-amount red">₹ {{ tx.amount }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="empty-state">No big transactions yet.</p>
+      {% endif %}
     </div>
-    <div class="table-scroll">
+    <div class="panel panel-recent">
+      <div class="panel-header">
+        <h3>Recent Transactions</h3>
+        <span class="pill">Merged transfers</span>
+      </div>
+      <!-- <div class="table-scroll"> -->
       <table class="tx-table">
         <thead>
           <tr>
@@ -253,6 +229,7 @@
           {% endfor %}
         </tbody>
       </table>
+      <!-- </div> -->
     </div>
   </section>
 </section>

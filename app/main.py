@@ -15,15 +15,22 @@ from app.core.startup import ensure_admin_exists, define_categories
 
 from app.db.init_db import init_indexes
 
-from app.routers import health, auth, accounts, transactions, categories, recurring_deposit
+from app.routers import (
+    health,
+    auth,
+    accounts,
+    transactions,
+    categories,
+    recurring_deposit,
+)
 from app.web.home import router as web_router
 from app.web.auth import router as web_auth_router
 from app.web.accounts import router as web_accounts_router
 from app.web.transactions import router as web_transactions_router
 from app.web.notifications import router as web_notifications_router
+from app.web.recurring import router as web_recurring_router
 
 from app.schedulers.recurring_scheduler import run_recurring_transactions
-
 
 
 # ======================================================
@@ -91,6 +98,7 @@ app.include_router(web_auth_router)
 app.include_router(web_accounts_router, prefix="/accounts")
 app.include_router(web_transactions_router, prefix="/transactions")
 app.include_router(web_notifications_router, prefix="/notifications")
+app.include_router(web_recurring_router, prefix="/recurring")
 
 
 # ======================================================
@@ -120,6 +128,7 @@ async def on_startup():
         id="recurring-transactions",
         replace_existing=True,
     )
+
     scheduler.start()
     logger.info("⏱ Recurring transaction scheduler started")
 

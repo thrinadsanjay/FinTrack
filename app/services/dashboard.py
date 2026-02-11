@@ -38,19 +38,25 @@ def start_of_day_utc(dt: datetime):
 
 async def _fetch_upcoming_bills(uid: ObjectId, account_map: dict):
     now = datetime.now(timezone.utc)
-    upcoming_end = now + timedelta(days=30)
+    tomorrow_start = start_of_today_utc() + timedelta(days=1)
+    next_month_start = datetime(
+        now.year + (1 if now.month == 12 else 0),
+        1 if now.month == 12 else now.month + 1,
+        1,
+        tzinfo=timezone.utc,
+    )
     upcoming_7_end = now + timedelta(days=7)
 
     recurring_cursor = db.recurring_deposits.find(
         {
             "user_id": uid,
             "is_active": True,
-            "next_run": {"$gte": now, "$lte": upcoming_end},
+            "next_run": {"$gte": now, "$lt": next_month_start},
         }
     ).sort("next_run", 1)
 
     upcoming_bills_7 = []
-    upcoming_bills_30 = []
+    upcoming_bills_month = []
     required_by_account = {}
 
     async for bill in recurring_cursor:
@@ -70,7 +76,8 @@ async def _fetch_upcoming_bills(uid: ObjectId, account_map: dict):
             "due_at": due_at,
         }
 
-        upcoming_bills_30.append(item)
+        if item["due_at"] and item["due_at"] >= tomorrow_start:
+            upcoming_bills_month.append(item)
         if item["due_at"] and item["due_at"] <= upcoming_7_end:
             upcoming_bills_7.append(item)
 
@@ -79,7 +86,7 @@ async def _fetch_upcoming_bills(uid: ObjectId, account_map: dict):
                 required_by_account.get(account_id, 0) + item["amount"]
             )
 
-    return upcoming_bills_7, upcoming_bills_30, required_by_account
+    return upcoming_bills_7, upcoming_bills_month, required_by_account
 
 
 # ======================================================
@@ -382,9 +389,9 @@ async def get_dashboard_summary(user_id: str):
         current = datetime(next_year, next_month, 1, tzinfo=timezone.utc)
 
     # -----------------------------
-    # UPCOMING BILLS (NEXT 7 / 30 DAYS)
+    # UPCOMING BILLS (NEXT 7 DAYS + TOMORROW TO MONTH END)
     # -----------------------------
-    upcoming_bills_7, upcoming_bills_30, required_by_account = (
+    upcoming_bills_7, upcoming_bills_month, required_by_account = (
         await _fetch_upcoming_bills(uid, account_map)
     )
 
@@ -462,7 +469,7 @@ async def get_dashboard_summary(user_id: str):
         "trend_daily": trend_daily,
         "trend_monthly": trend_monthly,
         "upcoming_bills_7": upcoming_bills_7,
-        "upcoming_bills_30": upcoming_bills_30,
+        "upcoming_bills_month": upcoming_bills_month,
         "notifications": notifications,
         "account_alerts": account_alerts,
     }
@@ -499,35 +506,30 @@ async def _persist_notifications(
     required_by_account: dict,
     account_map: dict,
 ):
-    active_keys = []
     for account_id, required in required_by_account.items():
         account_info = account_map.get(account_id, {})
         balance_value = account_info.get("balance", 0)
         if balance_value < required:
             key = f"low_balance:{account_id}"
-            active_keys.append(key)
             await upsert_notification(
                 user_id=uid,
                 key=key,
                 notif_type="warning",
-                title="Low balance for upcoming bills",
+                title="Low balance for upcoming bills...",
                 message=(
                     f"{account_info.get('name', 'Account')} needs ₹ {required} "
-                    f"but has ₹ {balance_value}."
+                    f"for pending recurring bills this month, but has ₹ {balance_value}."
                 ),
             )
 
-    if active_keys:
-        await db.notifications.update_many(
-            {
-                "user_id": uid,
-                "key": {"$regex": "^low_balance:"},
-                "key": {"$nin": active_keys},
-            },
-            {"$set": {"is_read": True, "updated_at": datetime.now(timezone.utc)}},
-        )
-
-    notifications = await list_notifications(user_id=uid, unread_only=True, limit=20)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=10)
+    notifications = await list_notifications(
+        user_id=uid,
+        unread_only=False,
+        limit=500,
+        since=cutoff,
+        include_unread_outside_since=True,
+    )
     for n in notifications:
         n["id"] = str(n["_id"])
     return notifications

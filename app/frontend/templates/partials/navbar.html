@@ -1,7 +1,8 @@
 <!-- DESKTOP NAVBAR -->
 <header class="navbar desktop-nav">
   {% set notifications = notifications | default([]) %}
-  {% set notif_count = notifications | length %}
+  {% set notif_total = notifications | length %}
+  {% set notif_count = notifications | selectattr("is_read", "equalto", false) | list | length %}
   <div class="nav-left">
     <span class="logo head">FinTracker</span>
 
@@ -14,6 +15,9 @@
       </a>
       <a href="/transactions/list" class="{% if active_page == 'listtransactions' %}active{% endif %}">
         Transactions
+      </a>
+      <a href="/recurring" class="{% if active_page == 'recurring' %}active{% endif %}">
+        Recurring
       </a>
       <a href="/accounts" class="{% if active_page == 'accounts' %}active{% endif %}">
         Accounts
@@ -62,18 +66,27 @@
   </div>
 </header>
 
-<div class="notif-panel" data-notif-panel data-count="{{ notif_count }}">
+<div class="notif-panel" data-notif-panel data-count="{{ notif_total }}">
   <div class="notif-header">
     <span>Notifications</span>
     {% if notif_count > 0 %}
       <button type="button" class="notif-read-all" data-notif-read-all>Mark all read</button>
     {% endif %}
   </div>
-  {% if notif_count > 0 %}
+  {% if notif_total > 0 %}
     <ul class="notif-list">
       {% for n in notifications %}
-        <li class="notif-item notif-{{ n.type | default('info') }}" data-notif-id="{{ n.id }}">
-          <div class="notif-title">{{ n.title }}</div>
+        <li
+          class="notif-item notif-{{ n.type | default('info') }} {% if not n.is_read %}notif-unread{% endif %}"
+          data-notif-id="{{ n.id }}"
+          data-notif-read="{{ 'true' if n.is_read else 'false' }}"
+        >
+          <div class="notif-title-row">
+            <div class="notif-title">{{ n.title }}</div>
+            {% if not n.is_read %}
+              <button type="button" class="notif-mark-read" data-notif-mark>Mark as read</button>
+            {% endif %}
+          </div>
           <div class="notif-message">{{ n.message }}</div>
         </li>
       {% endfor %}
@@ -93,6 +106,7 @@
   </div>
   <div class="profile-links">
     <a href="#" class="profile-link disabled" aria-disabled="true">Edit profile</a>
+    <a href="/recurring" class="profile-link">Recurring rules</a>
     <a href="#" class="profile-link">Preferences</a>
     <a href="#" class="profile-link">Security</a>
     <a href="#" class="profile-link">Help & support</a>
@@ -115,6 +129,11 @@
   <a href="/transactions/list" class="{% if active_page == 'listtransactions' %}active{% endif %}">
     <i class="fa fa-list"></i>
     <span>Transactions</span>
+  </a>
+
+  <a href="/recurring" class="{% if active_page == 'recurring' %}active{% endif %}">
+    <i class="fa fa-repeat"></i>
+    <span>Recurring</span>
   </a>
 
   <a href="/accounts" class="{% if active_page == 'accounts' %}active{% endif %}">

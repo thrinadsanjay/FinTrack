@@ -57,6 +57,14 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.panel-grid.insights {
+  grid-template-columns: 1fr;
+}
+
+.panel-grid.charts .panel-recent {
+  grid-column: span 2;
+}
+
 .panel {
   background: rgba(248, 250, 252, 0.86);
   border: 1px solid rgba(148, 163, 184, 0.4);
@@ -436,6 +444,10 @@
   .panel-grid,
   .panel-grid.charts {
     grid-template-columns: 1fr;
+  }
+
+  .panel-grid.charts .panel-recent {
+    grid-column: span 1;
   }
 
   .dashboard-container {

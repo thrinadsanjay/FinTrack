@@ -4,6 +4,7 @@
   const toggles = document.querySelectorAll("[data-notif-toggle]");
   const panel = document.querySelector("[data-notif-panel]");
   const readAllBtn = document.querySelector("[data-notif-read-all]");
+  const countBadges = document.querySelectorAll(".notif-count");
   const profileToggles = document.querySelectorAll("[data-profile-toggle]");
   const profileMenu = document.querySelector("[data-profile-menu]");
   if (!panel || toggles.length === 0) return;
@@ -26,6 +27,34 @@
     const max = Math.floor(window.innerHeight * 0.5);
     const target = Math.min(Math.max(base, base + count * perItem), max);
     panel.style.setProperty("--notif-max", `${target}px`);
+  }
+
+  function updateUnreadState() {
+    const unreadItems = panel.querySelectorAll('[data-notif-read="false"]');
+    const unreadCount = unreadItems.length;
+
+    if (readAllBtn) {
+      readAllBtn.style.display = unreadCount > 0 ? "inline-block" : "none";
+    }
+
+    countBadges.forEach((badge) => {
+      if (unreadCount > 0) {
+        badge.textContent = String(unreadCount);
+      } else {
+        badge.remove();
+      }
+    });
+  }
+
+  async function markRead(payload) {
+    const res = await fetch("/notifications/read", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      throw new Error("Failed to mark notification as read");
+    }
   }
 
   toggles.forEach((toggle) => {
@@ -52,13 +81,13 @@
     readAllBtn.addEventListener("click", async (e) => {
       e.stopPropagation();
       try {
-        await fetch("/notifications/read", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ all: true }),
+        await markRead({ all: true });
+        panel.querySelectorAll("[data-notif-id]").forEach((item) => {
+          item.dataset.notifRead = "true";
+          item.classList.remove("notif-unread");
         });
-        closePanel();
-        window.location.reload();
+        panel.querySelectorAll("[data-notif-mark]").forEach((btn) => btn.remove());
+        updateUnreadState();
       } catch (err) {
         console.error(err);
       }
@@ -72,19 +101,24 @@
   });
   panel.addEventListener("click", async (e) => {
     e.stopPropagation();
-    const item = e.target.closest("[data-notif-id]");
-    if (!item) return;
+    const markBtn = e.target.closest("[data-notif-mark]");
+    if (!markBtn) return;
+
+    const item = markBtn.closest("[data-notif-id]");
+    if (!item || item.dataset.notifRead === "true") return;
+
     const notifId = item.dataset.notifId;
     if (!notifId) return;
     try {
-      await fetch("/notifications/read", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: [notifId] }),
-      });
-      window.location.reload();
+      await markRead({ ids: [notifId] });
+      item.dataset.notifRead = "true";
+      item.classList.remove("notif-unread");
+      markBtn.remove();
+      updateUnreadState();
     } catch (err) {
       console.error(err);
     }
   });
+
+  updateUnreadState();
 })();
