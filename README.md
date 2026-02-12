@@ -168,6 +168,65 @@ pip install -r requirements.txt
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
+## CI/CD Pipeline (GitHub Actions)
+
+This repository now includes: `.github/workflows/cicd.yml`
+
+Flow implemented:
+
+1. Push to `dev` or `dev/*` (or run manually via `workflow_dispatch` on a dev branch)
+2. Auto-create/reuse a Pull Request from source branch to `main`
+3. Compute next Test version using `FT_APP_VERSION` major/minor + existing `test-v*` tags
+4. Wait for manual approval on `test` environment
+5. Deploy source commit to Test over SSH and run health check (`curl` with retries)
+6. Wait for manual approval on `production` environment
+7. Merge the PR into `main`
+8. Deploy merged `main` commit to Production
+
+Behavior implemented:
+
+- If `requirements.txt` changed, app container is rebuilt before restart
+- If `requirements.txt` did not change, app container is only force-recreated
+- `FT_APP_VERSION` is updated on remote `.env` during deployment
+- Git tags are created automatically:
+  - `test-v<version>` after successful Test deploy
+  - `prod-v<version>` after successful Production deploy (tagged on merged `main` commit)
+
+### GitHub Environment Setup (Required)
+
+Create two GitHub Environments:
+
+- `test`
+- `production`
+
+Add **required reviewers** for each environment to enforce approval gates.
+GitHub sends approval request emails to those reviewers automatically.
+
+For each environment, define:
+
+Environment variables (`Variables`):
+
+- `DEPLOY_HOST` (example: `test.example.com`)
+- `DEPLOY_USER` (example: `deploy`)
+- `DEPLOY_PORT` (default: `22`)
+- `DEPLOY_PATH` (example: `/home/sanjay/Application/FinTrack`)
+- `COMPOSE_FILE` (default: `docker/compose.yml`)
+- `APP_SERVICE` (default: `backend`)
+- `ENV_FILE` (default: `.env`)
+- `CONTAINER_CLI` (example: `docker` or `podman`)
+- `HEALTH_URL` (example: `http://localhost/health` or public HTTPS health endpoint)
+
+Environment secrets (`Secrets`):
+
+- `DEPLOY_SSH_KEY` (private key used by GitHub Actions for SSH deploy)
+
+### Manual Trigger
+
+Use workflow dispatch if you need:
+
+- `deploy_ref`: deploy a specific commit/tag
+- `force_rebuild`: rebuild app image even when `requirements.txt` is unchanged
+
 ## First Boot Behavior
 
 On startup the app:

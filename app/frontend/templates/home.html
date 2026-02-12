@@ -1,13 +1,11 @@
 {% extends "base.html" %}
-{% block title %}FinTracker{% endblock %}
+{% block title %}{{ FT_APP_NAME }} ¦ Dashboard{% endblock %}
 {% block content %}
-<section class="dashboard-container">
+<div class="title-row">
+  <h1>Dashboard</h1>
+</div>
+<section class="dashboard-container">  
   <section class="dashboard-header">
-    <div class="title-row">
-      <div>
-        <h1>Dashboard</h1>
-      </div>
-    </div>
     <div class="header-panels">
       <div class="header-panels-left">
         <div class="panel panel-compact">
@@ -123,7 +121,7 @@
               {% endfor %}
             </ul>
           {% else %}
-            <p class="empty-state">No bills due from tomorrow to month end.</p>
+            <p class="empty-state">No upcoming bills in this month.</p>
           {% endif %}
         </div>
       </div>

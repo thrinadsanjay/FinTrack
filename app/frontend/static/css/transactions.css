@@ -105,7 +105,8 @@
 }
 
 .form-field select option {
-  padding-left: 10px;
+  padding-left: 0;
+  left: 0;
 }
 
 /* ---------- Label: IDLE ---------- */
@@ -259,7 +260,7 @@
 
   .field--active input,
   .field--active select {
-    padding-left: 122421440px;
+    padding-left: 120px;
   }
 
   .field-group {

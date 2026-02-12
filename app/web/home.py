@@ -1,7 +1,8 @@
 """
 Dashboard UI controller.
 """
-
+from dotenv import load_dotenv
+import os
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 from app.web.templates import templates
