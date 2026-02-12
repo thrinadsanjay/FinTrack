@@ -1,15 +1,16 @@
 {% extends "base.html" %}
 {% block title %}{{ FT_APP_NAME }} ¦ Recurring Transactions{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/transactions.css">
+{% endblock %}
 {% block content %}
+<section class="page page-recurring">
 <div class="recurring-page">
   <div class="list-header recurring-header">
     <div class="title-row">
       <div>
         <h1>Recurring Transactions</h1>
       </div>
-    </div>
-    <div class="list-actions">
-      <a href="/transactions" class="chip">New recurring</a>
     </div>
   </div>
 
@@ -186,4 +187,5 @@
     </div>
   </div>
 </div>
+</section>
 {% endblock %}

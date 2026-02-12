@@ -1,7 +1,11 @@
 {% extends "base.html" %}
 {% block title %}{{ FT_APP_NAME }} ¦ Transaction{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/transactions.css">
+{% endblock %}
 
 {% block content %}
+<section class="page page-add-transaction add-tx-page">
 <div class="title-row">
       <div>
         <h1>New Transaction</h1>
@@ -25,9 +29,7 @@
           <select name="account_id" id="account" required>
             <option value="" hidden></option>
             {% for acc in accounts %}
-            <option value="{{ acc._id }}">
-              {{ acc.name }} (₹{{ acc.balance }})
-            </option>
+            <option value="{{ acc._id }}">{{ acc.name }} (₹{{ acc.balance }})</option>
             {% endfor %}
           </select>
         </div>
@@ -110,12 +112,12 @@
 
       <!-- Row  -->
       <div class="field-group">
-        <div class="form-field field--idle" id="recurringStartDate">
-          <label class="mt-2">Start Date</label>
+        <div class="form-field field--active recurring-date-field">
+          <label>Start Date</label>
           <input type="date" name="start_date" id="recurringStartDate">
         </div>
-        <div class="form-field field--idle" id="recurringEndDate">
-          <label class="mt-2">End Date</label>
+        <div class="form-field field--idle recurring-date-field">
+          <label>End Date</label>
           <input type="text" onfocus="(this.type='date')" onblur="if(!this.value) this.type='text'" name="end_date"
             id="recurringEndDate">
         </div>
@@ -146,4 +148,5 @@
 </div>
 
 <script src="/static/js/transactions.js" defer></script>
+</section>
 {% endblock %}

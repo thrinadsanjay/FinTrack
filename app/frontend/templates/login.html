@@ -1,7 +1,11 @@
 {% extends "base.html" %}
 {% block title %}{{ FT_APP_NAME }} ¦ Login{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/login.css">
+{% endblock %}
 
 {% block content %}
+<section class="page page-auth">
 <div class="login-bg">
   <div class="login-card animate-in">
     <h2 class="login-title">Welcome Back 👋</h2>
@@ -54,4 +58,5 @@
 </div>
 
 <script src="/static/js/login.js" defer></script>
+</section>
 {% endblock %}

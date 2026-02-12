@@ -10,6 +10,7 @@ async def upsert_notification(
     notif_type: str,
     title: str,
     message: str,
+    is_read: bool | None = None,
 ):
     now = datetime.now(timezone.utc)
     existing = await db.notifications.find_one(
@@ -24,13 +25,16 @@ async def upsert_notification(
         "updated_at": now,
     }
 
-    # Keep read state when content is unchanged; mark unread only for new/updated alerts.
-    if not existing or (
-        existing.get("type") != notif_type
-        or existing.get("title") != title
-        or existing.get("message") != message
-    ):
-        set_payload["is_read"] = False
+    if is_read is not None:
+        set_payload["is_read"] = is_read
+    else:
+        # Keep read state when content is unchanged; mark unread only for new/updated alerts.
+        if not existing or (
+            existing.get("type") != notif_type
+            or existing.get("title") != title
+            or existing.get("message") != message
+        ):
+            set_payload["is_read"] = False
 
     await db.notifications.update_one(
         {"user_id": user_id, "key": key},

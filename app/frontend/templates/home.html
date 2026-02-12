@@ -1,10 +1,14 @@
 {% extends "base.html" %}
 {% block title %}{{ FT_APP_NAME }} ¦ Dashboard{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/dash.css">
+{% endblock %}
 {% block content %}
-<div class="title-row">
+<section class="page page-dashboard">
+<div class="title-vvvvvvv">
   <h1>Dashboard</h1>
 </div>
-<section class="dashboard-container">  
+<section class="dashboard-container">
   <section class="dashboard-header">
     <div class="header-panels">
       <div class="header-panels-left">
@@ -230,6 +234,7 @@
       <!-- </div> -->
     </div>
   </section>
+</section>
 </section>
 
 <div

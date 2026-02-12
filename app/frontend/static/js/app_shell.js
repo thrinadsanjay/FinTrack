@@ -6,10 +6,59 @@
   }
 })();
 
+(function themeMode() {
+  const key = "ft-theme-mode";
+  const root = document.documentElement;
+  const metaTheme = document.querySelector('meta[name="theme-color"]');
+  const toggleButtons = document.querySelectorAll("[data-theme-toggle]");
+  const icons = document.querySelectorAll("[data-theme-icon]");
+  const media = window.matchMedia("(prefers-color-scheme: dark)");
+
+  function setButtonState(mode) {
+    const isDark = mode === "dark";
+    toggleButtons.forEach((btn) => {
+      btn.setAttribute("aria-label", isDark ? "Switch to light mode" : "Switch to dark mode");
+      btn.setAttribute("title", isDark ? "Switch to light mode" : "Switch to dark mode");
+    });
+    icons.forEach((icon) => {
+      icon.className = isDark ? "fa-solid fa-sun" : "fa-solid fa-moon";
+    });
+  }
+
+  function applyMode(mode) {
+    root.setAttribute("data-theme", mode);
+    setButtonState(mode);
+    if (metaTheme) {
+      metaTheme.setAttribute("content", mode === "dark" ? "#060b16" : "#0f172a");
+    }
+  }
+
+  const saved = localStorage.getItem(key);
+  const initial = saved === "dark" || saved === "light"
+    ? saved
+    : (media.matches ? "dark" : "light");
+  applyMode(initial);
+
+  toggleButtons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      localStorage.setItem(key, next);
+      applyMode(next);
+    });
+  });
+
+  media.addEventListener("change", (event) => {
+    const stored = localStorage.getItem(key);
+    if (stored === "dark" || stored === "light") return;
+    applyMode(event.matches ? "dark" : "light");
+  });
+})();
+
 (function toastMessages() {
   const toast = document.getElementById("toast");
   if (!toast) return;
-  const msg = toast.dataset.error || "";
+  const msgRaw = (toast.dataset.error || "").trim();
+  const msg = (msgRaw === "None" || msgRaw === "null") ? "" : msgRaw;
   if (!msg) return;
   const messageEl = toast.querySelector(".toast-message");
   const closeBtn = toast.querySelector(".toast-close");

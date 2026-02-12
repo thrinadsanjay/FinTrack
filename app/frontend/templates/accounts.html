@@ -1,8 +1,12 @@
 {% extends "base.html" %}
 {% block title %}{{ FT_APP_NAME }} ¦ Accounts{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/accounts.css">
+{% endblock %}
 {% block content %}
 {% set local_account_types = account_types %}
 <script src="/static/js/accounts.js" defer></script>
+<section class="page page-accounts">
 <div class="title-row">
       <div>
         <h1>Accounts</h1>
@@ -173,4 +177,5 @@
     </div>
   </div>
 </div>
+</section>
 {% endblock %}

@@ -3,6 +3,8 @@
 <head>
   <title>{% block title %}{{ FT_APP_NAME }}{% endblock %}</title>
   <!-- <link rel="icon" type="image/x-icon" href="/static/icons/favicon.ico"> -->
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="/static/icons/favicon-16x16.png">
@@ -10,20 +12,26 @@
 
   <link rel="manifest" href="/static/site.webmanifest">
   <link rel="stylesheet" href="/static/css/app.css">
-  <link rel="stylesheet" href="/static/css/navbar.css">
-  <link rel="stylesheet" href="/static/css/dash.css">
-  <link rel="stylesheet" href="/static/css/accounts.css">
-  <link rel="stylesheet" href="/static/css/transactions.css">
+  {% block extra_css %}{% endblock %}
   <link rel="manifest" href="/static/manifest.json">
   <meta name="theme-color" content="#0f172a">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
 </head>
-{% if request.session.user %}
-  {% include "partials/navbar.html" %}
-{% endif %}
-<body>
+<body class="{% if request.session.user %}user-authenticated{% else %}user-guest{% endif %}">
+  {% if request.session.user %}
+    {% include "partials/navbar.html" %}
+  {% else %}
+    <button
+      type="button"
+      class="theme-toggle theme-toggle-floating"
+      data-theme-toggle
+      aria-label="Toggle theme"
+      title="Toggle theme"
+    >
+      <i class="fa-solid fa-moon" data-theme-icon></i>
+    </button>
+  {% endif %}
   <div class="app-shell">
-    <div class="toast" id="toast" data-error="{{ error | default('') }}">
+    <div class="toast" id="toast" data-error="{{ error or '' }}">
       <span class="toast-icon">!</span>
       <span class="toast-message"></span>
       <button type="button" class="toast-close" aria-label="Close">×</button>
@@ -32,8 +40,8 @@
       {% block content %}{% endblock %}
     </main>
   </div>
+  {% include "partials/footer.html" %}
   <script src="/static/js/navbar.js" defer></script>
   <script src="/static/js/app_shell.js" defer></script>
 </body>
-{% include "partials/footer.html" %}
 </html>

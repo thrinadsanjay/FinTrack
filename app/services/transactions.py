@@ -25,12 +25,8 @@ from app.core.guards import (
     can_restore_today,
     RESTORE_WINDOW_HOURS,
 )
-from app.core.guards import (
-    is_within_edit_window,
-    can_restore_today,
-    RESTORE_WINDOW_HOURS,
-)
 from app.services.recurring_deposit import RecurringDepositService
+from app.services.notifications import upsert_notification
 
 UTC = timezone.utc
 
@@ -328,6 +324,19 @@ async def create_transaction(
             end_date=end_date,
             source_transaction_id=tx_id,
         )
+
+    success_title = "Transaction added successfully"
+    if tx_type == "transfer":
+        success_title = "Transfer added successfully"
+
+    await upsert_notification(
+        user_id=user_oid,
+        key=f"tx_added:{str(tx_id)}",
+        notif_type="success",
+        title=success_title,
+        message=f"₹ {amount} has been recorded.",
+        is_read=True,
+    )
 
     return tx_id
 

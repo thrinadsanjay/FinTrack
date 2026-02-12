@@ -51,6 +51,11 @@ async def _fetch_upcoming_bills(uid: ObjectId, account_map: dict):
         {
             "user_id": uid,
             "is_active": True,
+            "ended_at": None,
+            "$or": [
+                {"end_date": None},
+                {"end_date": {"$gte": now}},
+            ],
             "next_run": {"$gte": now, "$lt": next_month_start},
         }
     ).sort("next_run", 1)
@@ -482,7 +487,7 @@ async def get_user_notifications(user_id: str):
         db.accounts
         .find(
             {"user_id": uid, "deleted_at": None},
-            {"name": 1, "bank_name": 1, "balance": 1},
+            {"name": 1, "bank_name": 1, "balance": 1, "type": 1},
         )
     )
     account_map = {}
@@ -491,6 +496,7 @@ async def get_user_notifications(user_id: str):
             "name": acc.get("name"),
             "bank_name": acc.get("bank_name"),
             "balance": acc.get("balance", 0),
+            "type": acc.get("type"),
         }
 
     _, _, required_by_account = await _fetch_upcoming_bills(uid, account_map)
@@ -507,21 +513,124 @@ async def _persist_notifications(
     required_by_account: dict,
     account_map: dict,
 ):
+    active_low_balance_keys = set()
+
     for account_id, required in required_by_account.items():
         account_info = account_map.get(account_id, {})
         balance_value = account_info.get("balance", 0)
         if balance_value < required:
             key = f"low_balance:{account_id}"
+            active_low_balance_keys.add(key)
             await upsert_notification(
                 user_id=uid,
                 key=key,
                 notif_type="warning",
-                title="Low balance for upcoming bills...",
+                title="Low balance for upcoming bills",
                 message=(
                     f"{account_info.get('name', 'Account')} needs ₹ {required} "
                     f"for pending recurring bills this month, but has ₹ {balance_value}."
                 ),
             )
+
+    # Balance-threshold alerts.
+    active_balance_threshold_keys = set()
+    for account_id, account_info in account_map.items():
+        if account_info.get("type") == "credit_card":
+            continue
+        balance_value = account_info.get("balance", 0)
+        notif_type = None
+        title = None
+        if balance_value <= 500:
+            notif_type = "critical"
+            title = "Critical low balance"
+        elif balance_value <= 1000:
+            notif_type = "warning"
+            title = "Low balance warning"
+
+        if not notif_type:
+            continue
+
+        key = f"balance_threshold:{account_id}"
+        active_balance_threshold_keys.add(key)
+        await upsert_notification(
+            user_id=uid,
+            key=key,
+            notif_type=notif_type,
+            title=title,
+            message=(
+                f"{account_info.get('name', 'Account')} has ₹ {balance_value}. "
+                "Try adding funds soon."
+            ),
+        )
+
+    # Recurring transactions scheduled for today.
+    today_start = start_of_today_utc()
+    tomorrow_start = today_start + timedelta(days=1)
+    recurring_today_cursor = db.recurring_deposits.find(
+        {
+            "user_id": uid,
+            "is_active": True,
+            "ended_at": None,
+            "$and": [
+                {
+                    "$or": [
+                        {"end_date": None},
+                        {"end_date": {"$gte": today_start}},
+                    ]
+                },
+                {
+                    "$or": [
+                        {"next_run": {"$gte": today_start, "$lt": tomorrow_start}},
+                        {"last_run": {"$gte": today_start, "$lt": tomorrow_start}},
+                    ]
+                },
+            ],
+        }
+    ).sort("next_run", 1)
+
+    active_scheduled_today_keys = set()
+    today_key = today_start.strftime("%Y-%m-%d")
+
+    async for rule in recurring_today_cursor:
+        rule_id = str(rule.get("_id"))
+        account_id = str(rule.get("account_id"))
+        account_name = account_map.get(account_id, {}).get("name", "Account")
+        key = f"scheduled_today:{rule_id}:{today_key}"
+        active_scheduled_today_keys.add(key)
+        await upsert_notification(
+            user_id=uid,
+            key=key,
+            notif_type="info",
+            title="Payment due today",
+            message=(
+                f"{rule.get('description', 'Recurring transaction')} for ₹ {rule.get('amount', 0)} "
+                f"is scheduled today in {account_name}."
+            ),
+        )
+
+    # Clear stale low-balance warnings when there are no qualifying bills this month.
+    stale_low_balance_query = {"user_id": uid, "key": {"$regex": r"^low_balance:"}}
+    if active_low_balance_keys:
+        stale_low_balance_query["key"]["$nin"] = list(active_low_balance_keys)
+    await db.notifications.delete_many(stale_low_balance_query)
+
+    # Clear stale threshold notifications when balance recovers.
+    stale_balance_threshold_query = {
+        "user_id": uid,
+        "key": {"$regex": r"^balance_threshold:"},
+    }
+    if active_balance_threshold_keys:
+        stale_balance_threshold_query["key"]["$nin"] = list(active_balance_threshold_keys)
+    await db.notifications.delete_many(stale_balance_threshold_query)
+
+    # Keep only today's scheduled notifications.
+    stale_scheduled_today_query = {
+        "user_id": uid,
+        "key": {"$regex": r"^scheduled_today:"},
+    }
+    if active_scheduled_today_keys:
+        stale_scheduled_today_query["key"]["$nin"] = list(active_scheduled_today_keys)
+    await db.notifications.delete_many(stale_scheduled_today_query)
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=10)
     notifications = await list_notifications(
