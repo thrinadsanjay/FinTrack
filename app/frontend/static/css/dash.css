@@ -35,14 +35,38 @@
 
 .header-panels {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 0.6fr) minmax(0, 1.95fr);
+  grid-template-rows: auto auto;
   gap: 10px;
+  align-items: start;
 }
 
-.header-panels-left {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+.panel-total {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.panel-savings {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.panel-balance-accounts {
+  grid-column: 1 / span 2;
+  grid-row: 2;
+}
+
+.recurring-overview-panel {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  min-width: 0;
+  height: 100%;
+}
+
+.panel-balance-accounts .scroll-list {
+  max-height: 210px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .panel {
@@ -138,6 +162,16 @@
   margin-bottom: 8px;
 }
 
+.savings-top {
+  margin-bottom: 4px;
+}
+
+.savings-label {
+  font-size: 0.74rem;
+  color: var(--color-muted);
+  font-weight: 700;
+}
+
 .rate {
   font-size: 1.5rem;
   font-weight: 800;
@@ -153,6 +187,62 @@
 
 .panel-mini .rate {
   font-size: 1.14rem;
+}
+
+.savings-net {
+  margin-top: 8px;
+  margin-bottom: 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.savings-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-border) 70%, transparent);
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.savings-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #16a34a, #22c55e);
+}
+
+.savings-breakdown {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.savings-item {
+  border: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
+  border-radius: 9px;
+  padding: 6px 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.savings-item span {
+  font-size: 0.7rem;
+  color: var(--color-muted);
+}
+
+.savings-item strong {
+  font-size: 0.82rem;
+}
+
+.savings-item.income {
+  background: rgba(22, 163, 74, 0.12);
+  border-color: rgba(22, 163, 74, 0.35);
+}
+
+.savings-item.expense {
+  background: rgba(220, 38, 38, 0.1);
+  border-color: rgba(220, 38, 38, 0.35);
 }
 
 .panel-grid {
@@ -240,6 +330,164 @@
   padding-right: 2px;
 }
 
+.recurring-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.88fr) minmax(0, 1.12fr);
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+}
+
+.recurring-column {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+.recurring-section {
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--color-border) 78%, transparent);
+  background: color-mix(in srgb, var(--color-surface-strong) 88%, transparent);
+  padding: 8px;
+}
+
+.recurring-month {
+  flex: 1;
+  min-height: 0;
+}
+
+.recurring-left .recurring-section {
+  flex: 1;
+  min-height: 0;
+}
+
+.recurring-left .recurring-list,
+.recurring-right .recurring-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.recurring-left .empty-state,
+.recurring-right .empty-state {
+  margin-top: auto;
+}
+
+.recurring-overview-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.recurring-section h4 {
+  margin: 0 0 6px;
+  font-size: 0.84rem;
+}
+
+.month-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+}
+
+.month-group {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.month-group h5 {
+  margin: 0 0 6px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--color-muted);
+}
+
+.recurring-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+}
+
+.recurring-list li {
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--color-border) 82%, transparent);
+  background: color-mix(in srgb, var(--color-surface) 88%, transparent);
+  padding: 6px 7px;
+}
+
+.recurring-main {
+  font-size: 0.84rem;
+  font-weight: 700;
+  margin-bottom: 3px;
+}
+
+.recurring-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.76rem;
+  color: var(--color-muted);
+}
+
+.recurring-meta span:last-child {
+  font-size: 0.96rem;
+  font-weight: 800;
+  color: var(--color-text);
+}
+
+.pill-warning {
+  color: #7c2d12;
+  background: color-mix(in srgb, #f59e0b 28%, transparent);
+  border: 1px solid color-mix(in srgb, #f59e0b 46%, transparent);
+}
+
+.recurring-list li.status-completed {
+  border-color: #16a34a;
+  background: rgba(22, 163, 74, 0.24);
+}
+
+.recurring-list li.status-today {
+  border-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.26);
+}
+
+.recurring-list li.status-tomorrow {
+  border-color: #1d4ed8;
+  background: rgba(29, 78, 216, 0.26);
+}
+
+.recurring-list li.status-failed {
+  border-color: #d97706;
+  background: rgba(217, 119, 6, 0.28);
+}
+
+.recurring-list li.status-upcoming {
+  border-color: #ea580c;
+  background: rgba(234, 88, 12, 0.24);
+}
+
+.recurring-list li.status-critical {
+  border-color: #dc2626;
+  background: rgba(220, 38, 38, 0.26);
+}
+
+.recurring-today .recurring-list,
+.recurring-tomorrow .recurring-list {
+  max-height: 200px;
+}
+
+.month-group .recurring-list {
+  max-height: 230px;
+}
+
 .chart-wrap {
   position: relative;
   min-height: 180px;
@@ -306,9 +554,30 @@
 }
 
 @media (max-width: 1080px) {
-  .header-panels,
-  .header-panels-left {
-    grid-template-columns: 1fr;
+  .header-panels {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: auto auto auto;
+  }
+
+  .panel-total {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .panel-savings {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .recurring-overview-panel {
+    grid-column: 1 / span 2;
+    grid-row: 2;
+    height: auto;
+  }
+
+  .panel-balance-accounts {
+    grid-column: 1 / span 2;
+    grid-row: 3;
   }
 
   .panel-grid.charts {
@@ -323,6 +592,19 @@
 @media (max-width: 780px) {
   .page-dashboard {
     min-height: calc(100dvh - var(--page-viewport-offset));
+  }
+
+  .header-panels {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+  }
+
+  .panel-total,
+  .panel-savings,
+  .recurring-overview-panel,
+  .panel-balance-accounts {
+    grid-column: 1;
+    grid-row: auto;
   }
 
   .panel-grid,
@@ -345,6 +627,14 @@
 
   .scroll-list {
     max-height: 220px;
+  }
+
+  .recurring-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .month-groups {
+    grid-template-columns: 1fr;
   }
 }
 

@@ -12,7 +12,6 @@
   const splitNumbers = (value) => splitList(value).map((v) => Number(v));
 
   const dailyLabels = splitList(dataEl.dataset.dailyLabels);
-  const dailyNet = splitNumbers(dataEl.dataset.dailyNet);
   const dailyIncome = splitNumbers(dataEl.dataset.dailyIncome);
   const dailyExpense = splitNumbers(dataEl.dataset.dailyExpense);
 
@@ -52,33 +51,23 @@
   const cashflowCtx = document.getElementById("cashflowChart");
   if (cashflowCtx) {
     new Chart(cashflowCtx, {
-      type: "line",
+      type: "bar",
       data: {
         labels: dailyLabels,
         datasets: [
           {
-            label: "Net",
-            data: dailyNet,
-            borderColor: "#0f766e",
-            backgroundColor: "rgba(15, 118, 110, 0.15)",
-            tension: 0.35,
-            fill: true,
-          },
-          {
             label: "Income",
             data: dailyIncome,
-            borderColor: "#16a34a",
-            backgroundColor: "rgba(22, 163, 74, 0.08)",
-            tension: 0.35,
-            fill: false,
+            backgroundColor: "rgba(22, 163, 74, 0.65)",
+            borderRadius: 5,
+            maxBarThickness: 16,
           },
           {
             label: "Expense",
             data: dailyExpense,
-            borderColor: "#dc2626",
-            backgroundColor: "rgba(220, 38, 38, 0.08)",
-            tension: 0.35,
-            fill: false,
+            backgroundColor: "rgba(220, 38, 38, 0.65)",
+            borderRadius: 5,
+            maxBarThickness: 16,
           },
         ],
       },
@@ -88,6 +77,7 @@
           legend: { position: "top" },
         },
         scales: {
+          x: { title: { display: true, text: "Date" } },
           y: { beginAtZero: true },
         },
       },
@@ -104,12 +94,20 @@
           {
             label: "Income",
             data: monthlyIncome,
-            backgroundColor: "rgba(22, 163, 74, 0.6)",
+            backgroundColor: "rgba(22, 163, 74, 0.75)",
+            borderColor: "rgba(22, 163, 74, 1)",
+            borderWidth: 1,
+            borderRadius: 6,
+            maxBarThickness: 18,
           },
           {
             label: "Expense",
             data: monthlyExpense,
-            backgroundColor: "rgba(220, 38, 38, 0.6)",
+            backgroundColor: "rgba(220, 38, 38, 0.82)",
+            borderColor: "rgba(220, 38, 38, 1)",
+            borderWidth: 1,
+            borderRadius: 6,
+            maxBarThickness: 18,
           },
         ],
       },
@@ -119,6 +117,9 @@
           legend: { position: "top" },
         },
         scales: {
+          x: {
+            stacked: false,
+          },
           y: { beginAtZero: true },
         },
       },

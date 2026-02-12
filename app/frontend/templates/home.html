@@ -5,128 +5,196 @@
 {% endblock %}
 {% block content %}
 <section class="page page-dashboard">
-<div class="title-vvvvvvv">
+<div class="title-row">
   <h1>Dashboard</h1>
 </div>
 <section class="dashboard-container">
   <section class="dashboard-header">
     <div class="header-panels">
-      <div class="header-panels-left">
-        <div class="panel panel-compact">
-          <div class="panel-header">
-            <h3>Total Balance</h3>
-            <span class="pill">All accounts</span>
+      <div class="panel panel-compact panel-total">
+        <div class="panel-header">
+          <h3>Total Balance</h3>
+          <span class="pill">Consolidated</span>
+        </div>
+        <div class="balance-amount">₹ {{ summary.balance }}</div>
+        {% set today_net = (summary.today_income | default(0)) - (summary.today_expense | default(0)) %}
+        <div class="balance-sub">
+          <span class="metric green">Income (D): ₹ {{ summary.today_income }}</span>
+          <span class="metric red">Expense (D): ₹ {{ summary.today_expense }}</span>
+          <span class="metric {% if today_net < 0 %}red{% else %}green{% endif %}">
+            Net (D): ₹ {{ today_net }}
+          </span>
+          <span class="metric">Net (MTD): ₹ {{ summary.month_net }}</span>
+        </div>
+      </div>
+      <div class="panel panel-compact panel-mini panel-savings">
+        <div class="panel-header">
+          <h3>Savings Ratio</h3>
+          <span class="pill">MTD</span>
+        </div>
+        {% if summary.savings_rate is not none %}
+          {% set rate_value = summary.savings_rate | default(0) %}
+          {% set rate_progress = rate_value %}
+          {% if rate_progress < 0 %}{% set rate_progress = 0 %}{% endif %}
+          {% if rate_progress > 100 %}{% set rate_progress = 100 %}{% endif %}
+          <div class="savings-rate savings-top">
+            <span class="rate">{{ rate_value }}%</span>
+            <span class="savings-label">Income Retained</span>
           </div>
-          <div class="balance-amount">₹ {{ summary.balance }}</div>
-          {% set today_net = (summary.today_income | default(0)) - (summary.today_expense | default(0)) %}
-          <div class="balance-sub">
-            <span class="metric green">Today Income: ₹ {{ summary.today_income }}</span>
-            <span class="metric red">Today Expense: ₹ {{ summary.today_expense }}</span>
-            <span class="metric {% if today_net < 0 %}red{% else %}green{% endif %}">
-              Today Net: ₹ {{ today_net }}
+          {% if summary.savings_rate_change is not none %}
+            <span class="trend {% if summary.savings_rate_change < 0 %}red{% else %}green{% endif %}">
+              {% if summary.savings_rate_change < 0 %}Down{% else %}Up{% endif %}
+              {{ summary.savings_rate_change | abs }}% vs Prev M
             </span>
-            <span class="metric">Month Net: ₹ {{ summary.month_net }}</span>
+          {% endif %}
+          <div class="savings-net {% if summary.month_net < 0 %}red{% else %}green{% endif %}">
+            {% if summary.month_net < 0 %}
+              MTD Deficit: ₹ {{ summary.month_net | abs }}
+            {% else %}
+              MTD Savings: ₹ {{ summary.month_net }}
+            {% endif %}
           </div>
+          <div class="savings-bar" aria-hidden="true">
+            <span style="width: {{ rate_progress }}%"></span>
+          </div>
+          <div class="savings-breakdown">
+            <div class="savings-item income">
+              <span>Income</span>
+              <strong>₹ {{ summary.month_income }}</strong>
+            </div>
+            <div class="savings-item expense">
+              <span>Expense</span>
+              <strong>₹ {{ summary.month_expense }}</strong>
+            </div>
+          </div>
+        {% else %}
+          <p class="empty-state">No income recorded this month.</p>
+        {% endif %}
+      </div>
+      <div class="panel panel-balance-accounts">
+        <div class="panel-header">
+          <h3>Account Balances</h3>
+          <span class="pill">Active</span>
         </div>
-        <div class="panel panel-compact panel-mini">
-          <div class="panel-header">
-            <h3>Savings Rate</h3>
-            <span class="pill">This month</span>
-          </div>
-          {% if summary.savings_rate is not none %}
-            <div class="savings-rate">
-              <span class="rate">{{ summary.savings_rate }}%</span>
-              {% if summary.savings_rate_change is not none %}
-                <span class="trend {% if summary.savings_rate_change < 0 %}red{% else %}green{% endif %}">
-                  {% if summary.savings_rate_change < 0 %}Down{% else %}Up{% endif %}
-                  {{ summary.savings_rate_change | abs }}%
-                </span>
+        {% if summary.account_balances %}
+          <ul class="account-list scroll-list">
+            {% for account in summary.account_balances %}
+              <li>
+                <div>
+                  <span class="account-name">{{ account.name }}</span>
+                  {% if account.bank_name %}
+                    <span class="muted">({{ account.bank_name }})</span>
+                  {% endif %}
+                </div>
+                <span class="account-balance">₹ {{ account.balance }}</span>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="empty-state">No accounts yet.</p>
+        {% endif %}
+      </div>
+      <div class="panel recurring-overview-panel">
+        <div class="panel-header">
+          <h3>Recurring Schedule</h3>
+          <span class="pill">MTD</span>
+        </div>
+        <div class="recurring-grid">
+          <div class="recurring-column recurring-left">
+            <section class="recurring-section recurring-today">
+              <h4>Due Today</h4>
+              {% if summary.recurring_overview.today %}
+                <ul class="recurring-list">
+                  {% for item in summary.recurring_overview.today %}
+                    <li class="{% if item.status == 'failed' %}status-failed{% else %}status-today{% endif %}">
+                      <div class="recurring-main">{{ item.description }}</div>
+                      <div class="recurring-meta">
+                        <span>{{ item.account_name }}</span>
+                      <span>
+                        ₹ {{ item.amount }}
+                      </span>
+                    </div>
+                  </li>
+                  {% endfor %}
+                </ul>
+              {% else %}
+                <p class="empty-state">No recurring transactions today.</p>
               {% endif %}
-            </div>
-            <div class="muted">
-              Income: ₹ {{ summary.month_income }} - Expense: ₹ {{ summary.month_expense }}
-            </div>
-          {% else %}
-            <p class="empty-state">No income recorded this month.</p>
-          {% endif %}
-        </div>
-      </div>
-      <div class="header-panels-right"></div>
-    </div>
-  </section>
+            </section>
 
-  <section class="panel-grid">
-    <div class="panel">
-      <div class="panel-header">
-        <h3>Balance per Account</h3>
-        <span class="pill">Top accounts</span>
-      </div>
-      {% if summary.account_balances %}
-        <ul class="account-list scroll-list">
-          {% for account in summary.account_balances %}
-            <li>
-              <div>
-                <span class="account-name">{{ account.name }}</span>
-                {% if account.bank_name %}
-                  <span class="muted">({{ account.bank_name }})</span>
-                {% endif %}
+            <section class="recurring-section recurring-tomorrow">
+              <h4>Due Tomorrow</h4>
+              {% if summary.recurring_overview.tomorrow %}
+                <ul class="recurring-list">
+                  {% for item in summary.recurring_overview.tomorrow %}
+                    <li class="{% if item.status == 'critical' or item.status == 'risk' %}status-critical{% else %}status-tomorrow{% endif %}">
+                      <div class="recurring-main">{{ item.description }}</div>
+                      <div class="recurring-meta">
+                        <span>{{ item.account_name }}</span>
+                        <span>₹ {{ item.amount }}</span>
+                      </div>
+                    </li>
+                  {% endfor %}
+                </ul>
+              {% else %}
+                <p class="empty-state">No recurring transactions tomorrow.</p>
+              {% endif %}
+            </section>
+          </div>
+
+          <div class="recurring-column recurring-right">
+            <section class="recurring-section recurring-month">
+              <h4>Month View</h4>
+              <div class="month-groups">
+                <div class="month-group">
+                  <h5>Processed</h5>
+                  {% if summary.recurring_overview.completed_month or summary.recurring_overview.failed_month %}
+                    <ul class="recurring-list">
+                      {% for item in summary.recurring_overview.completed_month %}
+                        <li class="status-completed">
+                          <div class="recurring-main">{{ item.description }}</div>
+                          <div class="recurring-meta">
+                            <span>{{ item.account_name }}</span>
+                            <span>₹ {{ item.amount }}</span>
+                          </div>
+                        </li>
+                      {% endfor %}
+                      {% for item in summary.recurring_overview.failed_month %}
+                        <li class="status-failed">
+                          <div class="recurring-main">{{ item.description }}</div>
+                          <div class="recurring-meta">
+                            <span>{{ item.account_name }}</span>
+                            <span>₹ {{ item.amount }}</span>
+                          </div>
+                        </li>
+                      {% endfor %}
+                    </ul>
+                  {% else %}
+                    <p class="empty-state">No completed transactions this month.</p>
+                  {% endif %}
+                </div>
+
+                <div class="month-group">
+                  <h5>Scheduled</h5>
+                  {% if summary.recurring_overview.upcoming_month %}
+                    <ul class="recurring-list">
+                      {% for item in summary.recurring_overview.upcoming_month %}
+                        <li class="{% if item.status == 'critical' or item.status == 'risk' %}status-critical{% else %}status-upcoming{% endif %}">
+                          <div class="recurring-main">{{ item.description }}</div>
+                          <div class="recurring-meta">
+                            <span>{{ item.account_name }}</span>
+                            <span>₹ {{ item.amount }}</span>
+                          </div>
+                        </li>
+                      {% endfor %}
+                    </ul>
+                  {% else %}
+                    <p class="empty-state">No upcoming transactions this month.</p>
+                  {% endif %}
+                </div>
               </div>
-              <span class="account-balance">₹ {{ account.balance }}</span>
-            </li>
-          {% endfor %}
-        </ul>
-      {% else %}
-        <p class="empty-state">No accounts yet.</p>
-      {% endif %}
-    </div>
-
-    <div class="panel">
-    <div class="panel-header">
-        <h3>Upcoming Bills</h3>
-        <span class="pill">Next 7 days + This month</span>
-      </div>
-      <div class="bill-columns">
-        <div class="bill-column">
-          <h4>Next 7 days</h4>
-          {% if summary.upcoming_bills_7 %}
-            <ul class="bill-list scroll-list">
-              {% for bill in summary.upcoming_bills_7 %}
-                <li>
-                  <div>
-                    <span class="bill-title">{{ bill.description }}</span>
-                    <span class="muted">({{ bill.account_name }})</span>
-                  </div>
-                  <div class="bill-meta">
-                    <span class="bill-date">{{ bill.due_at | localtime(request) | dateformat }}</span>
-                    <span class="bill-amount">₹ {{ bill.amount }}</span>
-                  </div>
-                </li>
-              {% endfor %}
-            </ul>
-          {% else %}
-            <p class="empty-state">No bills due in the next 7 days.</p>
-          {% endif %}
-        </div>
-        <div class="bill-column">
-          <h4>This Month</h4>
-          {% if summary.upcoming_bills_month %}
-            <ul class="bill-list scroll-list">
-              {% for bill in summary.upcoming_bills_month %}
-                <li>
-                  <div>
-                    <span class="bill-title">{{ bill.description }}</span>
-                    <span class="muted">({{ bill.account_name }})</span>
-                  </div>
-                  <div class="bill-meta">
-                    <span class="bill-date">{{ bill.due_at | localtime(request) | dateformat }}</span>
-                    <span class="bill-amount">₹ {{ bill.amount }}</span>
-                  </div>
-                </li>
-              {% endfor %}
-            </ul>
-          {% else %}
-            <p class="empty-state">No upcoming bills in this month.</p>
-          {% endif %}
+            </section>
+          </div>
         </div>
       </div>
     </div>
@@ -135,21 +203,21 @@
   <section class="panel-grid charts">
     <div class="panel">
       <div class="panel-header">
-        <h3>Top Spending Categories</h3>
-        <span class="pill">This month</span>
+        <h3>Spend by Category</h3>
+        <span class="pill">MTD</span>
       </div>
       {% if summary.top_spending_categories %}
         <div class="chart-wrap chart-square">
           <canvas id="spendingCategoryChart" height="160"></canvas>
         </div>
       {% else %}
-        <p class="empty-state">No spending yet this month.</p>
+        <p class="empty-state">No spend data for MTD.</p>
       {% endif %}
     </div>
     <div class="panel">
       <div class="panel-header">
-        <h3>Cash Flow Trend (14 days)</h3>
-        <span class="pill">Net daily</span>
+        <h3>Daily Cash Flow</h3>
+        <span class="pill">{{ summary.cashflow_month_label }}</span>
       </div>
       <div class="chart-wrap chart-square">
         <canvas id="cashflowChart" height="160"></canvas>
@@ -157,8 +225,8 @@
     </div>
     <div class="panel">
       <div class="panel-header">
-        <h3>Income vs Expense (6 months)</h3>
-        <span class="pill">Monthly totals</span>
+        <h3>Monthly Income vs Expense</h3>
+        <span class="pill">Through {{ summary.monthly_till_label }}</span>
       </div>
       <div class="chart-wrap chart-square">
         <canvas id="incomeExpenseChart" height="160"></canvas>
@@ -166,8 +234,8 @@
     </div>
     <div class="panel panel-largest">
       <div class="panel-header">
-        <h3>Largest Transactions</h3>
-        <span class="pill">This month</span>
+        <h3>High-Value Transactions</h3>
+        <span class="pill">MTD</span>
       </div>
       {% if summary.largest_transactions %}
         <ul class="insight-list">
@@ -182,13 +250,13 @@
           {% endfor %}
         </ul>
       {% else %}
-        <p class="empty-state">No big transactions yet.</p>
+        <p class="empty-state">No high-value transactions in MTD.</p>
       {% endif %}
     </div>
     <div class="panel panel-recent">
       <div class="panel-header">
         <h3>Recent Transactions</h3>
-        <span class="pill">Merged transfers</span>
+        <span class="pill">Latest 5</span>
       </div>
       <!-- <div class="table-scroll"> -->
       <table class="tx-table">
@@ -206,7 +274,11 @@
             <td>{{ tx.created_at | localtime(request) | dateformat }}</td>
               <td>
                 {% if tx.type == "transfer" %}
-                  {{ tx.description }} — {{ tx.transfer.source }} → {{ tx.transfer.target }}
+                  {% if tx.transfer is defined and tx.transfer %}
+                    {{ tx.description }} — {{ tx.transfer.source | default("Unknown") }} → {{ tx.transfer.target | default("Unknown") }}
+                  {% else %}
+                    {{ tx.description }}
+                  {% endif %}
                 {% else %}
                   {{ tx.description }}
                 {% endif %}
@@ -226,7 +298,7 @@
             </tr>
           {% else %}
             <tr>
-              <td colspan="4" class="empty-state">No transactions yet</td>
+              <td colspan="4" class="empty-state">No transactions.</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -240,11 +312,10 @@
 <div
   id="dashboard-data"
   class="visually-hidden"
-  data-daily-labels="{% for d in summary.trend_daily %}{{ d.date }}{% if not loop.last %}|{% endif %}{% endfor %}"
-  data-daily-net="{% for d in summary.trend_daily %}{{ d.net }}{% if not loop.last %}|{% endif %}{% endfor %}"
+  data-daily-labels="{% for d in summary.trend_daily %}{{ d.day }}{% if not loop.last %}|{% endif %}{% endfor %}"
   data-daily-income="{% for d in summary.trend_daily %}{{ d.income }}{% if not loop.last %}|{% endif %}{% endfor %}"
   data-daily-expense="{% for d in summary.trend_daily %}{{ d.expense }}{% if not loop.last %}|{% endif %}{% endfor %}"
-  data-monthly-labels="{% for d in summary.trend_monthly %}{{ d.month }}{% if not loop.last %}|{% endif %}{% endfor %}"
+  data-monthly-labels="{% for d in summary.trend_monthly %}{{ d.month_short }}{% if not loop.last %}|{% endif %}{% endfor %}"
   data-monthly-income="{% for d in summary.trend_monthly %}{{ d.income }}{% if not loop.last %}|{% endif %}{% endfor %}"
   data-monthly-expense="{% for d in summary.trend_monthly %}{{ d.expense }}{% if not loop.last %}|{% endif %}{% endfor %}"
   data-category-labels="{% for c in summary.top_spending_categories %}{{ c.name }}{% if not loop.last %}|{% endif %}{% endfor %}"

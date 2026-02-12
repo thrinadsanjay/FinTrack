@@ -25,7 +25,7 @@ from app.core.guards import (
     can_restore_today,
     RESTORE_WINDOW_HOURS,
 )
-from app.services.recurring_deposit import RecurringDepositService
+from app.services.recurring_deposit import RecurringDepositService, calculate_next_run
 from app.services.notifications import upsert_notification
 
 UTC = timezone.utc
@@ -274,6 +274,80 @@ async def create_transaction(
         tx_type=tx_type,
     )
 
+    source_account = await db.accounts.find_one(
+        {"_id": ObjectId(account_id), "user_id": user_oid, "deleted_at": None},
+        {"balance": 1, "name": 1},
+    )
+    if not source_account:
+        raise Exception("Account not found")
+
+    target_account = None
+    if tx_type == "transfer":
+        if not target_account_id:
+            raise Exception("Target account required")
+        target_account = await db.accounts.find_one(
+            {"_id": ObjectId(target_account_id), "user_id": user_oid, "deleted_at": None},
+            {"balance": 1, "name": 1},
+        )
+        if not target_account:
+            raise Exception("Target account not found")
+        if str(target_account["_id"]) == str(source_account["_id"]):
+            raise Exception("Source and target cannot be same")
+
+    # Fail debit/transfer when funds are insufficient, but keep a retryable failed row.
+    if tx_type == "debit" and source_account.get("balance", 0) < amount:
+        failed_id = await _add_failed_transaction(
+            user_oid=user_oid,
+            account_id=account_id,
+            amount=amount,
+            tx_type=tx_type,
+            mode=mode,
+            description=description,
+            category=category,
+            subcategory=subcategory,
+            source="manual",
+            failure_reason="insufficient_funds",
+            request=request,
+        )
+        await upsert_notification(
+            user_id=user_oid,
+            key=f"tx_failed:{str(failed_id)}",
+            notif_type="warning",
+            title="Transaction failed: insufficient funds",
+            message=(
+                f"{source_account.get('name', 'Account')} has ₹ {source_account.get('balance', 0)}, "
+                f"but ₹ {amount} is required."
+            ),
+        )
+        return failed_id
+
+    if tx_type == "transfer" and source_account.get("balance", 0) < amount:
+        failed_id = await _add_failed_transaction(
+            user_oid=user_oid,
+            account_id=account_id,
+            amount=amount,
+            tx_type="transfer_out",
+            mode=mode,
+            description=description,
+            category=category,
+            subcategory=subcategory,
+            source="manual_transfer",
+            failure_reason="insufficient_funds",
+            target_account_id=target_account_id,
+            request=request,
+        )
+        await upsert_notification(
+            user_id=user_oid,
+            key=f"tx_failed:{str(failed_id)}",
+            notif_type="warning",
+            title="Transfer failed: insufficient funds",
+            message=(
+                f"{source_account.get('name', 'Account')} has ₹ {source_account.get('balance', 0)}, "
+                f"but ₹ {amount} is required."
+            ),
+        )
+        return failed_id
+
     # -----------------------------
     # Create transaction (now)
     # -----------------------------
@@ -399,6 +473,56 @@ async def _add_single_transaction(
         meta={"transaction_id": str(result.inserted_id), "amount": amount},
     )
 
+    return result.inserted_id
+
+
+async def _add_failed_transaction(
+    *,
+    user_oid: ObjectId,
+    account_id: str,
+    amount: float,
+    tx_type: str,
+    mode: str,
+    description: str,
+    category: dict,
+    subcategory: dict,
+    source: str,
+    failure_reason: str,
+    target_account_id: str | None = None,
+    request=None,
+):
+    now = datetime.now(UTC)
+    tx_doc = {
+        "user_id": user_oid,
+        "account_id": ObjectId(account_id),
+        "type": tx_type,
+        "mode": mode,
+        "amount": amount,
+        "description": description,
+        "category": category,
+        "subcategory": subcategory,
+        "created_at": now,
+        "deleted_at": None,
+        "source": source,
+        "is_failed": True,
+        "failure_reason": failure_reason,
+        "retry_status": "pending",
+    }
+    if target_account_id:
+        tx_doc["target_account_id"] = ObjectId(target_account_id)
+        tx_doc["transfer_id"] = ObjectId()
+
+    result = await db.transactions.insert_one(tx_doc)
+    await audit_log(
+        action="TRANSACTION_FAILED",
+        request=request,
+        user={"user_id": str(user_oid)},
+        meta={
+            "transaction_id": str(result.inserted_id),
+            "amount": amount,
+            "reason": failure_reason,
+        },
+    )
     return result.inserted_id
 
 
@@ -624,6 +748,8 @@ async def delete_transaction(
     )
     if not tx:
         raise Exception("Transaction not found")
+    if tx.get("is_failed"):
+        raise Exception("Failed transactions cannot be deleted")
 
     if tx.get("transfer_id"):
         raise Exception("Transfers must be deleted as a unit")
@@ -648,6 +774,16 @@ async def delete_transaction(
         request=request,
         user={"user_id": user_id},
         meta={"transaction_id": transaction_id},
+    )
+
+    stamp = now.strftime("%Y%m%d%H%M%S%f")
+    await upsert_notification(
+        user_id=user_oid,
+        key=f"tx_deleted:{transaction_id}:{stamp}",
+        notif_type="success",
+        title="Transaction deleted",
+        message=f"Deleted transaction of ₹ {tx.get('amount', 0)}.",
+        is_read=True,
     )
 
 # ======================================================
@@ -703,6 +839,16 @@ async def restore_transaction(
         meta={"transaction_id": transaction_id},
     )
 
+    stamp = now.strftime("%Y%m%d%H%M%S%f")
+    await upsert_notification(
+        user_id=user_oid,
+        key=f"tx_restored:{transaction_id}:{stamp}",
+        notif_type="success",
+        title="Transaction restored",
+        message=f"Restored transaction of ₹ {tx.get('amount', 0)}.",
+        is_read=True,
+    )
+
 # ======================================================
 # EDIT TRANSACTION
 # ======================================================
@@ -733,6 +879,8 @@ async def edit_transaction(
     )
     if not tx:
         raise Exception("Transaction not found")
+    if tx.get("is_failed"):
+        raise Exception("Failed transactions cannot be edited")
 
     if not is_within_edit_window(tx["created_at"]):
         raise Exception("Edit window expired")
@@ -768,10 +916,272 @@ async def edit_transaction(
         meta={"transaction_id": transaction_id},
     )
 
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
+    await upsert_notification(
+        user_id=user_oid,
+        key=f"tx_edited:{transaction_id}:{stamp}",
+        notif_type="success",
+        title="Transaction updated",
+        message=f"Updated transaction to ₹ {new_amount}.",
+        is_read=True,
+    )
+
+
+async def retry_failed_recurring_transaction(
+    *,
+    user_id: str,
+    failed_transaction_id: str,
+    request=None,
+) -> bool:
+    user_oid = ObjectId(user_id)
+    failed_oid = ObjectId(failed_transaction_id)
+    now = datetime.now(UTC)
+
+    failed_tx = await db.transactions.find_one(
+        {
+            "_id": failed_oid,
+            "user_id": user_oid,
+            "deleted_at": None,
+            "is_failed": True,
+        }
+    )
+    if not failed_tx:
+        raise Exception("Failed recurring transaction not found")
+
+    retry_status = failed_tx.get("retry_status", "pending")
+    if retry_status == "resolved":
+        return True
+
+    account = await db.accounts.find_one(
+        {"_id": failed_tx["account_id"], "user_id": user_oid, "deleted_at": None},
+        {"balance": 1, "name": 1},
+    )
+    if not account:
+        raise Exception("Account not found")
+
+    amount = failed_tx.get("amount", 0)
+    tx_type = failed_tx.get("type")
+    source = failed_tx.get("source", "")
+    if tx_type == "debit" and account.get("balance", 0) < amount:
+        await db.transactions.update_one(
+            {"_id": failed_oid},
+            {"$set": {"retry_status": "pending", "last_retry_at": now}},
+        )
+        await upsert_notification(
+            user_id=user_oid,
+            key=f"failed_tx_retry_failed:{str(failed_oid)}",
+            notif_type="warning",
+            title="Retry failed: insufficient funds",
+            message=(
+                f"{account.get('name', 'Account')} has ₹ {account.get('balance', 0)}, "
+                f"but ₹ {amount} is required."
+            ),
+        )
+        return False
+
+    if tx_type == "transfer_out" and account.get("balance", 0) < amount:
+        await db.transactions.update_one(
+            {"_id": failed_oid},
+            {"$set": {"retry_status": "pending", "last_retry_at": now}},
+        )
+        await upsert_notification(
+            user_id=user_oid,
+            key=f"failed_tx_retry_failed:{str(failed_oid)}",
+            notif_type="warning",
+            title="Retry failed: insufficient funds",
+            message=(
+                f"{account.get('name', 'Account')} has ₹ {account.get('balance', 0)}, "
+                f"but ₹ {amount} is required."
+            ),
+        )
+        return False
+
+    existing_success = await db.transactions.find_one(
+        {
+            "user_id": user_oid,
+            "retry_of": failed_oid,
+            "deleted_at": None,
+            "is_failed": {"$ne": True},
+        },
+        {"_id": 1},
+    )
+    if existing_success:
+        await db.transactions.update_one(
+            {"_id": failed_oid},
+            {
+                "$set": {
+                    "retry_status": "resolved",
+                    "resolved_at": now,
+                    "retry_transaction_id": existing_success["_id"],
+                    "last_retry_at": now,
+                }
+            },
+        )
+        return True
+
+    retry_reference = None
+    if source == "recurring":
+        recurring_id = failed_tx.get("recurring_id")
+        scheduled_for = failed_tx.get("scheduled_for")
+        if not recurring_id or not scheduled_for:
+            raise Exception("Failed transaction is missing recurring context")
+        if scheduled_for.tzinfo is None:
+            scheduled_for = scheduled_for.replace(tzinfo=UTC)
+
+        recurring_rule = await db.recurring_deposits.find_one(
+            {"_id": recurring_id, "user_id": user_oid}
+        )
+        if not recurring_rule:
+            raise Exception("Recurring rule not found for retry")
+
+        success_tx = {
+            "user_id": failed_tx["user_id"],
+            "account_id": failed_tx["account_id"],
+            "type": tx_type,
+            "mode": failed_tx.get("mode", "online"),
+            "amount": amount,
+            "description": failed_tx.get("description", ""),
+            "category": failed_tx.get("category"),
+            "subcategory": failed_tx.get("subcategory"),
+            "created_at": now,
+            "deleted_at": None,
+            "source": "recurring_retry",
+            "recurring_id": recurring_id,
+            "scheduled_for": scheduled_for,
+            "retry_of": failed_oid,
+        }
+        insert_result = await db.transactions.insert_one(success_tx)
+        retry_reference = insert_result.inserted_id
+
+        delta = amount if tx_type == "credit" else -amount
+        await db.accounts.update_one(
+            {"_id": failed_tx["account_id"]},
+            {"$inc": {"balance": delta}},
+        )
+
+        next_run = calculate_next_run(
+            last_run=scheduled_for.date(),
+            start_date=recurring_rule["start_date"].date(),
+            frequency=recurring_rule["frequency"],
+        )
+        await db.recurring_deposits.update_one(
+            {"_id": recurring_id},
+            {
+                "$set": {
+                    "last_run": scheduled_for,
+                    "next_run": next_run,
+                }
+            },
+        )
+    elif tx_type == "transfer_out":
+        target_account_id = failed_tx.get("target_account_id")
+        if not target_account_id:
+            raise Exception("Target account missing for failed transfer")
+        target_account = await db.accounts.find_one(
+            {"_id": target_account_id, "user_id": user_oid, "deleted_at": None},
+            {"_id": 1},
+        )
+        if not target_account:
+            raise Exception("Target account not found for retry")
+
+        transfer_id = ObjectId()
+        await db.transactions.insert_many([
+            {
+                "transfer_id": transfer_id,
+                "user_id": failed_tx["user_id"],
+                "account_id": failed_tx["account_id"],
+                "type": "transfer_out",
+                "mode": failed_tx.get("mode", "online"),
+                "amount": amount,
+                "description": failed_tx.get("description", ""),
+                "category": failed_tx.get("category"),
+                "subcategory": failed_tx.get("subcategory"),
+                "created_at": now,
+                "deleted_at": None,
+                "source": "manual_transfer_retry",
+                "retry_of": failed_oid,
+            },
+            {
+                "transfer_id": transfer_id,
+                "user_id": failed_tx["user_id"],
+                "account_id": target_account_id,
+                "type": "transfer_in",
+                "mode": failed_tx.get("mode", "online"),
+                "amount": amount,
+                "description": failed_tx.get("description", ""),
+                "category": failed_tx.get("category"),
+                "subcategory": failed_tx.get("subcategory"),
+                "created_at": now,
+                "deleted_at": None,
+                "source": "manual_transfer_retry",
+                "retry_of": failed_oid,
+            },
+        ])
+        await db.accounts.update_one({"_id": failed_tx["account_id"]}, {"$inc": {"balance": -amount}})
+        await db.accounts.update_one({"_id": target_account_id}, {"$inc": {"balance": amount}})
+        retry_reference = transfer_id
+    else:
+        success_tx = {
+            "user_id": failed_tx["user_id"],
+            "account_id": failed_tx["account_id"],
+            "type": tx_type,
+            "mode": failed_tx.get("mode", "online"),
+            "amount": amount,
+            "description": failed_tx.get("description", ""),
+            "category": failed_tx.get("category"),
+            "subcategory": failed_tx.get("subcategory"),
+            "created_at": now,
+            "deleted_at": None,
+            "source": "manual_retry",
+            "retry_of": failed_oid,
+        }
+        insert_result = await db.transactions.insert_one(success_tx)
+        retry_reference = insert_result.inserted_id
+        delta = amount if tx_type == "credit" else -amount
+        await db.accounts.update_one(
+            {"_id": failed_tx["account_id"]},
+            {"$inc": {"balance": delta}},
+        )
+
+    await db.transactions.update_one(
+        {"_id": failed_oid},
+        {
+            "$set": {
+                "retry_status": "resolved",
+                "resolved_at": now,
+                "last_retry_at": now,
+                "retry_transaction_id": retry_reference,
+            }
+        },
+    )
+
+    await upsert_notification(
+        user_id=user_oid,
+        key=f"failed_tx_retry_success:{str(failed_oid)}",
+        notif_type="success",
+        title="Retry successful",
+        message=(
+            f"{failed_tx.get('description', 'Transaction')} for ₹ {amount} "
+            f"was posted successfully."
+        ),
+    )
+
+    await audit_log(
+        action="RECURRING_RETRY_SUCCESS",
+        request=request,
+        user={"user_id": user_id},
+        meta={
+            "failed_transaction_id": failed_transaction_id,
+            "retry_transaction_id": str(retry_reference),
+        },
+    )
+    return True
+
 __all__ = [
     "create_transaction",
     "get_user_transactions",
     "delete_transaction",
     "restore_transaction",
     "edit_transaction",
+    "retry_failed_recurring_transaction",
 ]

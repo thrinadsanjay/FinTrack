@@ -161,7 +161,7 @@
       </thead>
       <tbody>
         {% for tx in transactions %}
-        <tr class="tx-row">
+        <tr class="tx-row {% if tx.is_failed %}tx-row-failed{% endif %}">
 
           <!-- DATE -->
           <td data-label="Date" class="col-date">
@@ -176,13 +176,18 @@
             {% elif tx.type == "transfer" %}
             <span class="amount-text transfer">₹{{ tx.amount }}</span>
             {% endif %}
+            {% if tx.is_failed %}
+            <span class="failed-pill">
+              Failed{% if tx.retry_status == "resolved" %} (retried){% endif %}
+            </span>
+            {% endif %}
           </td>
           <!-- ACCOUNT -->
           {% if tx.type == "transfer" %}
           <td data-label="Account" class="col-account">
-            {{ account_map[tx.from_account|string] }}
+            {{ account_map.get(tx.from_account|string, "Source") }}
             →
-            {{ account_map[tx.to_account|string] }}
+            {{ account_map.get(tx.to_account|string, "Target") }}
           </td>
           {% else %}
           <td data-label="Account" class="col-account">{{ account_map[tx.account_id|string] }}</td>
@@ -194,6 +199,15 @@
               {{ tx.description }}
             {% else %}
               —
+            {% endif %}
+            {% if tx.is_failed %}
+              <span class="failed-reason">
+                {% if tx.failure_reason == "insufficient_funds" %}
+                  Insufficient funds
+                {% else %}
+                  Failed
+                {% endif %}
+              </span>
             {% endif %}
           </td>
 
@@ -223,7 +237,21 @@
             {# -----------------------------
             CASE 1: MONTH CLOSED
             ----------------------------- #}
-            {% if tx.is_month_closed %}
+            {% if tx.can_retry %}
+            <form method="post" action="/transactions/retry-failed" style="display:inline"
+              onsubmit="return confirm('Retry this failed transaction now?')">
+              <input type="hidden" name="transaction_id" value="{{ tx._id }}">
+              <button class="icon-btn retry-btn" type="submit" title="Retry failed transaction">
+                <i class="fa-solid fa-rotate-right"></i>
+              </button>
+            </form>
+
+            {% elif tx.is_failed %}
+            <span title="Failed transaction">
+              <i class="fa-solid fa-triangle-exclamation"></i>
+            </span>
+
+            {% elif tx.is_month_closed %}
             <span title="Month closed"><i class="fa-solid fa-book"></i></span>
 
             {# -----------------------------

@@ -36,16 +36,252 @@ def start_of_month_utc():
 def start_of_day_utc(dt: datetime):
     return datetime(dt.year, dt.month, dt.day, tzinfo=timezone.utc)
 
-async def _fetch_upcoming_bills(uid: ObjectId, account_map: dict):
-    now = datetime.now(timezone.utc)
-    tomorrow_start = start_of_today_utc() + timedelta(days=1)
-    next_month_start = datetime(
-        now.year + (1 if now.month == 12 else 0),
-        1 if now.month == 12 else now.month + 1,
+
+def _next_month_start(dt: datetime) -> datetime:
+    return datetime(
+        dt.year + (1 if dt.month == 12 else 0),
+        1 if dt.month == 12 else dt.month + 1,
         1,
         tzinfo=timezone.utc,
     )
-    upcoming_7_end = now + timedelta(days=7)
+
+
+def _as_utc(dt: datetime | None) -> datetime | None:
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _recurring_rule_item(rule: dict, account_map: dict) -> dict:
+    account_id = str(rule.get("account_id"))
+    account = account_map.get(account_id, {})
+    due_at = _as_utc(rule.get("next_run"))
+    tx_type = rule.get("type", "")
+    amount = rule.get("amount", 0)
+    balance = account.get("balance", 0)
+    status = "scheduled"
+
+    # Warn when the scheduled debit may fail due to low funds.
+    if tx_type == "debit" and balance < amount:
+        status = "risk"
+
+    return {
+        "id": str(rule.get("_id")),
+        "description": rule.get("description", "Recurring transaction"),
+        "account_name": account.get("name", "Account"),
+        "amount": amount,
+        "type": tx_type,
+        "due_at": due_at,
+        "status": status,
+    }
+
+
+def _recurring_tx_item(tx: dict, account_map: dict, *, status: str | None = None) -> dict:
+    account_name = account_map.get(str(tx.get("account_id")), {}).get("name", "Account")
+    scheduled_for = _as_utc(tx.get("scheduled_for"))
+    created_at = _as_utc(tx.get("created_at"))
+    resolved_status = status
+    if not resolved_status:
+        resolved_status = "failed" if tx.get("is_failed") else "completed"
+
+    return {
+        "id": str(tx.get("_id")),
+        "description": tx.get("description", "Recurring transaction"),
+        "account_name": account_name,
+        "amount": tx.get("amount", 0),
+        "type": tx.get("type", ""),
+        "due_at": scheduled_for or created_at,
+        "status": resolved_status,
+        "retry_status": tx.get("retry_status"),
+    }
+
+
+async def _fetch_recurring_overview(uid: ObjectId, account_map: dict):
+    now = datetime.now(timezone.utc)
+    today_start = start_of_today_utc()
+    tomorrow_start = today_start + timedelta(days=1)
+    day_after_tomorrow_start = today_start + timedelta(days=2)
+    next_month_start = _next_month_start(today_start)
+    month_start = start_of_month_utc()
+
+    recurring_source_match = {"$in": ["recurring", "recurring_retry"]}
+
+    today_cursor = (
+        db.transactions
+        .find(
+            {
+                "user_id": uid,
+                "deleted_at": None,
+                "source": recurring_source_match,
+                "scheduled_for": {"$gte": today_start, "$lt": tomorrow_start},
+            }
+        )
+        .sort("scheduled_for", 1)
+        .limit(8)
+    )
+
+    tomorrow_rules_cursor = (
+        db.recurring_deposits
+        .find(
+            {
+                "user_id": uid,
+                "is_active": True,
+                "ended_at": None,
+                "$or": [
+                    {"end_date": None},
+                    {"end_date": {"$gte": tomorrow_start}},
+                ],
+                "next_run": {"$gte": tomorrow_start, "$lt": day_after_tomorrow_start},
+            }
+        )
+        .sort("next_run", 1)
+        .limit(8)
+    )
+
+    completed_month_cursor = (
+        db.transactions
+        .find(
+            {
+                "user_id": uid,
+                "deleted_at": None,
+                "source": recurring_source_match,
+                "is_failed": {"$ne": True},
+                "scheduled_for": {"$gte": month_start, "$lt": next_month_start},
+            }
+        )
+        .sort("scheduled_for", -1)
+        .limit(12)
+    )
+
+    upcoming_month_cursor = (
+        db.recurring_deposits
+        .find(
+            {
+                "user_id": uid,
+                "is_active": True,
+                "ended_at": None,
+                "$or": [
+                    {"end_date": None},
+                    {"end_date": {"$gte": day_after_tomorrow_start}},
+                ],
+                "next_run": {"$gte": day_after_tomorrow_start, "$lt": next_month_start},
+            }
+        )
+        .sort("next_run", 1)
+        .limit(12)
+    )
+
+    failed_month_cursor = (
+        db.transactions
+        .find(
+            {
+                "user_id": uid,
+                "deleted_at": None,
+                "source": recurring_source_match,
+                "is_failed": True,
+                "scheduled_for": {"$gte": month_start, "$lt": next_month_start},
+            }
+        )
+        .sort("scheduled_for", -1)
+        .limit(20)
+    )
+
+    today = []
+    today_recurring_ids = set()
+    async for tx in today_cursor:
+        # Once a failed recurring transaction is retried successfully,
+        # hide the original failed row from dashboard buckets.
+        if tx.get("is_failed") and tx.get("retry_status") == "resolved":
+            continue
+        today.append(_recurring_tx_item(tx, account_map))
+        recurring_id = tx.get("recurring_id")
+        if recurring_id:
+            today_recurring_ids.add(str(recurring_id))
+
+    tomorrow = []
+    async for rule in tomorrow_rules_cursor:
+        # Avoid showing the same recurring rule in both today and tomorrow buckets.
+        rule_id = str(rule.get("_id"))
+        if rule_id in today_recurring_ids:
+            continue
+        tomorrow.append(_recurring_rule_item(rule, account_map))
+
+    completed_month = []
+    async for tx in completed_month_cursor:
+        completed_month.append(_recurring_tx_item(tx, account_map, status="completed"))
+
+    upcoming_rules = []
+    async for rule in upcoming_month_cursor:
+        upcoming_rules.append(rule)
+
+    # Date-ordered balance projection for upcoming monthly bills.
+    # If a debit pushes projected balance below zero, mark that item critical.
+    projected_balance_by_account = {
+        account_id: info.get("balance", 0)
+        for account_id, info in account_map.items()
+    }
+
+    upcoming_month = []
+    for rule in upcoming_rules:
+        account_id = str(rule.get("account_id"))
+        amount = rule.get("amount", 0)
+        tx_type = rule.get("type")
+        item = _recurring_rule_item(rule, account_map)
+        current_balance = projected_balance_by_account.get(
+            account_id,
+            account_map.get(account_id, {}).get("balance", 0),
+        )
+
+        if tx_type == "debit":
+            if current_balance < amount:
+                item["status"] = "critical"
+            else:
+                item["status"] = "upcoming"
+            projected_balance_by_account[account_id] = current_balance - amount
+        else:
+            item["status"] = "upcoming"
+            if tx_type == "credit":
+                projected_balance_by_account[account_id] = current_balance + amount
+
+        upcoming_month.append(item)
+
+    failed_month = []
+    async for tx in failed_month_cursor:
+        if tx.get("retry_status") == "resolved":
+            continue
+        failed_month.append(_recurring_tx_item(tx, account_map, status="failed"))
+
+    failed_month_count = await db.transactions.count_documents(
+        {
+            "user_id": uid,
+            "deleted_at": None,
+            "source": recurring_source_match,
+            "is_failed": True,
+            "retry_status": {"$ne": "resolved"},
+            "scheduled_for": {"$gte": month_start, "$lt": next_month_start},
+        }
+    )
+
+    return {
+        "today": today,
+        "tomorrow": tomorrow,
+        "completed_month": completed_month,
+        "upcoming_month": upcoming_month,
+        "failed_month": failed_month,
+        "failed_month_count": failed_month_count,
+        "has_failures": failed_month_count > 0,
+        "generated_at": now,
+    }
+
+
+async def _fetch_upcoming_bills(uid: ObjectId, account_map: dict):
+    now = datetime.now(timezone.utc)
+    today_start = start_of_today_utc()
+    tomorrow_start = start_of_today_utc() + timedelta(days=1)
+    next_month_start = _next_month_start(now)
+    next_7_end = today_start + timedelta(days=7)
 
     recurring_cursor = db.recurring_deposits.find(
         {
@@ -56,7 +292,7 @@ async def _fetch_upcoming_bills(uid: ObjectId, account_map: dict):
                 {"end_date": None},
                 {"end_date": {"$gte": now}},
             ],
-            "next_run": {"$gte": now, "$lt": next_month_start},
+            "next_run": {"$gte": today_start, "$lt": next_month_start},
         }
     ).sort("next_run", 1)
 
@@ -81,9 +317,9 @@ async def _fetch_upcoming_bills(uid: ObjectId, account_map: dict):
             "due_at": due_at,
         }
 
-        if item["due_at"] and item["due_at"] >= tomorrow_start:
+        if item["due_at"] and tomorrow_start <= item["due_at"] < next_month_start:
             upcoming_bills_month.append(item)
-        if item["due_at"] and item["due_at"] <= upcoming_7_end:
+        if item["due_at"] and today_start <= item["due_at"] < next_7_end:
             upcoming_bills_7.append(item)
 
         if item["type"] == "debit":
@@ -133,6 +369,7 @@ async def get_dashboard_summary(user_id: str):
             "$match": {
                 "user_id": uid,
                 "deleted_at": None,
+                "is_failed": {"$ne": True},
                 "created_at": {"$gte": today},
             }
         },
@@ -161,6 +398,7 @@ async def get_dashboard_summary(user_id: str):
             "$match": {
                 "user_id": uid,
                 "deleted_at": None,
+                "is_failed": {"$ne": True},
                 "created_at": {"$gte": month_start},
             }
         },
@@ -222,6 +460,7 @@ async def get_dashboard_summary(user_id: str):
                 "$match": {
                     "user_id": uid,
                     "deleted_at": None,
+                    "is_failed": {"$ne": True},
                     "created_at": {"$gte": month_start},
                     "type": "debit",
                 }
@@ -257,6 +496,7 @@ async def get_dashboard_summary(user_id: str):
             {
                 "user_id": uid,
                 "deleted_at": None,
+                "is_failed": {"$ne": True},
                 "created_at": {"$gte": month_start},
                 "type": "debit",
                 "amount": {"$gt": 10000},
@@ -278,17 +518,19 @@ async def get_dashboard_summary(user_id: str):
         )
 
     # -----------------------------
-    # DAILY TREND (LAST 14 DAYS)
+    # DAILY TREND (CURRENT MONTH)
     # -----------------------------
     today = datetime.now(timezone.utc)
-    trend_start = start_of_day_utc(today - timedelta(days=13))
+    trend_start = start_of_month_utc()
+    trend_end = start_of_day_utc(today) + timedelta(days=1)
 
     trend_cursor = db.transactions.aggregate([
         {
             "$match": {
                 "user_id": uid,
                 "deleted_at": None,
-                "created_at": {"$gte": trend_start},
+                "is_failed": {"$ne": True},
+                "created_at": {"$gte": trend_start, "$lt": trend_end},
                 "type": {"$in": ["credit", "debit"]},
             }
         },
@@ -317,7 +559,8 @@ async def get_dashboard_summary(user_id: str):
         daily_map[day][tx_type] = row["total"]
 
     trend_daily = []
-    for i in range(14):
+    day_count = (start_of_day_utc(today) - trend_start).days + 1
+    for i in range(day_count):
         day_dt = trend_start + timedelta(days=i)
         day_key = day_dt.strftime("%Y-%m-%d")
         credit = daily_map.get(day_key, {}).get("credit", 0)
@@ -325,29 +568,34 @@ async def get_dashboard_summary(user_id: str):
         trend_daily.append(
             {
                 "date": day_key,
+                "day": day_dt.day,
                 "income": credit,
                 "expense": debit,
-                "net": credit - debit,
             }
         )
 
+    cashflow_month_label = trend_start.strftime("%b %Y")
+
     # -----------------------------
-    # MONTHLY TREND (LAST 6 MONTHS)
+    # MONTHLY TREND (LAST 12 MONTHS)
     # -----------------------------
     month_anchor = start_of_month_utc()
-    month_start = datetime(
-        month_anchor.year,
-        month_anchor.month,
-        1,
-        tzinfo=timezone.utc,
-    ) - timedelta(days=31 * 5)
-    month_start = datetime(month_start.year, month_start.month, 1, tzinfo=timezone.utc)
+    start_year = month_anchor.year
+    start_month = month_anchor.month
+    for _ in range(11):
+        if start_month == 1:
+            start_month = 12
+            start_year -= 1
+        else:
+            start_month -= 1
+    month_start = datetime(start_year, start_month, 1, tzinfo=timezone.utc)
 
     monthly_cursor = db.transactions.aggregate([
         {
             "$match": {
                 "user_id": uid,
                 "deleted_at": None,
+                "is_failed": {"$ne": True},
                 "created_at": {"$gte": month_start},
                 "type": {"$in": ["credit", "debit"]},
             }
@@ -378,13 +626,15 @@ async def get_dashboard_summary(user_id: str):
 
     trend_monthly = []
     current = month_start
-    for _ in range(6):
+    for _ in range(12):
         month_key = current.strftime("%Y-%m")
         credit = monthly_map.get(month_key, {}).get("credit", 0)
         debit = monthly_map.get(month_key, {}).get("debit", 0)
         trend_monthly.append(
             {
                 "month": month_key,
+                "month_short": current.strftime("%b"),
+                "month_label": current.strftime("%b %Y"),
                 "income": credit,
                 "expense": debit,
                 "net": credit - debit,
@@ -394,12 +644,20 @@ async def get_dashboard_summary(user_id: str):
         next_year = current.year + (1 if current.month == 12 else 0)
         current = datetime(next_year, next_month, 1, tzinfo=timezone.utc)
 
+    monthly_range_label = ""
+    monthly_till_label = month_anchor.strftime("%b %Y")
+    if trend_monthly:
+        monthly_range_label = (
+            f"{trend_monthly[0]['month_label']} - {trend_monthly[-1]['month_label']}"
+        )
+
     # -----------------------------
     # UPCOMING BILLS (NEXT 7 DAYS + TOMORROW TO MONTH END)
     # -----------------------------
     upcoming_bills_7, upcoming_bills_month, required_by_account = (
         await _fetch_upcoming_bills(uid, account_map)
     )
+    recurring_overview = await _fetch_recurring_overview(uid, account_map)
 
     notifications = await _persist_notifications(
         uid=uid,
@@ -473,9 +731,13 @@ async def get_dashboard_summary(user_id: str):
         "top_spending_categories": top_spending_categories,
         "largest_transactions": largest_transactions,
         "trend_daily": trend_daily,
+        "cashflow_month_label": cashflow_month_label,
         "trend_monthly": trend_monthly,
+        "monthly_range_label": monthly_range_label,
+        "monthly_till_label": monthly_till_label,
         "upcoming_bills_7": upcoming_bills_7,
         "upcoming_bills_month": upcoming_bills_month,
+        "recurring_overview": recurring_overview,
         "notifications": notifications,
         "account_alerts": account_alerts,
     }
@@ -666,6 +928,7 @@ async def get_recent_transactions(user_id: str, limit: int = 5):
             {
                 "user_id": uid,
                 "deleted_at": None,
+                "is_failed": {"$ne": True},
             }
         )
         .sort("created_at", -1)
@@ -690,6 +953,7 @@ async def get_recent_transactions(user_id: str, limit: int = 5):
                 {
                     "user_id": uid,
                     "deleted_at": None,
+                    "is_failed": {"$ne": True},
                     "transfer_id": transfer_id,
                     "type": {"$in": ["transfer_in", "transfer_out"]},
                     "_id": {"$ne": tx["_id"]},

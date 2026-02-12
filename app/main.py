@@ -124,7 +124,7 @@ async def on_startup():
     scheduler.add_job(
         run_recurring_transactions,
         trigger="cron",
-        hour=2,
+        hour=12,
         minute=30, # Run daily at 12:10 PM UTC
         id="recurring-transactions",
         replace_existing=True,

@@ -17,6 +17,7 @@ from app.services.transactions import (
     delete_transaction,
     restore_transaction,
     edit_transaction,
+    retry_failed_recurring_transaction,
 )
 from app.core.guards import is_within_edit_window, can_restore_today, is_month_closed, login_required
 
@@ -71,7 +72,7 @@ async def add_transaction(
         if not frequency:
             raise Exception("Recurring frequency is required")
 
-    if type == "transfer" and not target_account_id:
+    if tx_type == "transfer" and not target_account_id:
         raise Exception("Target account is required for transfers")
 
     try:
@@ -177,7 +178,11 @@ async def transactions_list_page(
                 "category": None,
                 "subcategory": None,
                 "from_account": (source or base).get("account_id"),
-                "to_account": (target or base).get("account_id"),
+                "to_account": (target or base).get("account_id") or base.get("target_account_id"),
+                "source": base.get("source"),
+                "is_failed": bool(base.get("is_failed")),
+                "failure_reason": base.get("failure_reason"),
+                "retry_status": base.get("retry_status", "pending"),
             }
         )
 
@@ -220,17 +225,28 @@ async def transactions_list_page(
             tx["created_at"] = created_at
 
         tx["is_deleted"] = tx.get("deleted_at") is not None
+        tx["is_failed"] = bool(tx.get("is_failed"))
+        tx["retry_status"] = tx.get("retry_status", "pending")
+        tx["can_retry"] = (
+            tx["is_failed"]
+            and tx.get("failure_reason") == "insufficient_funds"
+            and tx["retry_status"] != "resolved"
+        )
 
         tx["can_modify"] = (
             not tx["is_deleted"]
             and created_at
             and is_within_edit_window(created_at)
         )
+        if tx["is_failed"]:
+            tx["can_modify"] = False
 
         tx["can_restore"] = (
             tx["is_deleted"]
             and can_restore_today(tx["deleted_at"])
         )
+        if tx["is_failed"]:
+            tx["can_restore"] = False
 
         tx["lock_time"] = (
             created_at + timedelta(days=EDIT_WINDOW_DAYS)
@@ -334,6 +350,21 @@ async def edit_transaction_ui(
         request=request,
     )
 
+    return RedirectResponse("/transactions/list", status_code=303)
+
+
+@router.post("/retry-failed")
+@login_required
+async def retry_failed_transaction_ui(
+    request: Request,
+    transaction_id: str = Form(...),
+):
+    user = request.session.get("user")
+    await retry_failed_recurring_transaction(
+        user_id=user["user_id"],
+        failed_transaction_id=transaction_id,
+        request=request,
+    )
     return RedirectResponse("/transactions/list", status_code=303)
 
 @router.get("", response_class=HTMLResponse)

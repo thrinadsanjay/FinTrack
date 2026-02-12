@@ -3,6 +3,7 @@ from datetime import datetime, date, time, timezone
 from dateutil.relativedelta import relativedelta
 from app.db.mongo import db
 from app.services.audit import audit_log
+from app.services.notifications import upsert_notification
 
 
 def calculate_next_run(
@@ -104,7 +105,7 @@ class RecurringDepositService:
             "created_at": datetime.utcnow(),
         }
 
-        await db.recurring_deposits.insert_one(doc)
+        result = await db.recurring_deposits.insert_one(doc)
         await audit_log(
             action="RECURRING_CREATED",
             user={"user_id": str(user_id)},
@@ -116,6 +117,16 @@ class RecurringDepositService:
                 "interval": interval,
                 "source_transaction_id": str(source_transaction_id),
             },
+        )
+
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
+        await upsert_notification(
+            user_id=ObjectId(user_id),
+            key=f"recurring_created:{str(result.inserted_id)}:{stamp}",
+            notif_type="success",
+            title="Recurring rule created",
+            message=f"Created recurring {tx_type} of ₹ {amount}.",
+            is_read=True,
         )
 
     @staticmethod
@@ -360,6 +371,16 @@ class RecurringDepositService:
             },
         )
 
+        stamp = now.strftime("%Y%m%d%H%M%S%f")
+        await upsert_notification(
+            user_id=uid,
+            key=f"recurring_updated:{recurring_id}:{stamp}",
+            notif_type="success",
+            title="Recurring rule updated",
+            message=f"Updated recurring rule to ₹ {amount} ({frequency}).",
+            is_read=True,
+        )
+
     @staticmethod
     async def pause_rule(
         *,
@@ -393,6 +414,16 @@ class RecurringDepositService:
             request=request,
             user={"user_id": user_id},
             meta={"recurring_id": recurring_id},
+        )
+
+        stamp = now.strftime("%Y%m%d%H%M%S%f")
+        await upsert_notification(
+            user_id=uid,
+            key=f"recurring_paused:{recurring_id}:{stamp}",
+            notif_type="info",
+            title="Recurring rule paused",
+            message=f"Paused recurring rule: {rule.get('description', 'Recurring transaction')}.",
+            is_read=True,
         )
 
     @staticmethod
@@ -438,6 +469,19 @@ class RecurringDepositService:
             meta={"recurring_id": recurring_id, "next_run": next_run.isoformat()},
         )
 
+        stamp = now.strftime("%Y%m%d%H%M%S%f")
+        await upsert_notification(
+            user_id=uid,
+            key=f"recurring_resumed:{recurring_id}:{stamp}",
+            notif_type="success",
+            title="Recurring rule resumed",
+            message=(
+                f"Resumed recurring rule: {rule.get('description', 'Recurring transaction')} "
+                f"(next run {next_run.strftime('%d %b %Y')})."
+            ),
+            is_read=True,
+        )
+
     @staticmethod
     async def end_rule(
         *,
@@ -471,4 +515,14 @@ class RecurringDepositService:
             request=request,
             user={"user_id": user_id},
             meta={"recurring_id": recurring_id},
+        )
+
+        stamp = now.strftime("%Y%m%d%H%M%S%f")
+        await upsert_notification(
+            user_id=uid,
+            key=f"recurring_ended:{recurring_id}:{stamp}",
+            notif_type="info",
+            title="Recurring rule ended",
+            message=f"Ended recurring rule: {rule.get('description', 'Recurring transaction')}.",
+            is_read=True,
         )
