@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from fastapi import APIRouter, Request, Form, Query
 from fastapi.responses import RedirectResponse, HTMLResponse
+from app.core.csrf import verify_csrf_token
 from app.web.templates import templates
 from app.services.recurring_deposit import RecurringDepositService
 from app.services.accounts import get_accounts
@@ -65,7 +66,9 @@ async def add_transaction(
     interval: int = Form(1),
     start_date: str | None = Form(None),
     end_date: str | None = Form(None),
+    csrf_token: str = Form(...),
 ):
+    verify_csrf_token(request, csrf_token)
     user = request.session.get("user")
 
     if is_recurring:
@@ -301,7 +304,9 @@ async def transactions_list_page(
 async def delete_transaction_ui(
     request: Request,
     transaction_id: str = Form(...),
+    csrf_token: str = Form(...),
 ):
+    verify_csrf_token(request, csrf_token)
     user = request.session.get("user")
     print("Deleting TX ID:", transaction_id)
     await delete_transaction(
@@ -317,7 +322,9 @@ async def delete_transaction_ui(
 async def restore_transaction_ui(
     request: Request,
     transaction_id: str = Form(...),
+    csrf_token: str = Form(...),
 ):
+    verify_csrf_token(request, csrf_token)
     user = request.session.get("user")
     await restore_transaction(
         user_id=user["user_id"],
@@ -337,7 +344,9 @@ async def edit_transaction_ui(
     category_code: str = Form(...),
     subcategory_code: str = Form(...),
     description: str = Form(""),
+    csrf_token: str = Form(...),
 ):
+    verify_csrf_token(request, csrf_token)
     user = request.session.get("user")
     await edit_transaction(
         user_id=user["user_id"],
@@ -358,7 +367,9 @@ async def edit_transaction_ui(
 async def retry_failed_transaction_ui(
     request: Request,
     transaction_id: str = Form(...),
+    csrf_token: str = Form(...),
 ):
+    verify_csrf_token(request, csrf_token)
     user = request.session.get("user")
     await retry_failed_recurring_transaction(
         user_id=user["user_id"],

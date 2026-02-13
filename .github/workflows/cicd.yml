@@ -1,0 +1,424 @@
+name: FinTrack CI/CD
+
+on:
+  push:
+    branches:
+      - dev
+      - dev/**
+  workflow_dispatch:
+    inputs:
+      deploy_ref:
+        description: "Git ref or commit SHA to deploy to Test (default: current SHA)"
+        required: false
+        type: string
+      force_rebuild:
+        description: "Force app image rebuild even if requirements.txt did not change"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: fintrack-cicd-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare Version + Change Set
+    runs-on: ubuntu-latest
+    outputs:
+      deploy_ref: ${{ steps.meta.outputs.deploy_ref }}
+      requirements_changed: ${{ steps.meta.outputs.requirements_changed }}
+      deploy_version: ${{ steps.meta.outputs.deploy_version }}
+      test_tag: ${{ steps.meta.outputs.test_tag }}
+      prod_tag: ${{ steps.meta.outputs.prod_tag }}
+      base_version: ${{ steps.meta.outputs.base_version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute deployment metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          FORCE_REBUILD_INPUT="${{ github.event.inputs.force_rebuild || 'false' }}"
+          DEPLOY_REF_INPUT="${{ github.event.inputs.deploy_ref || '' }}"
+          if [[ -z "${FORCE_REBUILD_INPUT}" ]]; then
+            FORCE_REBUILD_INPUT="false"
+          fi
+
+          git fetch --tags --force
+
+          if [[ -n "${DEPLOY_REF_INPUT}" ]]; then
+            DEPLOY_REF="${DEPLOY_REF_INPUT}"
+          else
+            DEPLOY_REF="${GITHUB_SHA}"
+          fi
+          DEPLOY_REF="$(git rev-parse "${DEPLOY_REF}^{commit}")"
+
+          BASE_FOR_DIFF=""
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]]; then
+            BASE_FOR_DIFF="${{ github.event.before }}"
+          else
+            if git rev-parse "${DEPLOY_REF}^" >/dev/null 2>&1; then
+              BASE_FOR_DIFF="$(git rev-parse "${DEPLOY_REF}^")"
+            else
+              BASE_FOR_DIFF="${DEPLOY_REF}"
+            fi
+          fi
+
+          CHANGED_FILES="$(git diff --name-only "${BASE_FOR_DIFF}" "${DEPLOY_REF}")"
+          REQUIREMENTS_CHANGED="false"
+          if grep -qx "requirements.txt" <<<"${CHANGED_FILES}"; then
+            REQUIREMENTS_CHANGED="true"
+          fi
+          if [[ "${FORCE_REBUILD_INPUT}" == "true" ]]; then
+            REQUIREMENTS_CHANGED="true"
+          fi
+
+          RAW_VERSION="$(grep -E '^FT_APP_VERSION=' .env | head -1 | cut -d'=' -f2- | tr -d '\r' || true)"
+          if [[ -z "${RAW_VERSION}" ]]; then
+            RAW_VERSION="1.0.0"
+          fi
+
+          IFS='.' read -r MAJOR MINOR PATCH <<< "${RAW_VERSION}"
+          if [[ -z "${MAJOR:-}" ]]; then
+            MAJOR="1"
+          fi
+          if [[ -z "${MINOR:-}" ]]; then
+            MINOR="0"
+          fi
+
+          BASE_VERSION="${MAJOR}.${MINOR}"
+          LATEST_TEST_PATCH="$(
+            git tag -l "test-v${BASE_VERSION}.*" \
+              | sed -E "s/^test-v${BASE_VERSION}\.//" \
+              | grep -E '^[0-9]+$' \
+              | sort -n \
+              | tail -1 || true
+          )"
+          if [[ -z "${LATEST_TEST_PATCH}" ]]; then
+            LATEST_TEST_PATCH=0
+          fi
+
+          NEXT_PATCH=$((LATEST_TEST_PATCH + 1))
+          DEPLOY_VERSION="${BASE_VERSION}.${NEXT_PATCH}"
+          TEST_TAG="test-v${DEPLOY_VERSION}"
+          PROD_TAG="prod-v${DEPLOY_VERSION}"
+
+          {
+            echo "deploy_ref=${DEPLOY_REF}"
+            echo "requirements_changed=${REQUIREMENTS_CHANGED}"
+            echo "deploy_version=${DEPLOY_VERSION}"
+            echo "test_tag=${TEST_TAG}"
+            echo "prod_tag=${PROD_TAG}"
+            echo "base_version=${BASE_VERSION}"
+          } >> "${GITHUB_OUTPUT}"
+
+          {
+            echo "### Deployment Metadata"
+            echo "- Source branch: \`${GITHUB_REF_NAME}\`"
+            echo "- Deploy ref (Test): \`${DEPLOY_REF}\`"
+            echo "- requirements.txt changed: \`${REQUIREMENTS_CHANGED}\`"
+            echo "- Base version: \`${BASE_VERSION}\`"
+            echo "- Test/Prod deploy version: \`${DEPLOY_VERSION}\`"
+            echo "- Test tag: \`${TEST_TAG}\`"
+            echo "- Prod tag: \`${PROD_TAG}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  open_pr:
+    name: Open/Update PR To Main
+    runs-on: ubuntu-latest
+    needs: prepare
+    outputs:
+      pr_number: ${{ steps.pr.outputs.pr_number }}
+      pr_url: ${{ steps.pr.outputs.pr_url }}
+    steps:
+      - name: Ensure source branch pattern is allowed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF_NAME}" != "dev" && "${GITHUB_REF_NAME}" != dev/* ]]; then
+            echo "This workflow only supports source branches: dev or dev/*"
+            exit 1
+          fi
+
+      - name: Create or reuse pull request
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const headBranch = context.ref.replace("refs/heads/", "");
+            const baseBranch = "main";
+            const headRef = `${owner}:${headBranch}`;
+
+            const existing = await github.rest.pulls.list({
+              owner,
+              repo,
+              state: "open",
+              head: headRef,
+              base: baseBranch,
+              per_page: 1
+            });
+
+            let pr;
+            if (existing.data.length > 0) {
+              pr = existing.data[0];
+              core.info(`Using existing PR #${pr.number}: ${pr.html_url}`);
+            } else {
+              const created = await github.rest.pulls.create({
+                owner,
+                repo,
+                title: `Promote ${headBranch} to main`,
+                head: headBranch,
+                base: baseBranch,
+                body: [
+                  "Automated PR opened by FinTrack CI/CD.",
+                  "",
+                  `Source branch: \`${headBranch}\``,
+                  `Source commit: \`${context.sha}\``
+                ].join("\n")
+              });
+              pr = created.data;
+              core.info(`Created PR #${pr.number}: ${pr.html_url}`);
+            }
+
+            core.setOutput("pr_number", String(pr.number));
+            core.setOutput("pr_url", pr.html_url);
+
+      - name: Summary
+        shell: bash
+        run: |
+          {
+            echo "### Pull Request"
+            echo "- PR: #${{ steps.pr.outputs.pr_number }}"
+            echo "- URL: ${{ steps.pr.outputs.pr_url }}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  deploy_test:
+    name: Deploy To Test
+    runs-on: ubuntu-latest
+    needs:
+      - prepare
+      - open_pr
+    environment:
+      name: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+        run: |
+          set -euo pipefail
+          DEPLOY_PORT="${DEPLOY_PORT:-22}"
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "${DEPLOY_PORT}" -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Remote deploy (Test)
+        shell: bash
+        env:
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          COMPOSE_FILE: ${{ vars.COMPOSE_FILE }}
+          APP_SERVICE: ${{ vars.APP_SERVICE }}
+          ENV_FILE: ${{ vars.ENV_FILE }}
+          CONTAINER_CLI: ${{ vars.CONTAINER_CLI }}
+          HEALTH_URL: ${{ vars.HEALTH_URL }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+        run: |
+          set -euo pipefail
+
+          COMPOSE_FILE="${COMPOSE_FILE:-docker/compose.yml}"
+          APP_SERVICE="${APP_SERVICE:-backend}"
+          ENV_FILE="${ENV_FILE:-.env}"
+          CONTAINER_CLI="${CONTAINER_CLI:-docker}"
+          DEPLOY_PORT="${DEPLOY_PORT:-22}"
+
+          if [[ -z "${DEPLOY_USER}" || -z "${DEPLOY_HOST}" || -z "${DEPLOY_PATH}" || -z "${HEALTH_URL}" ]]; then
+            echo "Missing one or more required test environment vars: DEPLOY_USER, DEPLOY_HOST, DEPLOY_PATH, HEALTH_URL"
+            exit 1
+          fi
+
+          ssh -i ~/.ssh/id_ed25519 -p "${DEPLOY_PORT}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "export DEPLOY_PATH='${DEPLOY_PATH}' DEPLOY_REF='${{ needs.prepare.outputs.deploy_ref }}' DEPLOY_VERSION='${{ needs.prepare.outputs.deploy_version }}' REQUIREMENTS_CHANGED='${{ needs.prepare.outputs.requirements_changed }}' FORCE_REBUILD='${{ github.event.inputs.force_rebuild || 'false' }}' COMPOSE_FILE='${COMPOSE_FILE}' APP_SERVICE='${APP_SERVICE}' ENV_FILE='${ENV_FILE}' CONTAINER_CLI='${CONTAINER_CLI}' HEALTH_URL='${HEALTH_URL}'; bash -s" \
+            < scripts/cicd/remote_deploy.sh
+
+      - name: Tag test deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+          if git rev-parse "${{ needs.prepare.outputs.test_tag }}" >/dev/null 2>&1; then
+            echo "Tag already exists: ${{ needs.prepare.outputs.test_tag }}"
+            exit 0
+          fi
+          git tag "${{ needs.prepare.outputs.test_tag }}" "${{ needs.prepare.outputs.deploy_ref }}"
+          git push origin "${{ needs.prepare.outputs.test_tag }}"
+
+      - name: Summary
+        shell: bash
+        run: |
+          {
+            echo "### Test Deployment Status"
+            echo "- Status: ✅ Success"
+            echo "- Version: \`${{ needs.prepare.outputs.deploy_version }}\`"
+            echo "- Ref: \`${{ needs.prepare.outputs.deploy_ref }}\`"
+            echo "- PR: #${{ needs.open_pr.outputs.pr_number }}"
+            echo "- PR URL: ${{ needs.open_pr.outputs.pr_url }}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  deploy_prod:
+    name: Merge To Main + Deploy To Production
+    runs-on: ubuntu-latest
+    needs:
+      - prepare
+      - open_pr
+      - deploy_test
+    environment:
+      name: production
+    outputs:
+      merged_sha: ${{ steps.merge.outputs.merged_sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Merge PR to main
+        id: merge
+        uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ needs.open_pr.outputs.pr_number }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prNumber = Number(process.env.PR_NUMBER);
+
+            if (!prNumber) {
+              core.setFailed("PR number is missing.");
+              return;
+            }
+
+            const prResp = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: prNumber
+            });
+            const pr = prResp.data;
+
+            if (pr.base.ref !== "main") {
+              core.setFailed(`PR #${prNumber} base is ${pr.base.ref}, expected main.`);
+              return;
+            }
+
+            if (pr.merged) {
+              const mergedSha = pr.merge_commit_sha || pr.head.sha;
+              core.info(`PR #${prNumber} is already merged at ${mergedSha}.`);
+              core.setOutput("merged_sha", mergedSha);
+              return;
+            }
+
+            if (pr.state !== "open") {
+              core.setFailed(`PR #${prNumber} is not open (state=${pr.state}) and not merged.`);
+              return;
+            }
+
+            const mergeResp = await github.rest.pulls.merge({
+              owner,
+              repo,
+              pull_number: prNumber,
+              merge_method: "merge"
+            });
+
+            if (!mergeResp.data.merged) {
+              core.setFailed(`PR #${prNumber} merge failed: ${mergeResp.data.message}`);
+              return;
+            }
+
+            const mergedSha = mergeResp.data.sha || pr.head.sha;
+            core.info(`Merged PR #${prNumber} with SHA: ${mergedSha}`);
+            core.setOutput("merged_sha", mergedSha);
+
+      - name: Setup SSH
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+        run: |
+          set -euo pipefail
+          DEPLOY_PORT="${DEPLOY_PORT:-22}"
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "${DEPLOY_PORT}" -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Remote deploy (Production)
+        shell: bash
+        env:
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          COMPOSE_FILE: ${{ vars.COMPOSE_FILE }}
+          APP_SERVICE: ${{ vars.APP_SERVICE }}
+          ENV_FILE: ${{ vars.ENV_FILE }}
+          CONTAINER_CLI: ${{ vars.CONTAINER_CLI }}
+          HEALTH_URL: ${{ vars.HEALTH_URL }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+        run: |
+          set -euo pipefail
+
+          COMPOSE_FILE="${COMPOSE_FILE:-docker/compose.yml}"
+          APP_SERVICE="${APP_SERVICE:-backend}"
+          ENV_FILE="${ENV_FILE:-.env}"
+          CONTAINER_CLI="${CONTAINER_CLI:-docker}"
+          DEPLOY_PORT="${DEPLOY_PORT:-22}"
+
+          if [[ -z "${DEPLOY_USER}" || -z "${DEPLOY_HOST}" || -z "${DEPLOY_PATH}" || -z "${HEALTH_URL}" ]]; then
+            echo "Missing one or more required prod environment vars: DEPLOY_USER, DEPLOY_HOST, DEPLOY_PATH, HEALTH_URL"
+            exit 1
+          fi
+
+          ssh -i ~/.ssh/id_ed25519 -p "${DEPLOY_PORT}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "export DEPLOY_PATH='${DEPLOY_PATH}' DEPLOY_REF='${{ steps.merge.outputs.merged_sha }}' DEPLOY_VERSION='${{ needs.prepare.outputs.deploy_version }}' REQUIREMENTS_CHANGED='${{ needs.prepare.outputs.requirements_changed }}' FORCE_REBUILD='${{ github.event.inputs.force_rebuild || 'false' }}' COMPOSE_FILE='${COMPOSE_FILE}' APP_SERVICE='${APP_SERVICE}' ENV_FILE='${ENV_FILE}' CONTAINER_CLI='${CONTAINER_CLI}' HEALTH_URL='${HEALTH_URL}'; bash -s" \
+            < scripts/cicd/remote_deploy.sh
+
+      - name: Tag production deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+          git fetch origin main --force
+          if git rev-parse "${{ needs.prepare.outputs.prod_tag }}" >/dev/null 2>&1; then
+            echo "Tag already exists: ${{ needs.prepare.outputs.prod_tag }}"
+            exit 0
+          fi
+          git tag "${{ needs.prepare.outputs.prod_tag }}" "${{ steps.merge.outputs.merged_sha }}"
+          git push origin "${{ needs.prepare.outputs.prod_tag }}"
+
+      - name: Summary
+        shell: bash
+        run: |
+          {
+            echo "### Production Deployment Status"
+            echo "- Status: ✅ Success"
+            echo "- Version: \`${{ needs.prepare.outputs.deploy_version }}\`"
+            echo "- Merged PR: #${{ needs.open_pr.outputs.pr_number }}"
+            echo "- Merged SHA: \`${{ steps.merge.outputs.merged_sha }}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"

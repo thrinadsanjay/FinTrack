@@ -3,7 +3,7 @@ JSON API for accounts.
 No templates, no audit calls.
 """
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from app.routers.deps import get_current_user
 from app.services.accounts import create_account
 
@@ -19,8 +19,12 @@ async def create_account_endpoint(
     name: str | None = None,
     user=Depends(get_current_user),
 ):
+    user_id = user.get("user_id") or user.get("_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid session user")
+
     account_id = await create_account(
-        user_id=user["_id"],
+        user_id=user_id,
         name=name,
         bank_name=bank_name,
         acc_type=acc_type,

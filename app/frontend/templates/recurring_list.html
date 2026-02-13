@@ -46,6 +46,7 @@
   <div class="card recurring-edit-card">
     <h3 class="card-title">Edit recurring rule</h3>
     <form method="post" action="/recurring/edit" class="recurring-edit-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
       <input type="hidden" name="recurring_id" value="{{ edit_rule.id }}">
       <input type="hidden" name="status" value="{{ status }}">
 
@@ -149,6 +150,7 @@
 
                 {% if rule.status == "active" %}
                 <form method="post" action="/recurring/pause" onsubmit="return confirm('Pause this recurring rule?')">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
                   <input type="hidden" name="recurring_id" value="{{ rule.id }}">
                   <input type="hidden" name="status" value="{{ status }}">
                   <button type="submit" class="icon-btn" title="Pause">
@@ -157,6 +159,7 @@
                 </form>
                 {% elif rule.status == "paused" %}
                 <form method="post" action="/recurring/resume" onsubmit="return confirm('Resume this recurring rule?')">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
                   <input type="hidden" name="recurring_id" value="{{ rule.id }}">
                   <input type="hidden" name="status" value="{{ status }}">
                   <button type="submit" class="icon-btn" title="Resume">
@@ -167,6 +170,7 @@
 
                 {% if rule.status != "ended" %}
                 <form method="post" action="/recurring/end" onsubmit="return confirm('End this recurring rule?')">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
                   <input type="hidden" name="recurring_id" value="{{ rule.id }}">
                   <input type="hidden" name="status" value="{{ status }}">
                   <button type="submit" class="icon-btn tr-del" title="End recurring rule">

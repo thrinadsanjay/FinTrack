@@ -1,5 +1,6 @@
 from app.db.mongo import db
 
+
 async def init_indexes():
     # Users
     await db.users.create_index("email", unique=True)
@@ -25,6 +26,14 @@ async def init_indexes():
     await db.transactions.create_index([("user_id", 1)])
     await db.transactions.create_index([("account_id", 1)])
     await db.transactions.create_index([("created_at", -1)])
+    await db.transactions.create_index([("recurring_id", 1), ("scheduled_for", 1)])
+    await db.transactions.create_index([("retry_of", 1)])
+    await db.transactions.create_index([("is_failed", 1), ("retry_status", 1)])
+
+    # Recurring rules / scheduler
+    await db.recurring_deposits.create_index([("user_id", 1)])
+    await db.recurring_deposits.create_index([("is_active", 1), ("next_run", 1)])
+    await db.recurring_deposits.create_index([("user_id", 1), ("is_active", 1), ("next_run", 1)])
 
     # Notifications
     await db.notifications.create_index([("user_id", 1)])

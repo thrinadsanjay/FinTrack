@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Request, Form
 from fastapi.responses import RedirectResponse
+from app.core.csrf import verify_csrf_token
 from app.web.templates import templates
 from app.core.guards import login_required
 from app.services.accounts import (
@@ -62,7 +63,9 @@ async def add_account(
     acc_type: str = Form(...),
     balance: float = Form(...),
     name: str | None = Form(None),
+    csrf_token: str = Form(...),
 ):
+    verify_csrf_token(request, csrf_token)
     user = request.session.get("user")
     try:
         await create_account(
@@ -101,7 +104,9 @@ async def rename_account(
     request: Request,
     account_id: str = Form(...),
     name: str = Form(...),
+    csrf_token: str = Form(...),
 ):
+    verify_csrf_token(request, csrf_token)
     user = request.session.get("user")
     await update_account_name(
         user_id=user["user_id"],
@@ -123,7 +128,9 @@ async def edit_account(
     request: Request,
     account_id: str = Form(...),
     balance: float = Form(...),
+    csrf_token: str = Form(...),
 ):
+    verify_csrf_token(request, csrf_token)
     user = request.session.get("user")
     await update_account_balance(
         user_id=user["user_id"],
@@ -143,7 +150,9 @@ async def edit_account(
 async def remove_account(
     request: Request,
     account_id: str = Form(...),
+    csrf_token: str = Form(...),
 ):
+    verify_csrf_token(request, csrf_token)
     user = request.session.get("user")
     try:
         await delete_account(

@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from app.core.csrf import verify_csrf_token
 from app.core.guards import login_required
 from app.services.dashboard import get_user_notifications
 from app.services.recurring_deposit import RecurringDepositService
@@ -103,7 +104,9 @@ async def edit_recurring_rule(
     frequency: str = Form(...),
     end_date: str | None = Form(None),
     status: str = Form("all"),
+    csrf_token: str = Form(...),
 ):
+    verify_csrf_token(request, csrf_token)
     user = request.session.get("user")
     try:
         parsed_end_date = datetime.strptime(end_date, "%Y-%m-%d").date() if end_date else None
@@ -134,7 +137,9 @@ async def pause_recurring_rule(
     request: Request,
     recurring_id: str = Form(...),
     status: str = Form("all"),
+    csrf_token: str = Form(...),
 ):
+    verify_csrf_token(request, csrf_token)
     user = request.session.get("user")
     try:
         await RecurringDepositService.pause_rule(
@@ -158,7 +163,9 @@ async def resume_recurring_rule(
     request: Request,
     recurring_id: str = Form(...),
     status: str = Form("all"),
+    csrf_token: str = Form(...),
 ):
+    verify_csrf_token(request, csrf_token)
     user = request.session.get("user")
     try:
         await RecurringDepositService.resume_rule(
@@ -182,7 +189,9 @@ async def end_recurring_rule(
     request: Request,
     recurring_id: str = Form(...),
     status: str = Form("all"),
+    csrf_token: str = Form(...),
 ):
+    verify_csrf_token(request, csrf_token)
     user = request.session.get("user")
     try:
         await RecurringDepositService.end_rule(

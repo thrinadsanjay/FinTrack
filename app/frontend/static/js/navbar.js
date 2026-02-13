@@ -221,9 +221,15 @@
   }
 
   async function markRead(payload) {
+    const csrf = document
+      .querySelector('meta[name="csrf-token"]')
+      ?.getAttribute("content");
     const res = await fetch("/notifications/read", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": csrf || "",
+      },
       body: JSON.stringify(payload),
     });
     if (!res.ok) {

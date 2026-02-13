@@ -74,12 +74,14 @@ async def create_oauth_user(
     oauth_sub: str,
     email: str | None,
     username: str | None,
+    full_name: str | None = None,
 ):
     user = {
         "oauth_sub": oauth_sub,
         "keycloak_id": oauth_sub,
         "auth_provider": "keycloak",
         "username": username,
+        "full_name": full_name,
         "email": email,
         "is_admin": False,
         "is_active": True,
@@ -128,6 +130,18 @@ async def list_users() -> list[dict]:
     return [user async for user in cursor]
 
 
+async def get_user_by_id(user_id: str) -> Optional[dict]:
+    if not ObjectId.is_valid(user_id):
+        return None
+    return await db.users.find_one(
+        {
+            "_id": ObjectId(user_id),
+            "is_active": True,
+            "deleted_at": None,
+        }
+    )
+
+
 # ======================================================
 # LOGIN METADATA
 # ======================================================
@@ -141,6 +155,26 @@ async def update_last_login(user_id: str):
 
 async def update_oauth_last_login(user_id: str):
     await update_last_login(user_id)
+
+
+async def update_oauth_profile(
+    *,
+    user_id: str,
+    username: str | None,
+    email: str | None,
+    full_name: str | None,
+):
+    await db.users.update_one(
+        {"_id": ObjectId(user_id), "auth_provider": "keycloak", "deleted_at": None},
+        {
+            "$set": {
+                "username": username,
+                "email": email,
+                "full_name": full_name,
+                "updated_at": _now(),
+            }
+        },
+    )
 
 
 # ======================================================

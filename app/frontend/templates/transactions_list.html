@@ -243,6 +243,7 @@
             {% if tx.can_retry %}
             <form method="post" action="/transactions/retry-failed" style="display:inline"
               onsubmit="return confirm('Retry this failed transaction now?')">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
               <input type="hidden" name="transaction_id" value="{{ tx._id }}">
               <button class="icon-btn retry-btn" type="submit" title="Retry failed transaction">
                 <i class="fa-solid fa-rotate-right"></i>
@@ -264,6 +265,7 @@
             {% if tx.can_restore %}
             <form method="post" action="/transactions/restore" style="display:inline"
               onsubmit="return confirm('Restore this transaction? This will rollback balance.')">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
               <input type="hidden" name="transaction_id" value="{{ tx._id }}">
               <button class="icon-btn" title="Restore transaction">
                 <i class="fa-solid fa-rotate-left"></i>
@@ -288,6 +290,7 @@
 
             <form method="post" action="/transactions/delete" style="display:inline"
               onsubmit="return confirm('Delete this transaction? This will rollback balance.')">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
               {% if tx.type == "transfer" %}
               <input type="hidden" name="transfer_id" value="{{ tx.transfer_id }}">
               {% else %}
@@ -334,6 +337,7 @@
     </div>
 
     <form method="post" action="/transactions/edit" id="edit-transaction-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
 
       <input type="hidden" name="transaction_id" id="edit-transaction-id">
 

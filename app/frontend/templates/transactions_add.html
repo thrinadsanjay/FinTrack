@@ -13,6 +13,7 @@
     </div>
 <div class="card transaction-card form-scroll">
   <form method="post" action="/transactions/add" id="transaction-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
 
     <!-- ================= TRANSACTION DETAILS ================= -->
     <div class="form-section">

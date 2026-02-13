@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings
 from pydantic import ConfigDict
 
+
 class Settings(BaseSettings):
     FT_MONGO_URI: str
     FT_MONGO_DB_NAME: str
@@ -19,8 +20,12 @@ class Settings(BaseSettings):
 
     model_config = ConfigDict(
         env_file=".env",
-        extra="ignore",   # 👈 THIS fixes your error
-        FT_ENV_prefix="FT_",
+        extra="ignore",
+        env_prefix="",
     )
+
+    @property
+    def is_production(self) -> bool:
+        return self.FT_ENV.lower() in ("prod", "production")
 
 settings = Settings()

@@ -1,6 +1,8 @@
-DEFAULT_ADMIN_USERNAME = "admin"
-DEFAULT_ADMIN_PASSWORD = "admin123"   # TEMP / ONE-TIME
-DEFAULT_EMAIL_ADDRESS = "admin@example.com"
+import os
+
+DEFAULT_ADMIN_USERNAME = os.getenv("FT_DEFAULT_ADMIN_USERNAME", "admin")
+DEFAULT_ADMIN_PASSWORD = os.getenv("FT_DEFAULT_ADMIN_PASSWORD", "admin123")
+DEFAULT_EMAIL_ADDRESS = os.getenv("FT_DEFAULT_ADMIN_EMAIL", "admin@example.com")
 
 SYSTEM_CATEGORIES = [
     # =====================

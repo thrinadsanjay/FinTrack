@@ -12,9 +12,11 @@ Logout user based on auth provider:
 """
 
 import urllib.parse
+import secrets
 from fastapi import APIRouter, Request, Form
 from fastapi.responses import RedirectResponse, HTMLResponse
 from app.core.config import settings
+from app.core.csrf import verify_csrf_token
 from app.core.http import get_async_http_client
 from app.web.templates import templates
 from app.services.auth import (
@@ -24,6 +26,14 @@ from app.services.auth import (
 )
 
 router = APIRouter()
+
+
+def _callback_uri_from_request(request: Request) -> str:
+    forwarded_proto = request.headers.get("x-forwarded-proto")
+    forwarded_host = request.headers.get("x-forwarded-host")
+    scheme = forwarded_proto or request.url.scheme
+    host = forwarded_host or request.headers.get("host") or request.url.netloc
+    return f"{scheme}://{host}/callback"
 
 
 @router.get("/login", response_class=HTMLResponse)
@@ -36,7 +46,9 @@ async def local_login(
     request: Request,
     username: str = Form(...),
     password: str = Form(...),
+    csrf_token: str = Form(...),
 ):
+    verify_csrf_token(request, csrf_token)
     user = await authenticate_local_user(
         username=username,
         password=password,
@@ -62,11 +74,17 @@ async def local_login(
 
 @router.get("/login/oauth")
 async def login_oauth(request: Request):
+    oauth_state = secrets.token_urlsafe(32)
+    request.session["oauth_state"] = oauth_state
+    callback_uri = _callback_uri_from_request(request)
+    request.session["oauth_callback_uri"] = callback_uri
+
     params = {
         "client_id": settings.FT_CLIENT_ID,
         "response_type": "code",
         "scope": "openid profile email",
-        "redirect_uri": f"{settings.FT_BASE_URL}/callback",
+        "redirect_uri": callback_uri,
+        "state": oauth_state,
     }
 
     url = (
@@ -79,11 +97,17 @@ async def login_oauth(request: Request):
 
 
 @router.get("/callback")
-async def callback(request: Request, code: str):
+async def callback(request: Request, code: str, state: str | None = None):
+    expected_state = request.session.get("oauth_state")
+    if not expected_state or not state or state != expected_state:
+        return RedirectResponse("/login?error=oauth_state", status_code=303)
+    request.session.pop("oauth_state", None)
+
     token_url = (
         f"{settings.FT_KEYCLOAK_URL}/realms/{settings.FT_KEYCLOAK_REALM}/"
         "protocol/openid-connect/token"
     )
+    callback_uri = request.session.pop("oauth_callback_uri", None) or _callback_uri_from_request(request)
 
     async with get_async_http_client() as client:
         resp = await client.post(
@@ -92,20 +116,25 @@ async def callback(request: Request, code: str):
                 "grant_type": "authorization_code",
                 "client_id": settings.FT_CLIENT_ID,
                 "code": code,
-                "redirect_uri": f"{settings.FT_BASE_URL}/callback",
+                "redirect_uri": callback_uri,
             },
         )
+        resp.raise_for_status()
         token = resp.json()
+        id_token = token.get("id_token")
+        if not id_token:
+            return RedirectResponse("/login?error=oauth_token", status_code=303)
 
     user = await authenticate_oauth_user(
-        id_token=token["id_token"],
+        id_token=id_token,
         request=request,
     )
 
     request.session["user"] = {
         "user_id": str(user["_id"]),
         "auth_provider": "keycloak",
-        "username": user.get("username"),
+        "username": user.get("full_name") or user.get("username"),
+        "full_name": user.get("full_name"),
         "email": user.get("email"),
         "is_admin": user.get("is_admin", False),
     }
@@ -129,7 +158,9 @@ async def reset_password_submit(
     request: Request,
     password: str = Form(...),
     confirm_password: str = Form(...),
+    csrf_token: str = Form(...),
 ):
+    verify_csrf_token(request, csrf_token)
     if not request.session.get("force_pwd_reset"):
         return RedirectResponse("/", status_code=303)
 

@@ -1,15 +1,14 @@
-import os
 import logging
-
-from fastapi import FastAPI
-from fastapi.responses import PlainTextResponse
+import os
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
-from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 
 from app.core.config import settings
+from app.core.csrf import CsrfValidationError
 from app.core.logging import setup_logging
 from app.core.session import add_session_middleware
 from app.core.startup import ensure_admin_exists, define_categories
@@ -30,8 +29,12 @@ from app.web.accounts import router as web_accounts_router
 from app.web.transactions import router as web_transactions_router
 from app.web.notifications import router as web_notifications_router
 from app.web.recurring import router as web_recurring_router
+from app.web.profile import router as web_profile_router
+from app.web.templates import templates
 
 from app.schedulers.recurring_scheduler import run_recurring_transactions
+
+from app.helpers.recurring_schedule import parse_scheduler_time
 
 
 # ======================================================
@@ -100,6 +103,7 @@ app.include_router(web_accounts_router, prefix="/accounts")
 app.include_router(web_transactions_router, prefix="/transactions")
 app.include_router(web_notifications_router, prefix="/notifications")
 app.include_router(web_recurring_router, prefix="/recurring")
+app.include_router(web_profile_router)
 
 
 # ======================================================
@@ -107,7 +111,8 @@ app.include_router(web_recurring_router, prefix="/recurring")
 # ======================================================
 
 scheduler = AsyncIOScheduler(timezone="UTC")
-
+run_time = os.getenv("SCHEDULER_RUN_TIME", "5:41 AM IST")
+hour, minute, timezone = parse_scheduler_time(run_time)
 
 # ======================================================
 # STARTUP / SHUTDOWN
@@ -124,8 +129,9 @@ async def on_startup():
     scheduler.add_job(
         run_recurring_transactions,
         trigger="cron",
-        hour=5,
-        minute=41, # Run daily at 12:10 PM UTC
+        hour=hour,
+        minute=minute,
+        timezone=timezone,
         id="recurring-transactions",
         replace_existing=True,
     )
@@ -140,15 +146,50 @@ def on_shutdown():
     scheduler.shutdown(wait=False)
 
 
+@app.exception_handler(CsrfValidationError)
+async def csrf_exception_handler(request: Request, exc: CsrfValidationError):
+    accept = request.headers.get("accept", "")
+    if "text/html" in accept:
+        return templates.TemplateResponse(
+            "csrf_error.html",
+            {
+                "request": request,
+                "error": str(exc),
+            },
+            status_code=403,
+        )
+    return JSONResponse({"detail": str(exc)}, status_code=403)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.exception("Unhandled application error on %s", request.url.path, exc_info=exc)
+    accept = request.headers.get("accept", "")
+    if "text/html" in accept:
+        try:
+            return templates.TemplateResponse(
+                "app_error.html",
+                {
+                    "request": request,
+                    "error": str(exc),
+                },
+                status_code=500,
+            )
+        except Exception:
+            return PlainTextResponse("Unexpected error. Please retry.", status_code=500)
+    return JSONResponse({"detail": "Internal server error"}, status_code=500)
+
+
 # ======================================================
 # DEBUG ROUTES
 # ======================================================
 
-@app.get("/__debug/routes", include_in_schema=False)
-def debug_routes():
-    lines = [
-        f"{route.path} {getattr(route, 'methods', '')}"
-        for route in app.routes
-        if hasattr(route, "path")
-    ]
-    return PlainTextResponse("\n".join(lines))
+if not settings.is_production:
+    @app.get("/__debug/routes", include_in_schema=False)
+    def debug_routes():
+        lines = [
+            f"{route.path} {getattr(route, 'methods', '')}"
+            for route in app.routes
+            if hasattr(route, "path")
+        ]
+        return PlainTextResponse("\n".join(lines))

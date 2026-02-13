@@ -20,6 +20,7 @@
         <span class="chev">▾</span>
       </button>
       <form method="post" action="/accounts/add" class="account-form account-form-collapsed" id="accountForm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
         <div class="account-form-grid">
           <div class="account-field">
             <label>Bank Name</label>
@@ -74,6 +75,7 @@
   
   <tr class="account-row">
     <form method="post" action="/accounts/edit">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
 
       <!-- Hidden -->
       <input type="hidden" name="account_id" value="{{ acc._id }}">
