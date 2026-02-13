@@ -29,6 +29,11 @@ router = APIRouter()
 
 
 def _callback_uri_from_request(request: Request) -> str:
+    # Prefer the configured public URL so redirects remain correct behind proxies/TLS termination.
+    base_url = (settings.FT_BASE_URL or "").strip().rstrip("/")
+    if base_url:
+        return f"{base_url}/callback"
+
     forwarded_proto = request.headers.get("x-forwarded-proto")
     forwarded_host = request.headers.get("x-forwarded-host")
     scheme = forwarded_proto or request.url.scheme
