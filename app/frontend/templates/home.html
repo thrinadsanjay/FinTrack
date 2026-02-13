@@ -99,22 +99,45 @@
           <h3>Recurring Schedule</h3>
           <span class="pill">MTD</span>
         </div>
-        <div class="recurring-grid">
-          <div class="recurring-column recurring-left">
-            <section class="recurring-section recurring-today">
-              <h4>Due Today</h4>
-              {% if summary.recurring_overview.today %}
-                <ul class="recurring-list">
-                  {% for item in summary.recurring_overview.today %}
-                    <li class="{% if item.status == 'failed' %}status-failed{% else %}status-today{% endif %}">
-                      <div class="recurring-main">{{ item.description }}</div>
-                      <div class="recurring-meta">
-                        <span>{{ item.account_name }}</span>
-                      <span>
-                        ₹ {{ item.amount }}
-                      </span>
-                    </div>
-                  </li>
+        <div class="rt-dashboard">
+          {% set ro = summary.recurring_overview %}
+          <section class="rt-summary-grid">
+            <article class="rt-summary-card">
+              <span class="rt-summary-label">Total Scheduled</span>
+              <strong class="rt-summary-value">₹ {{ "%.2f"|format(ro.total_scheduled_amount | default(0)) }}</strong>
+              <small class="rt-summary-note">Current cycle outlook</small>
+            </article>
+            <article class="rt-summary-card">
+              <span class="rt-summary-label">Monthly Progress</span>
+              <strong class="rt-summary-value">₹ {{ "%.2f"|format(ro.paid_this_month_total | default(0)) }}</strong>
+              <div class="rt-progress" role="progressbar" aria-valuenow="{{ ro.paid_progress_percent | default(0) }}" aria-valuemin="0" aria-valuemax="100">
+                <span style="width: {{ ro.paid_progress_percent | default(0) }}%"></span>
+              </div>
+              <small class="rt-summary-note">Paid: ₹ {{ "%.2f"|format(ro.paid_this_month_total | default(0)) }} | Remaining: ₹ {{ "%.2f"|format(ro.remaining_amount | default(0)) }}</small>
+            </article>
+            <article class="rt-summary-card">
+              <span class="rt-summary-label">Upcoming This Month</span>
+              <strong class="rt-summary-value">{{ ro.upcoming_count | default(0) }} Payments</strong>
+              <small class="rt-summary-note">Next due: {{ ro.next_due_label | default("None") }}</small>
+            </article>
+          </section>
+
+          <section class="rt-day-grid" data-day-grid>
+            <section class="rt-block">
+              <h4>Today - ₹ {{ "%.2f"|format(ro.today_total | default(0)) }}</h4>
+              {% if ro.today %}
+                <ul class="rt-list">
+                  {% for item in ro.today %}
+                    <li class="rt-item freq-{{ (item.frequency or 'monthly') | lower }} {% if item.status == 'failed' %}is-failed{% endif %}">
+                      <div class="rt-row-top">
+                        <strong class="rt-name">{{ item.description }}</strong>
+                        <strong class="rt-amount">₹ {{ "%.2f"|format(item.amount | default(0)) }}</strong>
+                      </div>
+                      <div class="rt-row-bottom">
+                        <span class="rt-account">{{ item.account_name }}</span>
+                        <span class="rt-frequency">{{ (item.frequency or "scheduled") | lower }}</span>
+                      </div>
+                    </li>
                   {% endfor %}
                 </ul>
               {% else %}
@@ -122,16 +145,19 @@
               {% endif %}
             </section>
 
-            <section class="recurring-section recurring-tomorrow">
-              <h4>Due Tomorrow</h4>
-              {% if summary.recurring_overview.tomorrow %}
-                <ul class="recurring-list">
-                  {% for item in summary.recurring_overview.tomorrow %}
-                    <li class="{% if item.status == 'critical' or item.status == 'risk' %}status-critical{% else %}status-tomorrow{% endif %}">
-                      <div class="recurring-main">{{ item.description }}</div>
-                      <div class="recurring-meta">
-                        <span>{{ item.account_name }}</span>
-                        <span>₹ {{ item.amount }}</span>
+            <section class="rt-block">
+              <h4>Tomorrow - ₹ {{ "%.2f"|format(ro.tomorrow_total | default(0)) }}</h4>
+              {% if ro.tomorrow %}
+                <ul class="rt-list">
+                  {% for item in ro.tomorrow %}
+                    <li class="rt-item freq-{{ (item.frequency or 'monthly') | lower }} {% if item.status == 'critical' or item.status == 'risk' %}is-critical{% endif %}">
+                      <div class="rt-row-top">
+                        <strong class="rt-name">{{ item.description }}</strong>
+                        <strong class="rt-amount">₹ {{ "%.2f"|format(item.amount | default(0)) }}</strong>
+                      </div>
+                      <div class="rt-row-bottom">
+                        <span class="rt-account">{{ item.account_name }}</span>
+                        <span class="rt-frequency">{{ (item.frequency or "scheduled") | lower }}</span>
                       </div>
                     </li>
                   {% endfor %}
@@ -140,58 +166,97 @@
                 <p class="empty-state">No recurring transactions tomorrow.</p>
               {% endif %}
             </section>
-          </div>
+          </section>
 
-          <div class="recurring-column recurring-right">
-            <section class="recurring-section recurring-month">
-              <h4>Month View</h4>
-              <div class="month-groups">
-                <div class="month-group">
-                  <h5>Processed</h5>
-                  {% if summary.recurring_overview.completed_month or summary.recurring_overview.failed_month %}
-                    <ul class="recurring-list">
-                      {% for item in summary.recurring_overview.completed_month %}
-                        <li class="status-completed">
-                          <div class="recurring-main">{{ item.description }}</div>
-                          <div class="recurring-meta">
-                            <span>{{ item.account_name }}</span>
-                            <span>₹ {{ item.amount }}</span>
-                          </div>
-                        </li>
-                      {% endfor %}
-                      {% for item in summary.recurring_overview.failed_month %}
-                        <li class="status-failed">
-                          <div class="recurring-main">{{ item.description }}</div>
-                          <div class="recurring-meta">
-                            <span>{{ item.account_name }}</span>
-                            <span>₹ {{ item.amount }}</span>
-                          </div>
-                        </li>
-                      {% endfor %}
-                    </ul>
-                  {% else %}
-                    <p class="empty-state">No completed transactions this month.</p>
-                  {% endif %}
-                </div>
+          <div class="rt-month-sections">
+            <section class="rt-collapsible" data-collapsible>
+              <button type="button" class="rt-collapse-toggle" data-toggle aria-expanded="false">
+                <span>Daily (Month Projection) - ₹ {{ "%.2f"|format(ro.daily_projected_total | default(0)) }}</span>
+                <span class="rt-toggle-icon" aria-hidden="true">▾</span>
+              </button>
+              <div class="rt-collapse-body" data-body hidden>
+                {% if ro.daily_items %}
+                  <ul class="rt-list rt-list-grid rt-list-3col">
+                    {% for item in ro.daily_items %}
+                      <li class="rt-item freq-daily {% if item.status == 'failed' %}is-failed{% elif item.status == 'critical' or item.status == 'risk' %}is-critical{% endif %}">
+                        <div class="rt-row-top">
+                          <strong class="rt-name">{{ item.description }}</strong>
+                          <strong class="rt-amount">₹ {{ "%.2f"|format(item.amount | default(0)) }}</strong>
+                        </div>
+                        <div class="rt-row-bottom">
+                          <span class="rt-account">{{ item.account_name }}</span>
+                          <span class="rt-frequency">daily</span>
+                        </div>
+                      </li>
+                    {% endfor %}
+                  </ul>
+                {% else %}
+                  <p class="empty-state">No daily recurring transactions.</p>
+                {% endif %}
+              </div>
+            </section>
 
-                <div class="month-group">
-                  <h5>Scheduled</h5>
-                  {% if summary.recurring_overview.upcoming_month %}
-                    <ul class="recurring-list">
-                      {% for item in summary.recurring_overview.upcoming_month %}
-                        <li class="{% if item.status == 'critical' or item.status == 'risk' %}status-critical{% else %}status-upcoming{% endif %}">
-                          <div class="recurring-main">{{ item.description }}</div>
-                          <div class="recurring-meta">
-                            <span>{{ item.account_name }}</span>
-                            <span>₹ {{ item.amount }}</span>
-                          </div>
-                        </li>
-                      {% endfor %}
-                    </ul>
-                  {% else %}
-                    <p class="empty-state">No upcoming transactions this month.</p>
-                  {% endif %}
-                </div>
+            <section class="rt-collapsible" data-collapsible>
+              <button type="button" class="rt-collapse-toggle" data-toggle aria-expanded="false">
+                <span>Upcoming (This Month) - ₹ {{ "%.2f"|format(ro.upcoming_total | default(0)) }}</span>
+                <span class="rt-toggle-icon" aria-hidden="true">▾</span>
+              </button>
+              <div class="rt-collapse-body" data-body hidden>
+                {% if ro.upcoming_groups %}
+                  {% for group in ro.upcoming_groups %}
+                    <div class="rt-date-group">
+                      <h5>{{ group.date_label }}</h5>
+                      <ul class="rt-list rt-list-grid">
+                        {% for item in group["items"] %}
+                          <li class="rt-item freq-{{ (item.frequency or 'monthly') | lower }} {% if item.status == 'critical' or item.status == 'risk' %}is-critical{% endif %}">
+                            <div class="rt-row-top">
+                              <strong class="rt-name">{{ item.description }}</strong>
+                              <strong class="rt-amount">₹ {{ "%.2f"|format(item.amount | default(0)) }}</strong>
+                            </div>
+                            <div class="rt-row-bottom">
+                              <span class="rt-account">{{ item.account_name }}</span>
+                              <span class="rt-frequency">{{ (item.frequency or "scheduled") | lower }}</span>
+                            </div>
+                          </li>
+                        {% endfor %}
+                      </ul>
+                    </div>
+                  {% endfor %}
+                {% else %}
+                  <p class="empty-state">No upcoming transactions this month.</p>
+                {% endif %}
+              </div>
+            </section>
+
+            <section class="rt-collapsible" data-collapsible>
+              <button type="button" class="rt-collapse-toggle" data-toggle aria-expanded="false">
+                <span>Processed This Month - ₹ {{ "%.2f"|format(ro.processed_total | default(0)) }}</span>
+                <span class="rt-toggle-icon" aria-hidden="true">▾</span>
+              </button>
+              <div class="rt-collapse-body" data-body hidden>
+                {% if ro.processed_groups %}
+                  {% for group in ro.processed_groups %}
+                    <div class="rt-date-group">
+                      <h5>{{ group.date_label }}</h5>
+                      <ul class="rt-list rt-list-grid">
+                        {% for item in group["items"] %}
+                          <li class="rt-item freq-{{ (item.frequency or 'monthly') | lower }} {% if item.status == 'failed' %}is-failed{% endif %}">
+                            <div class="rt-row-top">
+                              <strong class="rt-name">{{ item.description }}</strong>
+                              <strong class="rt-amount">₹ {{ "%.2f"|format(item.amount | default(0)) }}</strong>
+                            </div>
+                            <div class="rt-row-bottom">
+                              <span class="rt-account">{{ item.account_name }}</span>
+                              <span class="rt-frequency">{{ (item.frequency or "scheduled") | lower }}</span>
+                            </div>
+                          </li>
+                        {% endfor %}
+                      </ul>
+                    </div>
+                  {% endfor %}
+                {% else %}
+                  <p class="empty-state">No processed recurring transactions this month.</p>
+                {% endif %}
               </div>
             </section>
           </div>
@@ -322,6 +387,48 @@
   data-category-totals="{% for c in summary.top_spending_categories %}{{ c.total }}{% if not loop.last %}|{% endif %}{% endfor %}"
 ></div>
 
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const dashboard = document.querySelector(".rt-dashboard");
+    if (!dashboard) return;
+    const sections = dashboard.querySelectorAll("[data-collapsible]");
+
+    function syncDaySections() {
+      const anyOpen = Array.from(sections).some(function (section) {
+        return section.classList.contains("is-open");
+      });
+      dashboard.classList.toggle("rt-month-expanded", anyOpen);
+      dashboard.classList.toggle("rt-days-expanded", !anyOpen);
+    }
+
+    function setSectionState(section, open) {
+      const toggle = section.querySelector("[data-toggle]");
+      const body = section.querySelector("[data-body]");
+      if (!toggle || !body) return;
+      section.classList.toggle("is-open", open);
+      toggle.setAttribute("aria-expanded", String(open));
+      body.hidden = !open;
+    }
+
+    sections.forEach(function (section) {
+      const toggle = section.querySelector("[data-toggle]");
+      if (!toggle) return;
+      setSectionState(section, section.classList.contains("is-open"));
+      toggle.addEventListener("click", function () {
+        const isOpen = section.classList.contains("is-open");
+        if (isOpen) {
+          setSectionState(section, false);
+        } else {
+          sections.forEach(function (other) {
+            setSectionState(other, other === section);
+          });
+        }
+        syncDaySections();
+      });
+    });
+    syncDaySections();
+  });
+</script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
 <script src="/static/js/dashboard_charts.js" defer></script>
 {% endblock %}

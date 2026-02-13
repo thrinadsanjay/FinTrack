@@ -2,7 +2,13 @@ import logging
 from datetime import datetime, timezone
 from app.core.logging import setup_logging
 from app.db.mongo import db
-from app.services.recurring_deposit import calculate_next_run
+from app.helpers.account_balances import apply_account_delta, delta_for_tx
+from app.helpers.notification_payloads import recurring_failed_scheduler_payload
+from app.helpers.recurring_schedule import (
+    calculate_next_run,
+    calculate_next_occurrence,
+    SKIP_MISSED_OCCURRENCES,
+)
 from app.services.notifications import upsert_notification
 
 setup_logging()
@@ -32,6 +38,7 @@ async def run_recurring_transactions():
     """
 
     now = datetime.now(timezone.utc)
+    today_date = now.date()
 
     recurrences = db[RECURRING].find({
         "is_active": True,
@@ -44,6 +51,34 @@ async def run_recurring_transactions():
             scheduled_for = scheduled_for.replace(tzinfo=timezone.utc)
 
         if not scheduled_for:
+            continue
+
+        # Skip stale past runs by default (no automatic backfill).
+        if SKIP_MISSED_OCCURRENCES and scheduled_for.date() < today_date:
+            next_run = calculate_next_occurrence(
+                start_date=r["start_date"].date(),
+                frequency=r["frequency"],
+                today=today_date,
+                include_today=False,
+                skip_missed=True,
+            )
+            if next_run <= scheduled_for:
+                next_run = calculate_next_run(
+                    last_run=scheduled_for.date(),
+                    start_date=r["start_date"].date(),
+                    frequency=r["frequency"],
+                )
+                if next_run.tzinfo is None:
+                    next_run = next_run.replace(tzinfo=timezone.utc)
+            await db[RECURRING].update_one(
+                {"_id": r["_id"]},
+                {
+                    "$set": {
+                        "next_run": next_run,
+                        "updated_at": now,
+                    }
+                },
+            )
             continue
 
         # -----------------------------
@@ -89,12 +124,13 @@ async def run_recurring_transactions():
             schedule_key = scheduled_for.strftime("%Y%m%d%H%M")
             await upsert_notification(
                 user_id=r["user_id"],
-                key=f"recurring_failed:{str(r['_id'])}:{schedule_key}",
-                notif_type="warning",
-                title="Recurring transaction failed",
-                message=(
-                    f"{account.get('name', 'Account') if account else 'Account'} has ₹ {account_balance}, "
-                    f"but ₹ {r['amount']} is required for {r.get('description', 'a recurring transaction')}."
+                **recurring_failed_scheduler_payload(
+                    recurring_id=str(r["_id"]),
+                    schedule_key=schedule_key,
+                    account_name=account.get("name", "Account") if account else "Account",
+                    balance=account_balance,
+                    amount=r["amount"],
+                    description=r.get("description", "a recurring transaction"),
                 ),
             )
             continue
@@ -124,11 +160,11 @@ async def run_recurring_transactions():
         # -----------------------------
         # Update account balance
         # -----------------------------
-        delta = r["amount"] if r["type"] == "credit" else -r["amount"]
-
-        await db[ACCOUNTS].update_one(
-            {"_id": r["account_id"]},
-            {"$inc": {"balance": delta}},
+        delta = delta_for_tx(r["type"], r["amount"])
+        await apply_account_delta(
+            db=db,
+            account_id=r["account_id"],
+            delta=delta,
         )
 
         # -----------------------------
@@ -139,6 +175,8 @@ async def run_recurring_transactions():
             start_date=r["start_date"].date(),
             frequency=r["frequency"],
         )
+        if next_run.tzinfo is None:
+            next_run = next_run.replace(tzinfo=timezone.utc)
 
         # -----------------------------
         # Update recurring rule

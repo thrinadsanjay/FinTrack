@@ -231,6 +231,9 @@
                 {% if tx.restored_at %}
                   &#10;♻ Restored
                 {% endif %}
+                {% if tx.source == "recurring" %}
+                  &#10;⚙ Scheduled
+                {% endif %}
                 "><i class="fa-solid fa-circle-info"></i>
               </span>
 

@@ -1,44 +1,27 @@
 from bson import ObjectId
 from datetime import datetime, date, time, timezone
-from dateutil.relativedelta import relativedelta
+from typing import Optional
 from app.db.mongo import db
+from app.helpers.recurring_schedule import (
+    VALID_FREQUENCIES,
+    calculate_next_occurrence,
+)
+from app.helpers.recurring_rules import (
+    compute_next_run_from_now,
+    recurring_status_of,
+    serialize_recurring_rule,
+    status_query,
+    to_utc,
+)
+from app.helpers.notification_payloads import (
+    recurring_created_payload,
+    recurring_ended_payload,
+    recurring_paused_payload,
+    recurring_resumed_payload,
+    recurring_updated_payload,
+)
 from app.services.audit import audit_log
 from app.services.notifications import upsert_notification
-
-
-def calculate_next_run(
-    last_run: date | None,
-    start_date: date,
-    frequency: str,
-) -> datetime:
-    """
-    Calendar-correct recurring schedule calculation.
-    """
-
-    base_date = last_run or start_date
-
-    if frequency == "daily":
-        return datetime.combine(base_date, datetime.min.time()) + relativedelta(days=1)
-
-    if frequency == "weekly":
-        return datetime.combine(base_date, datetime.min.time()) + relativedelta(weeks=1)
-
-    if frequency == "biweekly":
-        return datetime.combine(base_date, datetime.min.time()) + relativedelta(weeks=2)
-
-    if frequency == "monthly":
-        return datetime.combine(base_date, datetime.min.time()) + relativedelta(months=1)
-
-    if frequency == "quarterly":
-        return datetime.combine(base_date, datetime.min.time()) + relativedelta(months=3)
-
-    if frequency == "halfyearly":
-        return datetime.combine(base_date, datetime.min.time()) + relativedelta(months=6)
-
-    if frequency == "yearly":
-        return datetime.combine(base_date, datetime.min.time()) + relativedelta(years=1)
-
-    raise ValueError(f"Unsupported frequency: {frequency}")
 
 
 class RecurringDepositService:
@@ -57,15 +40,31 @@ class RecurringDepositService:
         interval: int,
         start_date: date,
         end_date: date | None,
-        source_transaction_id: ObjectId,
+        source_transaction_id: Optional[ObjectId] = None,
     ):
+        if not start_date:
+            raise Exception("Start date is required")
+        if frequency not in VALID_FREQUENCIES:
+            raise Exception("Invalid frequency")
+        if end_date and end_date < start_date:
+            raise Exception("End date cannot be before start date")
 
-        start_dt = datetime.combine(start_date, time.min)
+        start_dt = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
 
         end_dt = (
             datetime.combine(end_date, time.min)
             if end_date else None
         )
+
+        next_run = calculate_next_occurrence(
+            start_date=start_date,
+            frequency=frequency,
+            include_today=False,
+        )
+        if end_dt:
+            end_dt = to_utc(end_dt)
+            if next_run > end_dt:
+                raise Exception("No future run available within end date")
 
         doc = {
             # -----------------------------
@@ -91,11 +90,7 @@ class RecurringDepositService:
             "interval": interval,
             "start_date": start_dt,
             "end_date": end_dt,
-            "next_run": calculate_next_run(
-                last_run=None,
-                start_date=start_date,
-                frequency=frequency,
-            ),
+            "next_run": next_run,
 
             # -----------------------------
             # META
@@ -106,72 +101,32 @@ class RecurringDepositService:
         }
 
         result = await db.recurring_deposits.insert_one(doc)
+        audit_meta = {
+            "account_id": account_id,
+            "amount": amount,
+            "type": tx_type,
+            "frequency": frequency,
+            "interval": interval,
+        }
+        if source_transaction_id:
+            audit_meta["source_transaction_id"] = str(source_transaction_id)
+
         await audit_log(
             action="RECURRING_CREATED",
             user={"user_id": str(user_id)},
-            meta={
-                "account_id": account_id,
-                "amount": amount,
-                "type": tx_type,
-                "frequency": frequency,
-                "interval": interval,
-                "source_transaction_id": str(source_transaction_id),
-            },
+            meta=audit_meta,
         )
 
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
         await upsert_notification(
             user_id=ObjectId(user_id),
-            key=f"recurring_created:{str(result.inserted_id)}:{stamp}",
-            notif_type="success",
-            title="Recurring rule created",
-            message=f"Created recurring {tx_type} of ₹ {amount}.",
-            is_read=True,
+            **recurring_created_payload(
+                recurring_id=str(result.inserted_id),
+                stamp=stamp,
+                tx_type=tx_type,
+                amount=amount,
+            ),
         )
-
-    @staticmethod
-    def _to_utc(dt: datetime | None) -> datetime | None:
-        if not dt:
-            return None
-        if dt.tzinfo is None:
-            return dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc)
-
-    @staticmethod
-    def _status_of(rule: dict, now: datetime) -> str:
-        ended_at = RecurringDepositService._to_utc(rule.get("ended_at"))
-        end_date = RecurringDepositService._to_utc(rule.get("end_date"))
-        if ended_at:
-            return "ended"
-        if end_date and end_date < now:
-            return "ended"
-        if rule.get("is_active", True):
-            return "active"
-        return "paused"
-
-    @staticmethod
-    def _compute_next_run_from_now(*, rule: dict, frequency: str, now: datetime) -> datetime:
-        start_date = rule.get("start_date")
-        if not start_date:
-            raise Exception("Recurring rule is missing start date")
-        start_date = RecurringDepositService._to_utc(start_date)
-
-        candidate = RecurringDepositService._to_utc(rule.get("next_run"))
-        if not candidate:
-            candidate = datetime.combine(start_date.date(), time.min, tzinfo=timezone.utc)
-
-        # Bring schedule forward so we don't create delayed backlogs on resume/edit.
-        guard = 0
-        while candidate <= now and guard < 1000:
-            candidate = calculate_next_run(
-                last_run=candidate.date(),
-                start_date=start_date.date(),
-                frequency=frequency,
-            )
-            candidate = RecurringDepositService._to_utc(candidate)
-            guard += 1
-
-        return candidate
 
     @staticmethod
     async def list_user_rules(
@@ -182,39 +137,7 @@ class RecurringDepositService:
         uid = ObjectId(user_id)
         now = datetime.now(timezone.utc)
 
-        query: dict = {"user_id": uid}
-
-        if status == "active":
-            query.update(
-                {
-                    "is_active": True,
-                    "$or": [
-                        {"end_date": None},
-                        {"end_date": {"$gte": now}},
-                    ],
-                    "ended_at": None,
-                }
-            )
-        elif status == "paused":
-            query.update(
-                {
-                    "is_active": False,
-                    "ended_at": None,
-                    "$or": [
-                        {"end_date": None},
-                        {"end_date": {"$gte": now}},
-                    ],
-                }
-            )
-        elif status == "ended":
-            query.update(
-                {
-                    "$or": [
-                        {"ended_at": {"$ne": None}},
-                        {"end_date": {"$lt": now}},
-                    ]
-                }
-            )
+        query = status_query(user_id=uid, status=status, now=now)
 
         cursor = db.recurring_deposits.find(query).sort("created_at", -1)
         account_cursor = db.accounts.find(
@@ -233,35 +156,7 @@ class RecurringDepositService:
         async for rule in cursor:
             account_id = str(rule.get("account_id"))
             account = account_map.get(account_id, {})
-            next_run = RecurringDepositService._to_utc(rule.get("next_run"))
-            end_date = RecurringDepositService._to_utc(rule.get("end_date"))
-            ended_at = RecurringDepositService._to_utc(rule.get("ended_at"))
-            status_value = RecurringDepositService._status_of(rule, now)
-
-            rules.append(
-                {
-                    "id": str(rule["_id"]),
-                    "account_id": account_id,
-                    "account_name": account.get("name", "Account"),
-                    "bank_name": account.get("bank_name", ""),
-                    "type": rule.get("type"),
-                    "mode": rule.get("mode"),
-                    "amount": rule.get("amount", 0),
-                    "description": rule.get("description", ""),
-                    "category": rule.get("category", {}),
-                    "subcategory": rule.get("subcategory", {}),
-                    "frequency": rule.get("frequency"),
-                    "interval": rule.get("interval", 1),
-                    "start_date": RecurringDepositService._to_utc(rule.get("start_date")),
-                    "end_date": end_date,
-                    "next_run": next_run,
-                    "last_run": RecurringDepositService._to_utc(rule.get("last_run")),
-                    "is_active": rule.get("is_active", True),
-                    "ended_at": ended_at,
-                    "created_at": RecurringDepositService._to_utc(rule.get("created_at")),
-                    "status": status_value,
-                }
-            )
+            rules.append(serialize_recurring_rule(rule=rule, account=account, now=now))
 
         return rules
 
@@ -282,27 +177,7 @@ class RecurringDepositService:
             {"_id": rule.get("account_id")},
             {"name": 1, "bank_name": 1},
         )
-        return {
-            "id": str(rule["_id"]),
-            "account_id": str(rule.get("account_id")),
-            "account_name": (account or {}).get("name", "Account"),
-            "bank_name": (account or {}).get("bank_name", ""),
-            "type": rule.get("type"),
-            "mode": rule.get("mode"),
-            "amount": rule.get("amount", 0),
-            "description": rule.get("description", ""),
-            "category": rule.get("category", {}),
-            "subcategory": rule.get("subcategory", {}),
-            "frequency": rule.get("frequency"),
-            "interval": rule.get("interval", 1),
-            "start_date": RecurringDepositService._to_utc(rule.get("start_date")),
-            "end_date": RecurringDepositService._to_utc(rule.get("end_date")),
-            "next_run": RecurringDepositService._to_utc(rule.get("next_run")),
-            "last_run": RecurringDepositService._to_utc(rule.get("last_run")),
-            "is_active": rule.get("is_active", True),
-            "ended_at": RecurringDepositService._to_utc(rule.get("ended_at")),
-            "status": RecurringDepositService._status_of(rule, now),
-        }
+        return serialize_recurring_rule(rule=rule, account=account or {}, now=now)
 
     @staticmethod
     async def update_rule(
@@ -317,6 +192,8 @@ class RecurringDepositService:
     ):
         if amount <= 0:
             raise Exception("Amount must be positive")
+        if frequency not in VALID_FREQUENCIES:
+            raise Exception("Invalid frequency")
 
         uid = ObjectId(user_id)
         rid = ObjectId(recurring_id)
@@ -326,17 +203,17 @@ class RecurringDepositService:
         if not rule:
             raise Exception("Recurring rule not found")
 
-        if RecurringDepositService._status_of(rule, now) == "ended":
+        if recurring_status_of(rule, now) == "ended":
             raise Exception("Ended recurring rules cannot be edited")
 
-        start_date = RecurringDepositService._to_utc(rule.get("start_date"))
+        start_date = to_utc(rule.get("start_date"))
         end_dt = datetime.combine(end_date, time.min, tzinfo=timezone.utc) if end_date else None
         if end_dt and start_date and end_dt < start_date:
             raise Exception("End date cannot be before start date")
 
-        next_run = RecurringDepositService._to_utc(rule.get("next_run"))
+        next_run = to_utc(rule.get("next_run"))
         if rule.get("is_active", True):
-            next_run = RecurringDepositService._compute_next_run_from_now(
+            next_run = compute_next_run_from_now(
                 rule=rule,
                 frequency=frequency,
                 now=now,
@@ -374,11 +251,12 @@ class RecurringDepositService:
         stamp = now.strftime("%Y%m%d%H%M%S%f")
         await upsert_notification(
             user_id=uid,
-            key=f"recurring_updated:{recurring_id}:{stamp}",
-            notif_type="success",
-            title="Recurring rule updated",
-            message=f"Updated recurring rule to ₹ {amount} ({frequency}).",
-            is_read=True,
+            **recurring_updated_payload(
+                recurring_id=recurring_id,
+                stamp=stamp,
+                amount=amount,
+                frequency=frequency,
+            ),
         )
 
     @staticmethod
@@ -395,7 +273,7 @@ class RecurringDepositService:
         rule = await db.recurring_deposits.find_one({"_id": rid, "user_id": uid})
         if not rule:
             raise Exception("Recurring rule not found")
-        if RecurringDepositService._status_of(rule, now) == "ended":
+        if recurring_status_of(rule, now) == "ended":
             raise Exception("Ended recurring rules cannot be paused")
 
         await db.recurring_deposits.update_one(
@@ -419,11 +297,11 @@ class RecurringDepositService:
         stamp = now.strftime("%Y%m%d%H%M%S%f")
         await upsert_notification(
             user_id=uid,
-            key=f"recurring_paused:{recurring_id}:{stamp}",
-            notif_type="info",
-            title="Recurring rule paused",
-            message=f"Paused recurring rule: {rule.get('description', 'Recurring transaction')}.",
-            is_read=True,
+            **recurring_paused_payload(
+                recurring_id=recurring_id,
+                stamp=stamp,
+                description=rule.get("description", "Recurring transaction"),
+            ),
         )
 
     @staticmethod
@@ -440,10 +318,10 @@ class RecurringDepositService:
         rule = await db.recurring_deposits.find_one({"_id": rid, "user_id": uid})
         if not rule:
             raise Exception("Recurring rule not found")
-        if RecurringDepositService._status_of(rule, now) == "ended":
+        if recurring_status_of(rule, now) == "ended":
             raise Exception("Ended recurring rules cannot be resumed")
 
-        next_run = RecurringDepositService._compute_next_run_from_now(
+        next_run = compute_next_run_from_now(
             rule=rule,
             frequency=rule.get("frequency"),
             now=now,
@@ -472,14 +350,12 @@ class RecurringDepositService:
         stamp = now.strftime("%Y%m%d%H%M%S%f")
         await upsert_notification(
             user_id=uid,
-            key=f"recurring_resumed:{recurring_id}:{stamp}",
-            notif_type="success",
-            title="Recurring rule resumed",
-            message=(
-                f"Resumed recurring rule: {rule.get('description', 'Recurring transaction')} "
-                f"(next run {next_run.strftime('%d %b %Y')})."
+            **recurring_resumed_payload(
+                recurring_id=recurring_id,
+                stamp=stamp,
+                description=rule.get("description", "Recurring transaction"),
+                next_run_label=next_run.strftime("%d %b %Y"),
             ),
-            is_read=True,
         )
 
     @staticmethod
@@ -520,9 +396,9 @@ class RecurringDepositService:
         stamp = now.strftime("%Y%m%d%H%M%S%f")
         await upsert_notification(
             user_id=uid,
-            key=f"recurring_ended:{recurring_id}:{stamp}",
-            notif_type="info",
-            title="Recurring rule ended",
-            message=f"Ended recurring rule: {rule.get('description', 'Recurring transaction')}.",
-            is_read=True,
+            **recurring_ended_payload(
+                recurring_id=recurring_id,
+                stamp=stamp,
+                description=rule.get("description", "Recurring transaction"),
+            ),
         )
