@@ -2,6 +2,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import RedirectResponse
 from datetime import datetime, timezone
 from bson import ObjectId
+from app.core.config import settings
 from app.core.csrf import verify_csrf_token
 from app.core.guards import login_required
 from app.db.mongo import db
@@ -21,6 +22,21 @@ def _profile_identity(db_user: dict | None, session_user: dict) -> dict:
     }
 
 
+def _external_password_reset_url(db_user: dict | None) -> str:
+    configured_url = (settings.FT_EXTERNAL_PASSWORD_RESET_URL or "").strip()
+    if configured_url:
+        return configured_url
+
+    idp = ((db_user or {}).get("identity_provider") or "").strip().lower()
+    if idp in {"google", "google-oidc"}:
+        return "https://myaccount.google.com/security"
+
+    return (
+        f"{settings.FT_KEYCLOAK_URL.rstrip('/')}/realms/"
+        f"{settings.FT_KEYCLOAK_REALM}/account/#/security/signingin"
+    )
+
+
 @router.get("/profile")
 @login_required
 async def edit_profile_page(request: Request):
@@ -31,6 +47,9 @@ async def edit_profile_page(request: Request):
     db_user = await get_user_by_id(session_user["user_id"])
     source = (db_user or {}).get("auth_provider") or session_user.get("auth_provider") or "local"
     is_external = source != "local"
+    password_reset_url = "/profile/reset-password"
+    if is_external:
+        password_reset_url = _external_password_reset_url(db_user)
     now = datetime.now(timezone.utc)
     month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
     uid = ObjectId(session_user["user_id"])
@@ -65,6 +84,8 @@ async def edit_profile_page(request: Request):
         "auth_source_label": "External user" if is_external else "Local user",
         "external_id": (db_user or {}).get("oauth_sub") or (db_user or {}).get("keycloak_id") or "",
         "is_external": is_external,
+        "identity_provider": (db_user or {}).get("identity_provider") or "",
+        "password_reset_url": password_reset_url,
         "is_admin": bool((db_user or {}).get("is_admin") or session_user.get("is_admin")),
         "is_active": bool((db_user or {}).get("is_active", True)),
         "member_since": (db_user or {}).get("created_at"),
@@ -104,7 +125,7 @@ async def reset_password_page(request: Request):
 
     db_user = await get_user_by_id(session_user["user_id"])
     if not db_user or db_user.get("auth_provider") != "local":
-        return RedirectResponse("/profile", status_code=303)
+        return RedirectResponse(_external_password_reset_url(db_user), status_code=303)
 
     notifications = await get_user_notifications(session_user["user_id"])
     identity = _profile_identity(db_user, session_user)

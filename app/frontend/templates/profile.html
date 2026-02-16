@@ -18,7 +18,14 @@
 
       <nav class="profile-nav">
         <a class="profile-nav-item active" href="/profile"><i class="fa-solid fa-user"></i> Profile Overview</a>
-        <a class="profile-nav-item" href="/profile/reset-password"><i class="fa-solid fa-lock"></i> Reset Password</a>
+        <a
+          class="profile-nav-item"
+          href="{{ profile.password_reset_url }}"
+          {% if profile.is_external %}target="_blank" rel="noopener noreferrer"{% endif %}
+        >
+          <i class="fa-solid fa-lock"></i>
+          {{ "Manage Password" if profile.is_external else "Reset Password" }}
+        </a>
         <span class="profile-nav-item disabled"><i class="fa-solid fa-bell"></i> Notification Settings</span>
         <span class="profile-nav-item disabled"><i class="fa-solid fa-shield-halved"></i> Account Security</span>
       </nav>

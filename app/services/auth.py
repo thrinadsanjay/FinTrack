@@ -84,6 +84,7 @@ async def authenticate_oauth_user(
     oauth_sub = claims["sub"]
     email = claims.get("email")
     username = claims.get("preferred_username") or email
+    identity_provider = claims.get("identity_provider") or claims.get("idp")
     full_name = (
         claims.get("name")
         or " ".join(
@@ -99,6 +100,7 @@ async def authenticate_oauth_user(
             email=email,
             username=username,
             full_name=full_name,
+            identity_provider=identity_provider,
         )
     else:
         await update_oauth_last_login(str(user["_id"]))
@@ -107,10 +109,12 @@ async def authenticate_oauth_user(
             username=username,
             email=email,
             full_name=full_name,
+            identity_provider=identity_provider,
         )
         user["username"] = username
         user["email"] = email
         user["full_name"] = full_name
+        user["identity_provider"] = identity_provider
 
     await audit_log(
         action="OAUTH_LOGIN_SUCCESS",

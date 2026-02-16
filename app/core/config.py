@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     FT_APP_NAME: str
     FT_APP_VERSION: str
     FT_BASE_URL: str
+    FT_EXTERNAL_PASSWORD_RESET_URL: str | None = None
     FT_LOG_LEVEL: str = "INFO"
     FT_DEBUG_LOG: bool = False
     FT_LOG_DIR: str = "logs"

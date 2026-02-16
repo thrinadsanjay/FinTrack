@@ -75,6 +75,7 @@ async def create_oauth_user(
     email: str | None,
     username: str | None,
     full_name: str | None = None,
+    identity_provider: str | None = None,
 ):
     user = {
         "oauth_sub": oauth_sub,
@@ -82,6 +83,7 @@ async def create_oauth_user(
         "auth_provider": "keycloak",
         "username": username,
         "full_name": full_name,
+        "identity_provider": identity_provider,
         "email": email,
         "is_admin": False,
         "is_active": True,
@@ -163,6 +165,7 @@ async def update_oauth_profile(
     username: str | None,
     email: str | None,
     full_name: str | None,
+    identity_provider: str | None = None,
 ):
     await db.users.update_one(
         {"_id": ObjectId(user_id), "auth_provider": "keycloak", "deleted_at": None},
@@ -171,6 +174,7 @@ async def update_oauth_profile(
                 "username": username,
                 "email": email,
                 "full_name": full_name,
+                "identity_provider": identity_provider,
                 "updated_at": _now(),
             }
         },
