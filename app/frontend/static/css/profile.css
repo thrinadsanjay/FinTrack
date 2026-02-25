@@ -118,6 +118,22 @@
   margin-right: 8px;
 }
 
+.danger-btn.telegram {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.danger-btn.telegram.unregistered {
+  border-color: color-mix(in srgb, #16a34a 55%, var(--color-border));
+  background: color-mix(in srgb, #16a34a 14%, var(--color-chip-bg));
+  color: color-mix(in srgb, #0f172a 78%, #16a34a);
+}
+
+.danger-btn.telegram.registered {
+  border-color: color-mix(in srgb, #229ed9 55%, var(--color-border));
+  background: color-mix(in srgb, #229ed9 12%, var(--color-chip-bg));
+  color: color-mix(in srgb, #0f172a 80%, #229ed9);
+}
+
 .profile-main {
   display: grid;
   gap: 10px;

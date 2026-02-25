@@ -1,17 +1,25 @@
 from fastapi import APIRouter, Form, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
 from datetime import datetime, timezone
+from datetime import timedelta
+import re
+import secrets
 from bson import ObjectId
 from app.core.config import settings
 from app.core.csrf import verify_csrf_token
 from app.core.guards import login_required
+from app.core.http import get_async_http_client
 from app.db.mongo import db
 from app.services.auth import change_local_password
 from app.services.dashboard import get_user_notifications
 from app.services.users import get_user_by_id
+from app.services.admin_settings import get_admin_settings
 from app.web.templates import templates
 
 router = APIRouter()
+OTP_TTL_MINUTES = 10
+OTP_REGEX = re.compile(r"^\d{6}$")
+PHONE_REGEX = re.compile(r"^\+?[0-9]{8,15}$")
 
 
 def _profile_identity(db_user: dict | None, session_user: dict) -> dict:
@@ -35,6 +43,14 @@ def _external_password_reset_url(db_user: dict | None) -> str:
         f"{settings.FT_KEYCLOAK_URL.rstrip('/')}/realms/"
         f"{settings.FT_KEYCLOAK_REALM}/account/#/security/signingin"
     )
+
+
+def _to_aware_utc(dt: datetime | None) -> datetime | None:
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
 
 
 @router.get("/profile")
@@ -94,6 +110,10 @@ async def edit_profile_page(request: Request):
         "timezone": request.session.get("timezone", "Asia/Kolkata"),
         "theme": request.session.get("theme", "auto"),
         "notifications_enabled": True,
+        "telegram_chat_id": (db_user or {}).get("telegram_chat_id") or "",
+        "telegram_mobile": (db_user or {}).get("telegram_mobile") or "",
+        "telegram_username": (db_user or {}).get("telegram_username") or "",
+        "telegram_verified_at": (db_user or {}).get("telegram_verified_at"),
         "stats": {
             "accounts_count": accounts_count,
             "tx_this_month": tx_this_month,
@@ -101,6 +121,11 @@ async def edit_profile_page(request: Request):
             "unread_notifications": unread_count,
         },
     }
+
+    admin_settings = await get_admin_settings()
+    telegram_cfg = (admin_settings or {}).get("telegram") or {}
+    profile["telegram_enabled"] = bool(telegram_cfg.get("enabled"))
+    profile["telegram_bot_username"] = str(telegram_cfg.get("bot_username") or "").strip()
 
     notifications = await get_user_notifications(session_user["user_id"])
 
@@ -212,3 +237,256 @@ async def reset_password_submit(
         )
 
     return RedirectResponse("/profile/reset-password?updated=1", status_code=303)
+
+
+async def _send_telegram_message(bot_token: str, chat_id: str, text: str) -> None:
+    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    async with get_async_http_client() as client:
+        response = await client.post(
+            url,
+            json={
+                "chat_id": chat_id,
+                "text": text,
+            },
+        )
+        payload: dict = {}
+        try:
+            payload = response.json()
+        except Exception:
+            payload = {}
+
+        ok = bool(payload.get("ok"))
+        if response.status_code >= 400 or not ok:
+            description = str(payload.get("description") or "").strip()
+            if not description:
+                description = f"HTTP {response.status_code}"
+            if "chat not found" in description.lower():
+                description = (
+                    "Chat not found. Open your Telegram bot and press Start first, "
+                    "then use your numeric chat id."
+                )
+            raise RuntimeError(description)
+
+
+async def _resolve_chat_id_from_start_token(bot_token: str, start_token: str) -> dict | None:
+    url = f"https://api.telegram.org/bot{bot_token}/getUpdates"
+    async with get_async_http_client() as client:
+        response = await client.get(
+            url,
+            params={"limit": 100, "allowed_updates": '["message"]'},
+        )
+        payload: dict = {}
+        try:
+            payload = response.json()
+        except Exception:
+            payload = {}
+        if response.status_code >= 400 or not payload.get("ok"):
+            description = str(payload.get("description") or "").strip() or f"HTTP {response.status_code}"
+            raise RuntimeError(f"Unable to read Telegram updates: {description}")
+
+    for update in payload.get("result") or []:
+        message = (update or {}).get("message") or {}
+        text = str(message.get("text") or "").strip()
+        if text == f"/start {start_token}" or text.startswith(f"/start {start_token}"):
+            chat = message.get("chat") or {}
+            chat_id = str(chat.get("id") or "").strip()
+            if chat_id:
+                user_from = message.get("from") or {}
+                telegram_username = str(user_from.get("username") or "").strip()
+                return {
+                    "chat_id": chat_id,
+                    "telegram_username": telegram_username,
+                }
+    return None
+
+
+@router.post("/profile/telegram/send-otp")
+@login_required
+async def send_telegram_otp(request: Request):
+    verify_csrf_token(request, request.headers.get("X-CSRF-Token"))
+    session_user = request.session.get("user") or {}
+    user_id = session_user.get("user_id")
+    if not user_id or not ObjectId.is_valid(user_id):
+        return JSONResponse({"detail": "Invalid user session."}, status_code=401)
+
+    payload = await request.json()
+    mobile = str((payload or {}).get("mobile") or "").strip()
+    if not PHONE_REGEX.match(mobile):
+        return JSONResponse({"detail": "Enter a valid mobile number."}, status_code=400)
+
+    admin_settings = await get_admin_settings()
+    telegram_cfg = (admin_settings or {}).get("telegram") or {}
+    if not telegram_cfg.get("enabled"):
+        return JSONResponse({"detail": "Telegram integration is disabled by admin."}, status_code=400)
+    bot_token = str(telegram_cfg.get("bot_token") or "").strip()
+    bot_username = str(telegram_cfg.get("bot_username") or "").strip()
+    if not bot_token:
+        return JSONResponse({"detail": "Telegram bot token is not configured."}, status_code=400)
+    if not bot_username:
+        return JSONResponse({"detail": "Telegram bot username is not configured by admin."}, status_code=400)
+
+    now = datetime.now(timezone.utc)
+    user_oid = ObjectId(user_id)
+    pending = await db.telegram_otp_verifications.find_one({"user_id": user_oid})
+    start_token = str((pending or {}).get("start_token") or "")
+    if not start_token:
+        start_token = f"ftreg_{secrets.token_urlsafe(10)}"
+    start_url = f"https://t.me/{bot_username}?start={start_token}"
+
+    chat_info = None
+    try:
+        chat_info = await _resolve_chat_id_from_start_token(bot_token, start_token)
+    except Exception as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+
+    if not chat_info:
+        await db.telegram_otp_verifications.update_one(
+            {"user_id": user_oid},
+            {
+                "$set": {
+                    "user_id": user_oid,
+                    "mobile": mobile,
+                    "start_token": start_token,
+                    "bot_username": bot_username,
+                    "status": "awaiting_start",
+                    "updated_at": now,
+                },
+                "$setOnInsert": {"created_at": now},
+            },
+            upsert=True,
+        )
+        return JSONResponse(
+            {
+                "status": "awaiting_start",
+                "start_url": start_url,
+                "detail": "Open Telegram and press Start on the bot, then click Send OTP again.",
+            },
+            status_code=202,
+        )
+
+    otp = f"{secrets.randbelow(900000) + 100000:06d}"
+    expires_at = now + timedelta(minutes=OTP_TTL_MINUTES)
+    chat_id = str(chat_info.get("chat_id") or "").strip()
+    telegram_username = str(chat_info.get("telegram_username") or "").strip()
+
+    text = (
+        f"FinTracker verification OTP: {otp}\n"
+        f"Mobile: {mobile}\n"
+        f"This OTP expires in {OTP_TTL_MINUTES} minutes."
+    )
+    try:
+        await _send_telegram_message(bot_token, chat_id, text)
+    except Exception as exc:
+        return JSONResponse({"detail": f"Failed to send OTP to Telegram: {str(exc)}"}, status_code=400)
+
+    await db.telegram_otp_verifications.update_one(
+        {"user_id": user_oid},
+        {
+            "$set": {
+                "user_id": user_oid,
+                "mobile": mobile,
+                "chat_id": chat_id,
+                "telegram_username": telegram_username,
+                "otp": otp,
+                "expires_at": expires_at,
+                "attempts": 0,
+                "updated_at": now,
+                "bot_username": bot_username,
+                "start_token": start_token,
+                "status": "otp_sent",
+            },
+            "$setOnInsert": {"created_at": now},
+        },
+        upsert=True,
+    )
+
+    return JSONResponse(
+        {
+            "status": "ok",
+            "expires_in_minutes": OTP_TTL_MINUTES,
+            "start_url": start_url,
+        }
+    )
+
+
+@router.post("/profile/telegram/verify-otp")
+@login_required
+async def verify_telegram_otp(request: Request):
+    verify_csrf_token(request, request.headers.get("X-CSRF-Token"))
+    session_user = request.session.get("user") or {}
+    user_id = session_user.get("user_id")
+    if not user_id or not ObjectId.is_valid(user_id):
+        return JSONResponse({"detail": "Invalid user session."}, status_code=401)
+
+    payload = await request.json()
+    otp = str((payload or {}).get("otp") or "").strip()
+    if not OTP_REGEX.match(otp):
+        return JSONResponse({"detail": "OTP must be a 6-digit code."}, status_code=400)
+
+    pending = await db.telegram_otp_verifications.find_one({"user_id": ObjectId(user_id)})
+    if not pending:
+        return JSONResponse({"detail": "No OTP request found. Please send OTP first."}, status_code=400)
+
+    now = datetime.now(timezone.utc)
+    expires_at = _to_aware_utc(pending.get("expires_at"))
+    if expires_at and expires_at < now:
+        await db.telegram_otp_verifications.delete_one({"_id": pending["_id"]})
+        return JSONResponse({"detail": "OTP expired. Please request a new OTP."}, status_code=400)
+
+    if str(pending.get("otp") or "") != otp:
+        await db.telegram_otp_verifications.update_one(
+            {"_id": pending["_id"]},
+            {"$inc": {"attempts": 1}, "$set": {"updated_at": now}},
+        )
+        return JSONResponse({"detail": "Invalid OTP."}, status_code=400)
+
+    chat_id = str(pending.get("chat_id") or "").strip()
+    mobile = str(pending.get("mobile") or "").strip()
+    telegram_username = str(pending.get("telegram_username") or "").strip()
+    await db.users.update_one(
+        {"_id": ObjectId(user_id)},
+        {
+            "$set": {
+                "telegram_chat_id": chat_id,
+                "telegram_mobile": mobile,
+                "telegram_username": telegram_username,
+                "telegram_verified_at": now,
+                "updated_at": now,
+            }
+        },
+    )
+    await db.telegram_otp_verifications.delete_one({"_id": pending["_id"]})
+    return JSONResponse(
+        {
+            "status": "ok",
+            "telegram_chat_id": chat_id,
+            "telegram_mobile": mobile,
+            "telegram_username": telegram_username,
+        }
+    )
+
+
+@router.post("/profile/telegram/deregister")
+@login_required
+async def deregister_telegram(request: Request):
+    verify_csrf_token(request, request.headers.get("X-CSRF-Token"))
+    session_user = request.session.get("user") or {}
+    user_id = session_user.get("user_id")
+    if not user_id or not ObjectId.is_valid(user_id):
+        return JSONResponse({"detail": "Invalid user session."}, status_code=401)
+
+    now = datetime.now(timezone.utc)
+    await db.users.update_one(
+        {"_id": ObjectId(user_id)},
+        {
+            "$unset": {
+                "telegram_chat_id": "",
+                "telegram_mobile": "",
+                "telegram_username": "",
+                "telegram_verified_at": "",
+            },
+            "$set": {"updated_at": now},
+        },
+    )
+    await db.telegram_otp_verifications.delete_many({"user_id": ObjectId(user_id)})
+    return JSONResponse({"status": "ok"})

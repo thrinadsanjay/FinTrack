@@ -57,16 +57,110 @@
 (function toastMessages() {
   const toast = document.getElementById("toast");
   if (!toast) return;
-  const msgRaw = (toast.dataset.error || "").trim();
-  const msg = (msgRaw === "None" || msgRaw === "null") ? "" : msgRaw;
-  if (!msg) return;
   const messageEl = toast.querySelector(".toast-message");
   const closeBtn = toast.querySelector(".toast-close");
-  messageEl.textContent = msg;
-  toast.classList.add("show");
-  const hide = () => toast.classList.remove("show");
+  const iconEl = toast.querySelector(".toast-icon");
+  let hideTimer = null;
+
+  function hide() {
+    toast.classList.remove("show");
+    toast.classList.remove("toast-success", "toast-error", "toast-info");
+    if (hideTimer) {
+      window.clearTimeout(hideTimer);
+      hideTimer = null;
+    }
+  }
+
+  function show(message, kind = "error") {
+    const msg = String(message || "").trim();
+    if (!msg) return;
+    const mode = ["success", "error", "info"].includes(kind) ? kind : "error";
+    messageEl.textContent = msg;
+    toast.classList.remove("toast-success", "toast-error", "toast-info");
+    toast.classList.add(`toast-${mode}`);
+    if (iconEl) {
+      iconEl.textContent = mode === "success" ? "✓" : mode === "info" ? "i" : "!";
+    }
+    toast.classList.add("show");
+    if (hideTimer) window.clearTimeout(hideTimer);
+    hideTimer = window.setTimeout(hide, 5000);
+  }
+
+  window.ftNotify = show;
   if (closeBtn) closeBtn.addEventListener("click", hide);
-  setTimeout(hide, 5000);
+
+  const msgRaw = (toast.dataset.error || "").trim();
+  const msg = (msgRaw === "None" || msgRaw === "null") ? "" : msgRaw;
+  if (msg) show(msg, "error");
+
+  const url = new URL(window.location.href);
+  const auth = (url.searchParams.get("auth") || "").toLowerCase();
+  if (auth) {
+    const errorCode = (url.searchParams.get("error") || "").toLowerCase();
+    if (auth === "success") {
+      show("Authentication successful.", "success");
+    } else if (auth === "failed") {
+      let message = "Authentication failed.";
+      if (errorCode === "invalid") message = "Authentication failed: invalid credentials.";
+      if (errorCode === "oauth_state") message = "Authentication failed: invalid OAuth state.";
+      if (errorCode === "oauth_token") message = "Authentication failed: token exchange failed.";
+      show(message, "error");
+    }
+    url.searchParams.delete("auth");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  }
+})();
+
+(function maintenanceReadonlyMode() {
+  const body = document.body;
+  if (!body) return;
+  const maintenanceMode = String(body.dataset.maintenanceMode || "").toLowerCase() === "true";
+  if (!maintenanceMode) return;
+
+  function isAuthFormControl(el) {
+    const form = el.closest("form");
+    if (!form) return false;
+    if (form.classList.contains("login-form")) return true;
+    const action = String(form.getAttribute("action") || "").toLowerCase();
+    return action.includes("/login") || action.includes("/reset-password");
+  }
+
+  const root = document.querySelector(".app-content") || document;
+  const controls = root.querySelectorAll("input, textarea, select, button");
+  controls.forEach((el) => {
+    if (!(el instanceof HTMLElement)) return;
+    if (el.hasAttribute("data-maintenance-allowed")) return;
+    if (isAuthFormControl(el)) return;
+    const type = (el.getAttribute("type") || "").toLowerCase();
+    if (type === "hidden") return;
+
+    if (el instanceof HTMLInputElement) {
+      if (["checkbox", "radio", "file", "submit", "button", "reset"].includes(type)) {
+        el.disabled = true;
+        el.setAttribute("aria-disabled", "true");
+      } else {
+        el.readOnly = true;
+        el.setAttribute("readonly", "readonly");
+        el.setAttribute("aria-readonly", "true");
+      }
+      return;
+    }
+    if (el instanceof HTMLTextAreaElement) {
+      el.readOnly = true;
+      el.setAttribute("readonly", "readonly");
+      el.setAttribute("aria-readonly", "true");
+      return;
+    }
+    if (el instanceof HTMLSelectElement) {
+      el.disabled = true;
+      el.setAttribute("aria-disabled", "true");
+      return;
+    }
+    if (el instanceof HTMLButtonElement) {
+      el.disabled = true;
+      el.setAttribute("aria-disabled", "true");
+    }
+  });
 })();
 
 (function swipeNavigation() {

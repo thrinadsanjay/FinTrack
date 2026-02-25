@@ -31,6 +31,19 @@
       </nav>
 
       <div class="profile-danger-zone">
+        <button
+          type="button"
+          class="danger-btn telegram {% if profile.telegram_chat_id %}registered{% else %}unregistered{% endif %}"
+          data-telegram-open
+          data-telegram-registered="{{ 'true' if profile.telegram_chat_id else 'false' }}"
+          data-telegram-enabled="{{ 'true' if profile.telegram_enabled else 'false' }}"
+          data-telegram-bot-username="{{ profile.telegram_bot_username or '' }}"
+          data-telegram-mobile="{{ profile.telegram_mobile or '' }}"
+          data-telegram-username="{{ profile.telegram_username or '' }}"
+          {% if not profile.telegram_enabled %}disabled title="Telegram integration is disabled by admin"{% endif %}
+        >
+          <i class="fa-brands fa-telegram"></i> Register Telegram
+        </button>
         <button type="button" class="danger-btn warning" disabled>
           <i class="fa-solid fa-user-slash"></i> Disable Account
         </button>

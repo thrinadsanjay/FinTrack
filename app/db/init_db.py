@@ -41,6 +41,18 @@ async def init_indexes():
     await db.notifications.create_index([("user_id", 1), ("updated_at", -1)])
     await db.notifications.create_index([("user_id", 1), ("key", 1)], unique=True)
 
+    # Chat / support messages
+    await db.chat_logs.create_index([("channel", 1), ("timestamp", -1)])
+    await db.chat_logs.create_index([("channel", 1), ("user_id", 1), ("timestamp", -1)])
+    await db.chat_logs.create_index([("channel", 1), ("user_id", 1), ("sender", 1), ("admin_read", 1)])
+    await db.chat_logs.create_index([("channel", 1), ("user_id", 1), ("sender", 1), ("user_read", 1)])
+    await db.support_sessions.create_index([("user_id", 1), ("updated_at", -1)])
+    await db.support_sessions.create_index([("status", 1), ("updated_at", -1)])
+
+    # Telegram OTP verification
+    await db.telegram_otp_verifications.create_index([("user_id", 1)], unique=True)
+    await db.telegram_otp_verifications.create_index([("expires_at", 1)], expireAfterSeconds=0)
+
 
     
     

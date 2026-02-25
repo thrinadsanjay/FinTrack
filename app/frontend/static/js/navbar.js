@@ -7,6 +7,24 @@
   const countBadges = document.querySelectorAll(".notif-count");
   const profileToggles = document.querySelectorAll("[data-profile-toggle]");
   const profileMenu = document.querySelector("[data-profile-menu]");
+  const telegramOpenLinks = document.querySelectorAll("[data-telegram-open]");
+  const telegramModal = document.querySelector("[data-telegram-modal]");
+  const telegramCloseBtn = document.querySelector("[data-telegram-close]");
+  const telegramMobileInput = document.querySelector("[data-telegram-mobile]");
+  const telegramOtpInput = document.querySelector("[data-telegram-otp]");
+  const telegramSendBtn = document.querySelector("[data-telegram-send-otp]");
+  const telegramVerifyBtn = document.querySelector("[data-telegram-verify-otp]");
+  const telegramBotName = document.querySelector("[data-telegram-bot-name]");
+  const telegramStartHelp = document.querySelector("[data-telegram-start-help]");
+  const telegramOpenBotLink = document.querySelector("[data-telegram-open-bot]");
+  const telegramChangeModal = document.querySelector("[data-telegram-change-modal]");
+  const telegramChangeUser = document.querySelector("[data-telegram-change-user]");
+  const telegramChangeUserRow = document.querySelector("[data-telegram-change-user-row]");
+  const telegramChangeMobile = document.querySelector("[data-telegram-change-mobile]");
+  const telegramChangeYes = document.querySelector("[data-telegram-change-yes]");
+  const telegramChangeDeregister = document.querySelector("[data-telegram-change-deregister]");
+  const telegramChangeNo = document.querySelector("[data-telegram-change-no]");
+  let telegramChangePendingOpen = false;
   const seenKey = "ft_seen_notif_ids_v1";
   const maxSeenIds = 400;
   const flyoutDurationMs = 7000;
@@ -194,6 +212,81 @@
     profileToggles.forEach((t) => t.setAttribute("aria-expanded", "false"));
   }
 
+  function openTelegramModal({ botUsername = "" } = {}) {
+    if (!telegramModal) return;
+    if (telegramBotName) {
+      const normalized = String(botUsername || "").trim().replace(/^@+/, "");
+      telegramBotName.textContent = normalized ? `@${normalized}` : "@your_bot_name";
+    }
+    if (telegramStartHelp) {
+      telegramStartHelp.classList.add("hidden");
+    }
+    if (telegramOpenBotLink) {
+      telegramOpenBotLink.setAttribute("href", "#");
+    }
+    telegramModal.classList.remove("hidden");
+    if (telegramMobileInput) telegramMobileInput.focus();
+  }
+
+  function closeTelegramModal() {
+    if (!telegramModal) return;
+    telegramModal.classList.add("hidden");
+  }
+
+  function openTelegramChangeModal({ username, mobile }) {
+    if (!telegramChangeModal) return;
+    if (telegramChangeUser && telegramChangeUserRow) {
+      if (username) {
+        telegramChangeUser.textContent = `@${username}`;
+        telegramChangeUserRow.style.display = "";
+      } else {
+        telegramChangeUser.textContent = "";
+        telegramChangeUserRow.style.display = "none";
+      }
+    }
+    if (telegramChangeMobile) {
+      telegramChangeMobile.textContent = mobile || "-";
+    }
+    telegramChangeModal.classList.remove("hidden");
+  }
+
+  function closeTelegramChangeModal() {
+    if (!telegramChangeModal) return;
+    telegramChangeModal.classList.add("hidden");
+  }
+
+  function notify(message, kind) {
+    if (typeof window.ftNotify === "function") {
+      window.ftNotify(message, kind || "info");
+      return;
+    }
+    window.alert(message);
+  }
+
+  function setLoading(btn, loading, label) {
+    if (!btn) return;
+    if (loading) {
+      btn.dataset.prevLabel = btn.textContent || label || "";
+      btn.textContent = label || btn.textContent;
+      btn.classList.add("is-loading");
+      btn.disabled = true;
+      return;
+    }
+    btn.classList.remove("is-loading");
+    btn.disabled = false;
+    btn.textContent = btn.dataset.prevLabel || btn.textContent;
+  }
+
+  function setTelegramRegistrationState({ registered, mobile = "", username = "" }) {
+    telegramOpenLinks.forEach((link) => {
+      link.dataset.telegramRegistered = registered ? "true" : "false";
+      link.dataset.telegramMobile = mobile;
+      link.dataset.telegramUsername = username;
+      link.classList.remove("registered", "unregistered");
+      link.classList.add(registered ? "registered" : "unregistered");
+    });
+  }
+
   function setPanelHeight() {
     const count = parseInt(panel.dataset.count || "0", 10);
     const base = 140;
@@ -274,6 +367,189 @@
     });
   }
 
+  telegramOpenLinks.forEach((link) => {
+    link.addEventListener("click", (e) => {
+      e.preventDefault();
+      closeProfile();
+      const isEnabled = String(link.dataset.telegramEnabled || "").toLowerCase() === "true";
+      if (!isEnabled) {
+        notify("Telegram integration is currently disabled by admin.", "info");
+        return;
+      }
+      const botUsername = String(link.dataset.telegramBotUsername || "").trim();
+      const isRegistered = String(link.dataset.telegramRegistered || "").toLowerCase() === "true";
+      if (isRegistered) {
+        const username = String(link.dataset.telegramUsername || "").trim();
+        const mobile = String(link.dataset.telegramMobile || "-").trim() || "-";
+        telegramChangePendingOpen = true;
+        openTelegramChangeModal({ username, mobile });
+        return;
+      }
+      openTelegramModal({ botUsername });
+    });
+  });
+
+  if (telegramChangeYes) {
+    telegramChangeYes.addEventListener("click", () => {
+      closeTelegramChangeModal();
+      if (telegramChangePendingOpen) {
+        const enabledLink = Array.from(telegramOpenLinks).find(
+          (link) => String(link.dataset.telegramEnabled || "").toLowerCase() === "true"
+        );
+        const botUsername = String(enabledLink?.dataset.telegramBotUsername || "").trim();
+        telegramChangePendingOpen = false;
+        openTelegramModal({ botUsername });
+      }
+    });
+  }
+
+  if (telegramChangeNo) {
+    telegramChangeNo.addEventListener("click", () => {
+      telegramChangePendingOpen = false;
+      closeTelegramChangeModal();
+      closeTelegramModal();
+    });
+  }
+
+  if (telegramChangeDeregister) {
+    telegramChangeDeregister.addEventListener("click", async () => {
+      const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") || "";
+      setLoading(telegramChangeDeregister, true, "Removing...");
+      try {
+        const res = await fetch("/profile/telegram/deregister", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": csrf,
+          },
+          body: JSON.stringify({}),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.detail || "Failed to deregister Telegram.");
+        }
+        setTelegramRegistrationState({ registered: false });
+        notify("Telegram deregistered successfully.", "success");
+        telegramChangePendingOpen = false;
+        closeTelegramChangeModal();
+        closeTelegramModal();
+      } catch (error) {
+        notify(error?.message || "Failed to deregister Telegram.", "error");
+      } finally {
+        setLoading(telegramChangeDeregister, false);
+      }
+    });
+  }
+
+  if (telegramChangeModal) {
+    telegramChangeModal.addEventListener("click", (e) => {
+      if (e.target === telegramChangeModal) {
+        telegramChangePendingOpen = false;
+        closeTelegramChangeModal();
+      }
+    });
+  }
+
+  if (telegramCloseBtn) {
+    telegramCloseBtn.addEventListener("click", () => closeTelegramModal());
+  }
+
+  if (telegramModal) {
+    telegramModal.addEventListener("click", (e) => {
+      if (e.target === telegramModal) closeTelegramModal();
+    });
+  }
+
+  if (telegramSendBtn) {
+    telegramSendBtn.addEventListener("click", async () => {
+      const mobile = (telegramMobileInput?.value || "").trim();
+      if (!mobile) {
+        notify("Mobile number is required.", "error");
+        telegramMobileInput?.focus();
+        return;
+      }
+      const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") || "";
+      setLoading(telegramSendBtn, true, "Sending...");
+      try {
+        const res = await fetch("/profile/telegram/send-otp", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": csrf,
+          },
+          body: JSON.stringify({
+            mobile,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!(res.ok || res.status === 202)) {
+          throw new Error(data.detail || "Failed to send OTP.");
+        }
+        if (data.status === "awaiting_start") {
+          if (telegramStartHelp) {
+            telegramStartHelp.classList.remove("hidden");
+          }
+          if (telegramOpenBotLink && data.start_url) {
+            telegramOpenBotLink.setAttribute("href", String(data.start_url));
+          }
+          notify(
+            data.detail ||
+              "Open Telegram bot from the button, press Start, then click Send OTP again.",
+            "info"
+          );
+        } else {
+          if (telegramStartHelp) {
+            telegramStartHelp.classList.add("hidden");
+          }
+          notify("OTP sent to your Telegram successfully.", "success");
+        }
+        telegramOtpInput?.focus();
+      } catch (error) {
+        notify(error?.message || "Failed to send OTP.", "error");
+      } finally {
+        setLoading(telegramSendBtn, false);
+      }
+    });
+  }
+
+  if (telegramVerifyBtn) {
+    telegramVerifyBtn.addEventListener("click", async () => {
+      const otp = (telegramOtpInput?.value || "").trim();
+      if (!otp) {
+        notify("OTP is required.", "error");
+        telegramOtpInput?.focus();
+        return;
+      }
+      const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") || "";
+      setLoading(telegramVerifyBtn, true, "Verifying...");
+      try {
+        const res = await fetch("/profile/telegram/verify-otp", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": csrf,
+          },
+          body: JSON.stringify({ otp }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.detail || "OTP verification failed.");
+        }
+        setTelegramRegistrationState({
+          registered: true,
+          mobile: data.telegram_mobile || (telegramMobileInput?.value || "").trim(),
+          username: data.telegram_username || "",
+        });
+        notify("Telegram registered successfully.", "success");
+        closeTelegramModal();
+      } catch (error) {
+        notify(error?.message || "OTP verification failed.", "error");
+      } finally {
+        setLoading(telegramVerifyBtn, false);
+      }
+    });
+  }
+
   window.addEventListener("resize", () => {
     setPanelHeight();
     placeFlyoutHost();
@@ -303,6 +579,31 @@
     } catch (err) {
       console.error(err);
     }
+
+    return;
+  });
+
+  panel.addEventListener("click", async (e) => {
+    const item = e.target.closest("[data-notif-id]");
+    if (!item || e.target.closest("[data-notif-mark]")) return;
+    const key = String(item.dataset.notifKey || "");
+    if (!key.startsWith("support_reply:")) return;
+
+    const notifId = item.dataset.notifId;
+    if (notifId && item.dataset.notifRead !== "true") {
+      try {
+        await markRead({ ids: [notifId] });
+        item.dataset.notifRead = "true";
+        item.classList.remove("notif-unread");
+        const markButton = item.querySelector("[data-notif-mark]");
+        if (markButton) markButton.remove();
+        updateUnreadState();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    window.location.href = "/help-support#support-chat";
   });
 
   updateUnreadState();

@@ -17,9 +17,17 @@
   <link rel="manifest" href="/static/manifest.json">
   <meta name="theme-color" content="#0f172a">
 </head>
-<body class="{% if request.session.user %}user-authenticated{% else %}user-guest{% endif %}">
-  {% if request.session.user %}
-    {% include "partials/navbar.html" %}
+{% set session_user = (request.scope.get("session") or {}).get("user") %}
+{% set current_user = session_user or user %}
+<body
+  class="{% if current_user %}user-authenticated{% else %}user-guest{% endif %}{% if request.state.maintenance_mode %} maintenance-on{% endif %}"
+  data-maintenance-mode="{{ 'true' if request.state.maintenance_mode else 'false' }}"
+  data-maintenance-message="{{ request.state.maintenance_message or '' }}"
+>
+  {% if current_user %}
+    {% with user=current_user %}
+      {% include "partials/navbar.html" %}
+    {% endwith %}
   {% else %}
     <button
       type="button"
@@ -31,6 +39,12 @@
       <i class="fa-solid fa-moon" data-theme-icon></i>
     </button>
   {% endif %}
+  {% if request.state.maintenance_mode %}
+    <div class="maintenance-banner" role="status" aria-live="polite">
+      {{ request.state.maintenance_message or 'Maintenance mode is active. Updates are temporarily disabled.' }}
+    </div>
+  {% endif %}
+  
   <div class="app-shell">
     <div class="toast" id="toast" data-error="{{ error or '' }}">
       <span class="toast-icon">!</span>
@@ -42,7 +56,7 @@
     </main>
   </div>
   {% include "partials/footer.html" %}
-  <script src="/static/js/navbar.js" defer></script>
-  <script src="/static/js/app_shell.js" defer></script>
+  <script src="/static/js/navbar.js?v={{ FT_APP_VERSION }}" defer></script>
+  <script src="/static/js/app_shell.js?v={{ FT_APP_VERSION }}" defer></script>
 </body>
 </html>

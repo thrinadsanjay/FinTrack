@@ -13,7 +13,7 @@ Logout user based on auth provider:
 
 import urllib.parse
 import secrets
-from fastapi import APIRouter, Request, Form
+from fastapi import APIRouter, Request, Form, HTTPException
 from fastapi.responses import RedirectResponse, HTMLResponse
 from app.core.config import settings
 from app.core.csrf import verify_csrf_token
@@ -24,8 +24,32 @@ from app.services.auth import (
     authenticate_oauth_user,
     reset_user_password,
 )
+from app.services.users import count_active_users_total
+from app.services.metrics import (
+    mark_user_logged_in,
+    mark_user_logged_out,
+    set_total_users,
+)
 
 router = APIRouter()
+
+
+async def _sync_user_metrics_on_login(user_id: str):
+    # Keep auth flow resilient: metrics failures must not block login.
+    try:
+        mark_user_logged_in(user_id)
+        set_total_users(await count_active_users_total())
+    except Exception:
+        pass
+
+
+async def _sync_user_metrics_on_logout(user_id: str | None):
+    try:
+        if user_id:
+            mark_user_logged_out(user_id)
+        set_total_users(await count_active_users_total())
+    except Exception:
+        pass
 
 
 def _callback_uri_from_request(request: Request) -> str:
@@ -54,14 +78,19 @@ async def local_login(
     csrf_token: str = Form(...),
 ):
     verify_csrf_token(request, csrf_token)
-    user = await authenticate_local_user(
-        username=username,
-        password=password,
-        request=request,
-    )
+    try:
+        user = await authenticate_local_user(
+            username=username,
+            password=password,
+            request=request,
+        )
+    except HTTPException as exc:
+        if exc.status_code == 403:
+            return RedirectResponse("/account-disabled", status_code=303)
+        raise
 
     if not user:
-        return RedirectResponse("/login?error=invalid", status_code=303)
+        return RedirectResponse("/login?auth=failed&error=invalid", status_code=303)
 
     request.session["user"] = {
         "user_id": str(user["_id"]),
@@ -69,12 +98,13 @@ async def local_login(
         "username": user["username"],
         "is_admin": user.get("is_admin", False),
     }
+    await _sync_user_metrics_on_login(str(user["_id"]))
 
     if user.get("must_reset_password"):
         request.session["force_pwd_reset"] = True
         return RedirectResponse("/reset-password", status_code=303)
 
-    return RedirectResponse("/", status_code=303)
+    return RedirectResponse("/?auth=success", status_code=303)
 
 
 @router.get("/login/oauth")
@@ -105,7 +135,7 @@ async def login_oauth(request: Request):
 async def callback(request: Request, code: str, state: str | None = None):
     expected_state = request.session.get("oauth_state")
     if not expected_state or not state or state != expected_state:
-        return RedirectResponse("/login?error=oauth_state", status_code=303)
+        return RedirectResponse("/login?auth=failed&error=oauth_state", status_code=303)
     request.session.pop("oauth_state", None)
 
     token_url = (
@@ -128,12 +158,17 @@ async def callback(request: Request, code: str, state: str | None = None):
         token = resp.json()
         id_token = token.get("id_token")
         if not id_token:
-            return RedirectResponse("/login?error=oauth_token", status_code=303)
+            return RedirectResponse("/login?auth=failed&error=oauth_token", status_code=303)
 
-    user = await authenticate_oauth_user(
-        id_token=id_token,
-        request=request,
-    )
+    try:
+        user = await authenticate_oauth_user(
+            id_token=id_token,
+            request=request,
+        )
+    except HTTPException as exc:
+        if exc.status_code == 403:
+            return RedirectResponse("/account-disabled", status_code=303)
+        raise
 
     request.session["user"] = {
         "user_id": str(user["_id"]),
@@ -143,8 +178,9 @@ async def callback(request: Request, code: str, state: str | None = None):
         "email": user.get("email"),
         "is_admin": user.get("is_admin", False),
     }
+    await _sync_user_metrics_on_login(str(user["_id"]))
 
-    return RedirectResponse("/", status_code=303)
+    return RedirectResponse("/?auth=success", status_code=303)
 
 
 @router.get("/reset-password", response_class=HTMLResponse)
@@ -154,6 +190,16 @@ async def reset_password_page(request: Request):
 
     return templates.TemplateResponse(
         "reset_password.html",
+        {"request": request},
+    )
+
+
+@router.get("/account-disabled", response_class=HTMLResponse)
+async def account_disabled_page(request: Request):
+    # Ensure blocked users are not kept in active session.
+    request.session.clear()
+    return templates.TemplateResponse(
+        "account_disabled.html",
         {"request": request},
     )
 
@@ -194,6 +240,7 @@ from app.core.config import settings
 @router.get("/logout")
 async def logout(request: Request):
     user = request.session.get("user")
+    user_id = (user or {}).get("user_id")
     auth_provider = user.get("auth_provider") if user else None
 
     # ---- Audit logout BEFORE clearing session ----
@@ -208,6 +255,7 @@ async def logout(request: Request):
 
     # ---- Clear session ----
     request.session.clear()
+    await _sync_user_metrics_on_logout(user_id)
 
     # ---- Redirect logic ----
     if auth_provider == "keycloak":

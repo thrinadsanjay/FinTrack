@@ -56,6 +56,7 @@ from app.helpers.notification_payloads import (
 from app.services.recurring_deposit import RecurringDepositService
 from app.helpers.transaction_inputs import parse_date_value, validate_category
 from app.services.notifications import upsert_notification
+from app.services.metrics import increment_transaction
 
 UTC = timezone.utc
 
@@ -453,6 +454,7 @@ async def create_transaction(
             amount=amount,
         ),
     )
+    increment_transaction()
 
     return tx_id
 

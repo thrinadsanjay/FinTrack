@@ -14,4 +14,7 @@ templates.env.globals["FT_APP_VERSION"] = settings.FT_APP_VERSION
 templates.env.globals["FT_KEYCLOAK_URL"] = settings.FT_KEYCLOAK_URL
 templates.env.globals["FT_KEYCLOAK_REALM"] = settings.FT_KEYCLOAK_REALM
 templates.env.globals["FT_CLIENT_ID"] = settings.FT_CLIENT_ID
+templates.env.globals["FT_SMTP_FROM"] = settings.FT_SMTP_FROM
+templates.env.globals["FT_SUPPORT_EMAIL"] = settings.FT_SUPPORT_EMAIL
+templates.env.globals["FT_SUPPORT_PHONE"] = settings.FT_SUPPORT_PHONE
 templates.env.globals["csrf_token"] = get_csrf_token

@@ -18,3 +18,5 @@ PyJWT[crypto]
 python-jose[cryptography]
 python-dateutil
 apscheduler
+prometheus-client
+openai

@@ -1,0 +1,416 @@
+.page-help {
+  position: relative;
+  --help-floating-bottom: calc(var(--content-bottom-gap) + env(safe-area-inset-bottom) + 20px);
+  --help-radius: 16px;
+  --help-radius-sm: 12px;
+  --help-border: color-mix(in srgb, var(--color-border) 78%, transparent);
+  --help-shadow: 0 12px 34px color-mix(in srgb, var(--color-shadow) 24%, transparent);
+  --help-surface-soft: color-mix(in srgb, var(--color-surface-strong) 84%, transparent);
+  height: calc(100dvh - var(--page-viewport-offset));
+  display: flex;
+  overflow: hidden;
+}
+
+body.help-support-locked,
+body.help-support-locked .app-content {
+  overflow: hidden !important;
+}
+
+.help-wrap {
+  width: 100%;
+  max-width: 1300px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 12px;
+}
+
+.help-hero {
+  border: 1px solid var(--help-border);
+  border-radius: var(--help-radius);
+  padding: 18px 18px 16px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  background:
+    radial-gradient(circle at 5% 0%, color-mix(in srgb, var(--color-primary) 24%, transparent), transparent 48%),
+    linear-gradient(150deg, var(--help-surface-soft), color-mix(in srgb, var(--color-surface) 62%, transparent));
+  box-shadow: var(--help-shadow);
+}
+
+.help-hero h1 {
+  font-size: clamp(1.2rem, 2vw, 1.6rem);
+  letter-spacing: 0.01em;
+  margin-bottom: 4px;
+}
+
+.help-hero p,
+.help-muted {
+  color: var(--color-muted);
+}
+
+.hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.help-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.help-tile {
+  border: 1px solid var(--help-border);
+  background: var(--help-surface-soft);
+  border-radius: var(--help-radius-sm);
+  padding: 12px;
+  font-weight: 700;
+  color: var(--color-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: transform 0.22s ease, box-shadow 0.22s ease, background 0.22s ease, border-color 0.22s ease;
+}
+
+.help-tile:hover,
+.help-tile.active {
+  border-color: color-mix(in srgb, var(--color-primary) 52%, var(--help-border));
+  background: color-mix(in srgb, var(--color-primary) 18%, var(--help-surface-soft));
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--color-primary) 20%, transparent);
+  transform: translateY(-1px);
+}
+
+.help-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 12px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.help-panels {
+  border: 1px solid var(--help-border);
+  border-radius: var(--help-radius);
+  background: var(--help-surface-soft);
+  padding: 16px;
+  min-height: 0;
+  overflow: auto;
+  box-shadow: var(--help-shadow);
+}
+
+.help-panel {
+  display: none;
+}
+
+.help-panel.active {
+  display: block;
+}
+
+.help-panel h2 {
+  margin-bottom: 8px;
+  font-size: 1.04rem;
+}
+
+.contact-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.contact-card,
+.side-card {
+  border: 1px solid var(--help-border);
+  border-radius: var(--help-radius-sm);
+  padding: 13px;
+  background: color-mix(in srgb, var(--color-surface) 88%, transparent);
+  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+}
+
+.contact-card:hover,
+.side-card:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 34%, var(--help-border));
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--color-shadow) 18%, transparent);
+  transform: translateY(-1px);
+}
+
+.contact-card label {
+  color: var(--color-muted);
+  font-size: 0.78rem;
+}
+
+.contact-card p {
+  margin: 7px 0 11px;
+  font-size: 1.06rem;
+  font-weight: 700;
+}
+
+.mobile-call {
+  display: none;
+}
+
+.faq-list {
+  display: grid;
+  gap: 8px;
+}
+
+.faq-list details {
+  border: 1px solid var(--help-border);
+  border-radius: 10px;
+  padding: 10px 11px;
+  background: color-mix(in srgb, var(--color-surface) 90%, transparent);
+}
+
+.faq-list summary {
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.faq-list p {
+  margin-top: 8px;
+  color: var(--color-muted);
+}
+
+.account-grid {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 11px;
+}
+
+.help-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.help-side {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  min-height: 0;
+  overflow: auto;
+}
+
+.side-card {
+  position: relative;
+}
+
+.side-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 12px;
+  bottom: 12px;
+  width: 3px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-primary) 80%, transparent), color-mix(in srgb, var(--color-primary) 35%, transparent));
+}
+
+.side-card h3 {
+  margin-bottom: 6px;
+  padding-left: 8px;
+}
+
+.side-card p,
+.side-card li {
+  color: var(--color-muted);
+}
+
+.side-card p {
+  line-height: 1.45;
+  margin-bottom: 10px;
+  padding-left: 8px;
+}
+
+.side-card .btn-primary,
+.side-card .btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  margin-top: 2px;
+}
+
+.side-card ul {
+  margin: 0;
+  padding-left: 26px;
+  display: grid;
+  gap: 4px;
+}
+
+.chat-fab {
+  position: fixed;
+  right: 22px;
+  bottom: var(--help-floating-bottom);
+  z-index: 55;
+  width: 52px;
+  height: 52px;
+  border: 0;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #0ea5e9, #0284c7);
+  color: #fff;
+  box-shadow: 0 12px 24px rgba(2, 132, 199, 0.35);
+  cursor: pointer;
+  font-size: 1.05rem;
+  transition: transform 0.22s ease, box-shadow 0.22s ease, filter 0.22s ease;
+}
+
+.chat-fab:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 28px rgba(2, 132, 199, 0.4);
+}
+
+.chat-box {
+  position: fixed;
+  right: 22px;
+  bottom: calc(var(--help-floating-bottom) + 56px);
+  z-index: 56;
+  width: min(340px, calc(100vw - 24px));
+  border: 1px solid var(--help-border);
+  border-radius: 14px;
+  background: var(--help-surface-soft);
+  box-shadow: 0 16px 30px var(--color-shadow);
+}
+
+.chat-box header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 78%, transparent);
+}
+
+.chat-box header button {
+  background: transparent;
+  border: 0;
+  color: var(--color-muted);
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
+/* .chat-body {
+  min-height: 120px;
+  max-height: 220px;
+  overflow: auto;
+  padding: 10px 12px;
+} */
+
+.chat-body {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  max-height: 300px;
+}
+
+.chat-input {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px 12px;
+}
+
+.chat-input input {
+  flex: 1;
+}
+
+@media (max-width: 1160px) {
+  .help-layout {
+    grid-template-columns: minmax(0, 1fr) 290px;
+  }
+}
+
+@media (max-width: 1040px) {
+  .help-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .help-side {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .side-card::before {
+    top: 10px;
+    bottom: auto;
+    height: 3px;
+    width: calc(100% - 24px);
+  }
+
+  .side-card h3,
+  .side-card p {
+    padding-left: 0;
+  }
+
+  .side-card ul {
+    padding-left: 18px;
+  }
+}
+
+@media (max-width: 860px) {
+  .page-help {
+    height: auto;
+    overflow: visible;
+  }
+
+  .help-hero {
+    flex-direction: column;
+  }
+
+  .contact-grid,
+  .help-side {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .mobile-call {
+    display: inline-flex;
+  }
+
+  .chat-fab {
+    right: 14px;
+    bottom: var(--help-floating-bottom);
+  }
+
+  .chat-box {
+    right: 12px;
+    bottom: calc(var(--help-floating-bottom) + 56px);
+  }
+}
+
+
+.chat-message {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-radius: 12px;
+  max-width: 80%;
+  font-size: 14px;
+}
+
+.chat-message.bot {
+  background: #eef3ff;
+  align-self: flex-start;
+}
+
+.chat-message.user {
+  background: #d1f0d6;
+  align-self: flex-end;
+  margin-left: auto;
+}
+
+.chat-option-btn {
+  background: #f0f4ff;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 16px;
+  margin: 5px 5px 0 0;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.chat-option-btn:hover {
+  background: #d6e4ff;
+}

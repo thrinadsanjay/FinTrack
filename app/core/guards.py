@@ -15,6 +15,9 @@ Must remain:
 from datetime import datetime, timedelta, timezone
 from fastapi.responses import RedirectResponse
 from functools import wraps
+from bson import ObjectId
+
+from app.db.mongo import db
 
 # ======================================================
 # CONFIGURABLE WINDOWS
@@ -33,6 +36,40 @@ def login_required(f):
         user = request.session.get("user")
         if not user:
             return RedirectResponse("/login", status_code=303)
+        user_id = user.get("user_id")
+        if not user_id or not ObjectId.is_valid(user_id):
+            request.session.clear()
+            return RedirectResponse("/account-disabled", status_code=303)
+        db_user = await db.users.find_one(
+            {"_id": ObjectId(user_id), "deleted_at": None, "is_active": True},
+            {"_id": 1},
+        )
+        if not db_user:
+            request.session.clear()
+            return RedirectResponse("/account-disabled", status_code=303)
+        return await f(request, *args, **kwargs)
+    return decorated_function
+
+
+def admin_required(f):
+    @wraps(f)
+    async def decorated_function(request, *args, **kwargs):
+        user = request.session.get("user")
+        if not user:
+            return RedirectResponse("/login", status_code=303)
+        user_id = user.get("user_id")
+        if not user_id or not ObjectId.is_valid(user_id):
+            request.session.clear()
+            return RedirectResponse("/account-disabled", status_code=303)
+        db_user = await db.users.find_one(
+            {"_id": ObjectId(user_id), "deleted_at": None, "is_active": True},
+            {"_id": 1},
+        )
+        if not db_user:
+            request.session.clear()
+            return RedirectResponse("/account-disabled", status_code=303)
+        if not user.get("is_admin"):
+            return RedirectResponse("/", status_code=303)
         return await f(request, *args, **kwargs)
     return decorated_function
 

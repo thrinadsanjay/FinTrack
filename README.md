@@ -57,34 +57,62 @@ FinTrack/
 └── .env
 ```
 
-## Required Environment Variables
+## Environment Variables
 
-`app/core/config.py` requires the following variables at startup.
-If any required variable is missing, app boot will fail.
+`app/core/config.py` enforces required runtime variables at startup. Missing required values will fail app boot.
 
-### Core App Variables (Required)
+### Core App Variables
 
-| Variable | Required | Example | Purpose |
-|---|---|---|---|
-| `FT_MONGO_URI` | Yes | `mongodb://mongodb:27017` | MongoDB connection URI |
-| `FT_MONGO_DB_NAME` | Yes | `finance` | MongoDB database name |
-| `FT_ENV` | Yes | `production` | Environment mode (`dev/development/prod/production`) |
-| `FT_KEYCLOAK_URL` | Yes | `https://sso.example.com` | Keycloak base URL |
-| `FT_KEYCLOAK_REALM` | Yes | `fintracker` | Keycloak realm |
-| `FT_CLIENT_ID` | Yes | `fintracker-web` | Keycloak client ID |
-| `FT_SESSION_SECRET` | Yes | `replace-with-long-random-secret` | Session signing secret |
-| `FT_APP_NAME` | Yes | `FinTracker` | FastAPI app title/UI label |
-| `FT_APP_VERSION` | Yes | `1.0.0` | App version string |
-| `FT_BASE_URL` | Yes | `https://fin.example.com` | Public app URL used for OAuth redirects |
+| Variable | Required | Default | Example | Purpose |
+|---|---|---|---|---|
+| `FT_MONGO_URI` | Yes | - | `mongodb://mongodb:27017` | MongoDB connection URI |
+| `FT_MONGO_DB_NAME` | Yes | - | `finance` | MongoDB database name |
+| `FT_ENV` | Yes | - | `production` | Runtime mode: `dev/development/prod/production` |
+| `FT_KEYCLOAK_URL` | Yes | - | `https://sso.example.com` | Keycloak base URL |
+| `FT_KEYCLOAK_REALM` | Yes | - | `fintracker` | Keycloak realm |
+| `FT_CLIENT_ID` | Yes | - | `fintracker-web` | Keycloak OIDC client ID |
+| `FT_SESSION_SECRET` | Yes | - | `replace-with-long-random-secret` | Session signing/encryption secret |
+| `FT_APP_NAME` | Yes | - | `FinTracker` | Application display name |
+| `FT_APP_VERSION` | Yes | - | `1.0.0` | Application version label |
+| `FT_BASE_URL` | Yes | - | `https://fin.example.com` | Public base URL (OAuth callback construction) |
 
-### App Logging Variables (Optional)
+### Auth and Access Variables
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `FT_LOG_LEVEL` | `INFO` | Logging level |
-| `FT_DEBUG_LOG` | `false` | Enables debug log behavior |
-| `FT_LOG_DIR` | `logs` | Log directory |
-| `FT_LOG_FILE` | `logs/app.log` | Log file path |
+| Variable | Required | Default | Example | Purpose |
+|---|---|---|---|---|
+| `FT_KEYCLOAK_ADMIN_ROLES` | No | `fintracker-admin,admin` | `fintracker-admin,platform-admin` | Comma-separated admin roles treated as app admins |
+| `FT_KEYCLOAK_ADMIN_GROUPS` | No | `/fintracker-admin,fintracker-admin` | `/org/admins` | Comma-separated Keycloak groups treated as app admins |
+| `FT_EXTERNAL_PASSWORD_RESET_URL` | No | `None` | `https://myaccount.google.com/security` | Optional external password reset URL for local users |
+
+### Support and SMTP Variables
+
+| Variable | Required | Default | Example | Purpose |
+|---|---|---|---|---|
+| `FT_SUPPORT_EMAIL` | No | `support@fintracker.local` | `support@example.com` | Default support email shown in Help/Support |
+| `FT_SUPPORT_PHONE` | No | `+1-555-0100` | `+1-800-123-4567` | Default support phone shown in Help/Support |
+| `FT_SMTP_HOST` | No | `None` | `smtp.sendgrid.net` | SMTP host |
+| `FT_SMTP_PORT` | No | `None` | `587` | SMTP port |
+| `FT_SMTP_USERNAME` | No | `None` | `apikey` | SMTP username/login |
+| `FT_SMTP_FROM` | No | `None` | `no-reply@example.com` | Sender email address |
+| `FT_SMTP_TLS` | No | `true` | `true` | Enable TLS for SMTP connections |
+
+### Logging, Scheduler, Bootstrap, AI
+
+| Variable | Required | Default | Example | Purpose |
+|---|---|---|---|---|
+| `FT_LOG_LEVEL` | No | `INFO` | `DEBUG` | Base log level |
+| `FT_DEBUG_LOG` | No | `false` | `true` | Forces debug logging when enabled |
+| `FT_LOG_DIR` | No | `logs` | `/var/log/fintracker` | Log directory |
+| `FT_LOG_FILE` | No | `logs/app.log` | `/var/log/fintracker/app.log` | Log file path |
+| `SCHEDULER_RUN_TIME` | No | `5:41 AM IST` | `11:00 PM UTC` | Daily recurring-job runtime (parsed by scheduler helper) |
+| `FT_DEFAULT_ADMIN_USERNAME` | No | `admin` | `admin` | Initial admin username on first boot |
+| `FT_DEFAULT_ADMIN_PASSWORD` | No | `admin123` | `ChangeMeNow!` | Initial admin password on first boot |
+| `FT_DEFAULT_ADMIN_EMAIL` | No | `admin@example.com` | `admin@example.com` | Initial admin email on first boot |
+| `OPENAI_API_KEY` | No | `None` | `sk-...` | Required only if `/api/aichat` endpoint is used |
+
+Notes:
+- Admin UI Settings are saved in MongoDB (`app_settings` collection). Env vars above provide startup defaults/fallbacks.
+- If you disable local admin bootstrap, ensure Keycloak admin role/group mapping is configured correctly.
 
 ### Docker Compose Companion Variables
 
@@ -119,12 +147,43 @@ FT_APP_VERSION=1.0.0
 FT_BASE_URL=https://fin.example.com
 
 # -------------------------------
-# Logging (optional)
+# Auth mapping (optional)
+# -------------------------------
+FT_KEYCLOAK_ADMIN_ROLES=fintracker-admin,admin
+FT_KEYCLOAK_ADMIN_GROUPS=/fintracker-admin,fintracker-admin
+FT_EXTERNAL_PASSWORD_RESET_URL=
+
+# -------------------------------
+# Support + SMTP (optional)
+# -------------------------------
+FT_SUPPORT_EMAIL=support@example.com
+FT_SUPPORT_PHONE=+1-800-123-4567
+FT_SMTP_HOST=
+FT_SMTP_PORT=
+FT_SMTP_USERNAME=
+FT_SMTP_FROM=
+FT_SMTP_TLS=true
+
+# -------------------------------
+# Logging + jobs (optional)
 # -------------------------------
 FT_LOG_LEVEL=INFO
 FT_DEBUG_LOG=false
 FT_LOG_DIR=logs
 FT_LOG_FILE=logs/app.log
+SCHEDULER_RUN_TIME=5:41 AM IST
+
+# -------------------------------
+# Bootstrap admin (optional)
+# -------------------------------
+FT_DEFAULT_ADMIN_USERNAME=admin
+FT_DEFAULT_ADMIN_PASSWORD=admin123
+FT_DEFAULT_ADMIN_EMAIL=admin@example.com
+
+# -------------------------------
+# AI chat (optional)
+# -------------------------------
+OPENAI_API_KEY=
 
 # -------------------------------
 # Docker helper services

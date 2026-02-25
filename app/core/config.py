@@ -9,11 +9,20 @@ class Settings(BaseSettings):
     FT_KEYCLOAK_URL: str 
     FT_KEYCLOAK_REALM: str 
     FT_CLIENT_ID: str
+    FT_KEYCLOAK_ADMIN_ROLES: str = "fintracker-admin,admin"
+    FT_KEYCLOAK_ADMIN_GROUPS: str = "/fintracker-admin,fintracker-admin"
     FT_SESSION_SECRET: str
     FT_APP_NAME: str
     FT_APP_VERSION: str
     FT_BASE_URL: str
     FT_EXTERNAL_PASSWORD_RESET_URL: str | None = None
+    FT_SUPPORT_EMAIL: str = "support@fintracker.local"
+    FT_SUPPORT_PHONE: str = "+1-555-0100"
+    FT_SMTP_HOST: str | None = None
+    FT_SMTP_PORT: int | None = None
+    FT_SMTP_USERNAME: str | None = None
+    FT_SMTP_FROM: str | None = None
+    FT_SMTP_TLS: bool = True
     FT_LOG_LEVEL: str = "INFO"
     FT_DEBUG_LOG: bool = False
     FT_LOG_DIR: str = "logs"
