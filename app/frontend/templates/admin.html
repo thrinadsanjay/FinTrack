@@ -1,0 +1,393 @@
+{% extends "base.html" %}
+{% block title %}{{ FT_APP_NAME }} ¦ Admin{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/admin.css">
+{% endblock %}
+{% block content %}
+<section class="page page-admin">
+  <aside class="admin-sidebar">
+    <div class="admin-brand">
+      <div class="admin-badge">A</div>
+      <div>
+        <h2>Admin Center</h2>
+        <p>Operational overview</p>
+      </div>
+    </div>
+    <nav class="admin-nav">
+      <a href="#overview" class="active" data-admin-nav="overview">Overview</a>
+      <a href="#settings" data-admin-nav="settings">Settings</a>
+      <a href="#users" data-admin-nav="users">Users</a>
+      <a href="#support" data-admin-nav="support">Support Requests</a>
+    </nav>
+  </aside>
+
+  <div class="admin-main" data-admin-main>
+    <section class="admin-view active" data-admin-view="overview" id="overview">
+      <header class="admin-header">
+        <h1>FinTracker Administration</h1>
+        <p>Monitor platform health, user activity, and operational throughput.</p>
+      </header>
+
+      <section class="admin-grid metrics-grid">
+        <article class="metric-card">
+          <h3>Total Users</h3>
+          <p>{{ stats.total_users }}</p>
+        </article>
+        <article class="metric-card">
+          <h3>Active Users (24h)</h3>
+          <p>{{ stats.active_users_24h }}</p>
+        </article>
+        <article class="metric-card">
+          <h3>Active Users (7d)</h3>
+          <p>{{ stats.active_users_7d }}</p>
+        </article>
+        <article class="metric-card">
+          <h3>Total Transactions</h3>
+          <p>{{ stats.total_transactions }}</p>
+        </article>
+        <article class="metric-card">
+          <h3>Total Volume Processed</h3>
+          <p>₹ {{ "{:,.2f}".format(stats.total_volume_processed) }}</p>
+        </article>
+        <article class="metric-card danger">
+          <h3>Failed Transactions</h3>
+          <p>{{ stats.failed_transactions }}</p>
+        </article>
+      </section>
+      <section class="admin-grid status-grid">
+        <article class="status-card">
+          <h3>Server Status</h3>
+          <span class="status-pill {{ 'up' if stats.server_status == 'UP' else 'down' }}">{{ stats.server_status }}</span>
+        </article>
+        <article class="status-card">
+          <h3>DB Status</h3>
+          <span class="status-pill {{ 'up' if stats.db_status == 'UP' else 'down' }}">{{ stats.db_status }}</span>
+        </article>
+        <article class="status-card muted">
+          <h3>Admin Accounts</h3>
+          <span>{{ stats.total_admins }}</span>
+        </article>
+        <article class="status-card muted">
+          <h3>Auth Mix</h3>
+          <span>Local {{ stats.total_local }} | Keycloak {{ stats.total_keycloak }}</span>
+        </article>
+      </section>
+    </section>
+
+    <section class="admin-view" data-admin-view="settings" id="settings" hidden>
+      <header class="admin-header">
+        <h1>Settings</h1>
+        <p>Configure platform integrations, communication, auth, and operations.</p>
+      </header>
+      <form class="admin-panel settings-form" method="post" action="/admin/settings" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+        <div class="panel-head">
+          <h2>Platform Settings</h2>
+          <button type="submit" class="btn-action ok" data-maintenance-allowed>Save Settings</button>
+        </div>
+        <div class="settings-scroll">
+          <section class="settings-group">
+            <div class="settings-group-head">
+              <h3>Application</h3>
+            </div>
+            <div class="settings-grid two">
+              <label>Application Name
+                <input type="text" name="app_name" value="{{ admin_settings.application.app_name }}">
+              </label>
+              <label>Logo URL
+                <input type="text" name="logo_url" value="{{ admin_settings.application.logo_url }}">
+              </label>
+              <label>Logo Upload
+                <input type="file" name="logo_file" accept=".png,.jpg,.jpeg,.svg,.webp">
+              </label>
+              <label>Support Email
+                <input type="email" name="support_email" value="{{ admin_settings.application.support_email }}">
+              </label>
+              <label>Support Phone
+                <input type="text" name="support_phone" value="{{ admin_settings.application.support_phone }}">
+              </label>
+              <label class="toggle inline">
+                <input type="checkbox" name="debug_mode" {% if admin_settings.application.debug_mode %}checked{% endif %}>
+                <span>Debug Mode</span>
+              </label>
+              <label class="toggle inline">
+                <input type="checkbox" name="maintenance_mode" data-maintenance-allowed {% if admin_settings.application.maintenance_mode %}checked{% endif %}>
+                <span>Maintenance Mode</span>
+              </label>
+              <label class="full">Maintenance Message
+                <textarea name="maintenance_message" rows="2" data-maintenance-allowed>{{ admin_settings.application.maintenance_message }}</textarea>
+              </label>
+            </div>
+          </section>
+
+          <section class="settings-group">
+            <div class="settings-group-head">
+              <h3>SMTP Settings</h3>
+              <div class="action-row">
+                <button type="button" class="btn-action" data-smtp-test>Test SMTP</button>
+                <label class="toggle">
+                  <input type="checkbox" name="smtp_enabled" {% if admin_settings.smtp.enabled %}checked{% endif %}>
+                  <span>Enabled</span>
+                </label>
+              </div>
+            </div>
+            <div class="settings-grid three">
+              <label>Host
+                <input type="text" name="smtp_host" value="{{ admin_settings.smtp.host }}">
+              </label>
+              <label>Port
+                <input type="text" name="smtp_port" value="{{ admin_settings.smtp.port }}">
+              </label>
+              <label>Username
+                <input type="text" name="smtp_username" value="{{ admin_settings.smtp.username }}">
+              </label>
+              <label>Password
+                <input type="password" name="smtp_password" value="{{ admin_settings.smtp.password }}">
+              </label>
+              <label>From Email
+                <input type="email" name="smtp_from_email" value="{{ admin_settings.smtp.from_email }}">
+              </label>
+              <label class="toggle inline">
+                <input type="checkbox" name="smtp_tls" {% if admin_settings.smtp.tls %}checked{% endif %}>
+                <span>TLS</span>
+              </label>
+            </div>
+          </section>
+
+          <section class="settings-group">
+            <div class="settings-group-head">
+              <h3>Telegram Integration</h3>
+              <label class="toggle">
+                <input type="checkbox" name="telegram_enabled" {% if admin_settings.telegram.enabled %}checked{% endif %}>
+                <span>Enabled</span>
+              </label>
+            </div>
+            <div class="settings-grid two">
+              <label>Bot Username
+                <input type="text" name="telegram_bot_username" value="{{ admin_settings.telegram.bot_username }}">
+              </label>
+              <label>Bot Token
+                <input type="text" name="telegram_bot_token" value="{{ admin_settings.telegram.bot_token }}">
+              </label>
+              <label>Chat ID
+                <input type="text" name="telegram_chat_id" value="{{ admin_settings.telegram.chat_id }}">
+              </label>
+            </div>
+          </section>
+
+          <section class="settings-group">
+            <div class="settings-group-head">
+              <h3>Push Notification Settings</h3>
+              <label class="toggle">
+                <input type="checkbox" name="push_enabled" {% if admin_settings.push_notifications.enabled %}checked{% endif %}>
+                <span>Enabled</span>
+              </label>
+            </div>
+            <div class="settings-grid two">
+              <label>Provider
+                <input type="text" name="push_provider" value="{{ admin_settings.push_notifications.provider }}">
+              </label>
+              <label>VAPID Public Key
+                <input type="text" name="push_vapid_public_key" value="{{ admin_settings.push_notifications.vapid_public_key }}">
+              </label>
+              <label class="full">VAPID Private Key
+                <input type="text" name="push_vapid_private_key" value="{{ admin_settings.push_notifications.vapid_private_key }}">
+              </label>
+            </div>
+          </section>
+
+          <section class="settings-group">
+            <div class="settings-group-head">
+              <h3>Authentication Integration</h3>
+              <label class="toggle">
+                <input type="checkbox" name="auth_enabled" {% if admin_settings.authentication.enabled %}checked{% endif %}>
+                <span>Enabled</span>
+              </label>
+            </div>
+            <div class="settings-grid three">
+              <label>Provider
+                <input type="text" name="auth_provider" value="{{ admin_settings.authentication.provider }}">
+              </label>
+              <label>Keycloak URL
+                <input type="text" name="auth_keycloak_url" value="{{ admin_settings.authentication.keycloak_url }}">
+              </label>
+              <label>Realm
+                <input type="text" name="auth_realm" value="{{ admin_settings.authentication.realm }}">
+              </label>
+              <label>Client ID
+                <input type="text" name="auth_client_id" value="{{ admin_settings.authentication.client_id }}">
+              </label>
+              <label class="toggle inline">
+                <input type="checkbox" name="auth_allow_local_login" {% if admin_settings.authentication.allow_local_login %}checked{% endif %}>
+                <span>Allow Local Login</span>
+              </label>
+            </div>
+          </section>
+
+          <section class="settings-group">
+            <div class="settings-group-head">
+              <h3>Database Settings</h3>
+              <label class="toggle">
+                <input type="checkbox" name="db_enabled" {% if admin_settings.database.enabled %}checked{% endif %}>
+                <span>Enabled</span>
+              </label>
+            </div>
+            <div class="settings-grid two">
+              <label>Mongo URI
+                <input type="text" name="db_mongo_uri" value="{{ admin_settings.database.mongo_uri }}">
+              </label>
+              <label>Database Name
+                <input type="text" name="db_mongo_db_name" value="{{ admin_settings.database.mongo_db_name }}">
+              </label>
+            </div>
+          </section>
+
+          <section class="settings-group">
+            <div class="settings-group-head">
+              <h3>Backup Settings</h3>
+              <label class="toggle">
+                <input type="checkbox" name="backup_enabled" {% if admin_settings.backup.enabled %}checked{% endif %}>
+                <span>Enabled</span>
+              </label>
+            </div>
+            <div class="settings-grid three">
+              <label>Provider
+                <input type="text" name="backup_provider" value="{{ admin_settings.backup.provider }}">
+              </label>
+              <label>Schedule (Cron)
+                <input type="text" name="backup_schedule_cron" value="{{ admin_settings.backup.schedule_cron }}">
+              </label>
+              <label>Retention (days)
+                <input type="text" name="backup_retention_days" value="{{ admin_settings.backup.retention_days }}">
+              </label>
+              <label class="full">Destination
+                <input type="text" name="backup_destination" value="{{ admin_settings.backup.destination }}">
+              </label>
+            </div>
+          </section>
+        </div>
+      </form>
+    </section>
+
+    <section class="admin-view" data-admin-view="users" id="users" hidden>
+      <header class="admin-header">
+        <h1>Users</h1>
+        <p>Manage status and admin access for platform users.</p>
+      </header>
+      <section class="admin-panel">
+        <div class="panel-head">
+          <h2>Users</h2>
+          <span>Latest 100</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+          <thead>
+            <tr>
+              <th>Username</th>
+              <th>Email</th>
+              <th>Provider</th>
+              <th>Active</th>
+              <th>Admin</th>
+              <th>Last Login</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for u in users %}
+              {% set is_self = (u._id == current_admin_user_id) %}
+              {% set is_protected_local_admin = (u.auth_provider == 'local' and u.is_admin) %}
+              <tr>
+                <td>{{ u.username or '-' }}</td>
+                <td>{{ u.email or '-' }}</td>
+                <td>{{ u.auth_provider or '-' }}</td>
+                <td>
+                  <span class="status-pill {{ 'up' if u.is_active else 'down' }}">
+                    {{ 'Enabled' if u.is_active else 'Disabled' }}
+                  </span>
+                </td>
+                <td>
+                  <span class="status-pill {{ 'up' if u.is_admin else 'down' }}">
+                    {{ 'Admin' if u.is_admin else 'Standard' }}
+                  </span>
+                </td>
+                <td>{{ u.last_login_at | localtime(request) | datetimeformat if u.last_login_at else '-' }}</td>
+                <td>
+                  <div class="action-row">
+                    <form method="post" action="/admin/users/{{ u._id }}/toggle-active">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                      <button
+                        type="submit"
+                        class="btn-action {{ 'warn' if u.is_active else 'ok' }}"
+                        {% if is_protected_local_admin %}disabled title="Local admin account cannot be managed"{% elif is_self %}disabled title="You cannot disable your own account"{% endif %}
+                      >
+                        {{ 'Disable' if u.is_active else 'Enable' }}
+                      </button>
+                    </form>
+                    <form method="post" action="/admin/users/{{ u._id }}/toggle-admin">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                      <button
+                        type="submit"
+                        class="btn-action {{ 'warn' if u.is_admin else 'ok' }}"
+                        {% if is_protected_local_admin %}disabled title="Local admin account cannot be managed"{% elif is_self %}disabled title="You cannot remove your own admin access"{% endif %}
+                      >
+                        {{ 'Remove Admin' if u.is_admin else 'Grant Admin' }}
+                      </button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      </section>
+    </section>
+
+    <section class="admin-view" data-admin-view="support" id="support" hidden>
+      <header class="admin-header">
+        <h1>Support Requests</h1>
+        <p>View user requests and support chat history.</p>
+      </header>
+      <section class="admin-panel">
+        <div class="panel-head">
+          <h2>Support Requests</h2>
+          <div class="action-row">
+            <button type="button" class="btn-action warn" data-support-end disabled>End Chat</button>
+            <button type="button" class="btn-action" data-support-refresh>Refresh</button>
+          </div>
+        </div>
+        <div class="support-layout" data-support-root>
+          <aside class="support-users">
+            <div class="support-users-head">Users</div>
+            <div class="support-user-list" data-support-user-list>
+              <p class="support-empty">No support requests yet.</p>
+            </div>
+          </aside>
+          <article class="support-thread">
+            <header class="support-thread-head">
+              <h3 data-support-user-title>Select a user</h3>
+              <p data-support-user-subtitle>Choose a support conversation from the list.</p>
+            </header>
+            <div class="support-messages" data-support-messages>
+              <p class="support-empty">Messages will appear here.</p>
+            </div>
+            <form class="support-composer" data-support-compose-form>
+              <input
+                type="text"
+                data-support-compose-input
+                placeholder="Select a user to reply..."
+                autocomplete="off"
+                disabled
+              />
+              <button type="submit" class="btn-action ok" data-support-compose-send disabled>Send</button>
+            </form>
+          </article>
+        </div>
+      </section>
+    </section>
+  </div>
+</section>
+<script src="/static/js/admin_nav.js?v={{ FT_APP_VERSION }}" defer></script>
+<script src="/static/js/admin_support.js?v={{ FT_APP_VERSION }}" defer></script>
+<script src="/static/js/admin_settings.js?v={{ FT_APP_VERSION }}" defer></script>
+{% endblock %}

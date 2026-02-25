@@ -1,11 +1,20 @@
 from app.db.mongo import db
 
+
 async def init_indexes():
     # Users
     await db.users.create_index("email", unique=True)
     # Accounts
     await db.accounts.create_index([("user_id", 1)])
-    await db.accounts.create_index([("user_id", 1), ("name", 1)], unique=True, name="unique_account_name_per_user")
+    # Drop legacy unique index on name (if exists) to avoid cross-user collisions
+    existing = await db.accounts.index_information()
+    if "name_1" in existing:
+        await db.accounts.drop_index("name_1")
+    await db.accounts.create_index(
+        [("user_id", 1), ("name", 1)],
+        unique=True,
+        name="unique_account_name_per_user",
+    )
     # Audit Logs
     await db.audit_logs.create_index([("user_id", 1)])
     await db.audit_logs.create_index({ "action": 1 })
@@ -17,6 +26,32 @@ async def init_indexes():
     await db.transactions.create_index([("user_id", 1)])
     await db.transactions.create_index([("account_id", 1)])
     await db.transactions.create_index([("created_at", -1)])
+    await db.transactions.create_index([("recurring_id", 1), ("scheduled_for", 1)])
+    await db.transactions.create_index([("retry_of", 1)])
+    await db.transactions.create_index([("is_failed", 1), ("retry_status", 1)])
+
+    # Recurring rules / scheduler
+    await db.recurring_deposits.create_index([("user_id", 1)])
+    await db.recurring_deposits.create_index([("is_active", 1), ("next_run", 1)])
+    await db.recurring_deposits.create_index([("user_id", 1), ("is_active", 1), ("next_run", 1)])
+
+    # Notifications
+    await db.notifications.create_index([("user_id", 1)])
+    await db.notifications.create_index([("user_id", 1), ("is_read", 1)])
+    await db.notifications.create_index([("user_id", 1), ("updated_at", -1)])
+    await db.notifications.create_index([("user_id", 1), ("key", 1)], unique=True)
+
+    # Chat / support messages
+    await db.chat_logs.create_index([("channel", 1), ("timestamp", -1)])
+    await db.chat_logs.create_index([("channel", 1), ("user_id", 1), ("timestamp", -1)])
+    await db.chat_logs.create_index([("channel", 1), ("user_id", 1), ("sender", 1), ("admin_read", 1)])
+    await db.chat_logs.create_index([("channel", 1), ("user_id", 1), ("sender", 1), ("user_read", 1)])
+    await db.support_sessions.create_index([("user_id", 1), ("updated_at", -1)])
+    await db.support_sessions.create_index([("status", 1), ("updated_at", -1)])
+
+    # Telegram OTP verification
+    await db.telegram_otp_verifications.create_index([("user_id", 1)], unique=True)
+    await db.telegram_otp_verifications.create_index([("expires_at", 1)], expireAfterSeconds=0)
 
 
     

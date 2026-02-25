@@ -74,14 +74,19 @@ async def create_oauth_user(
     oauth_sub: str,
     email: str | None,
     username: str | None,
+    full_name: str | None = None,
+    identity_provider: str | None = None,
+    is_admin: bool = False,
 ):
     user = {
         "oauth_sub": oauth_sub,
         "keycloak_id": oauth_sub,
         "auth_provider": "keycloak",
         "username": username,
+        "full_name": full_name,
+        "identity_provider": identity_provider,
         "email": email,
-        "is_admin": False,
+        "is_admin": is_admin,
         "is_active": True,
         "must_reset_password": False,
         "created_at": _now(),
@@ -114,6 +119,13 @@ async def get_local_user(username: str) -> Optional[dict]:
     })
 
 
+async def get_local_user_any(username: str) -> Optional[dict]:
+    return await db.users.find_one({
+        "username": username,
+        "auth_provider": "local",
+    })
+
+
 async def get_oauth_user_by_sub(oauth_sub: str) -> Optional[dict]:
     return await db.users.find_one({
         "oauth_sub": oauth_sub,
@@ -123,9 +135,37 @@ async def get_oauth_user_by_sub(oauth_sub: str) -> Optional[dict]:
     })
 
 
+async def get_oauth_user_by_sub_any(oauth_sub: str) -> Optional[dict]:
+    return await db.users.find_one({
+        "oauth_sub": oauth_sub,
+        "auth_provider": "keycloak",
+    })
+
+
 async def list_users() -> list[dict]:
     cursor = db.users.find({"deleted_at": None})
     return [user async for user in cursor]
+
+
+async def count_active_users_total() -> int:
+    return await db.users.count_documents(
+        {
+            "deleted_at": None,
+            "is_active": True,
+        }
+    )
+
+
+async def get_user_by_id(user_id: str) -> Optional[dict]:
+    if not ObjectId.is_valid(user_id):
+        return None
+    return await db.users.find_one(
+        {
+            "_id": ObjectId(user_id),
+            "is_active": True,
+            "deleted_at": None,
+        }
+    )
 
 
 # ======================================================
@@ -141,6 +181,31 @@ async def update_last_login(user_id: str):
 
 async def update_oauth_last_login(user_id: str):
     await update_last_login(user_id)
+
+
+async def update_oauth_profile(
+    *,
+    user_id: str,
+    username: str | None,
+    email: str | None,
+    full_name: str | None,
+    identity_provider: str | None = None,
+    is_admin: bool | None = None,
+):
+    update_fields = {
+        "username": username,
+        "email": email,
+        "full_name": full_name,
+        "identity_provider": identity_provider,
+        "updated_at": _now(),
+    }
+    if is_admin is not None:
+        update_fields["is_admin"] = is_admin
+
+    await db.users.update_one(
+        {"_id": ObjectId(user_id), "auth_provider": "keycloak", "deleted_at": None},
+        {"$set": update_fields},
+    )
 
 
 # ======================================================

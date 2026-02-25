@@ -7,15 +7,18 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from fastapi import APIRouter, Request, Form, Query
 from fastapi.responses import RedirectResponse, HTMLResponse
+from app.core.csrf import verify_csrf_token
 from app.web.templates import templates
 from app.services.recurring_deposit import RecurringDepositService
 from app.services.accounts import get_accounts
+from app.services.dashboard import get_user_notifications
 from app.services.transactions import (
     create_transaction,
     get_user_transactions,
     delete_transaction,
     restore_transaction,
     edit_transaction,
+    retry_failed_recurring_transaction,
 )
 from app.core.guards import is_within_edit_window, can_restore_today, is_month_closed, login_required
 
@@ -32,6 +35,7 @@ async def transactions_page(request: Request):
         return RedirectResponse("/login", status_code=303)
 
     accounts = await get_accounts(user["user_id"])
+    notifications = await get_user_notifications(user["user_id"])
 
     return templates.TemplateResponse(
         "transactions_add.html",
@@ -39,6 +43,7 @@ async def transactions_page(request: Request):
             "request": request,
             "user": user,
             "accounts": accounts,
+            "notifications": notifications,
             "active_page": "addtransaction",
         },
     )
@@ -61,33 +66,51 @@ async def add_transaction(
     interval: int = Form(1),
     start_date: str | None = Form(None),
     end_date: str | None = Form(None),
+    csrf_token: str = Form(...),
 ):
+    verify_csrf_token(request, csrf_token)
     user = request.session.get("user")
 
     if is_recurring:
         if not frequency:
             raise Exception("Recurring frequency is required")
 
-    if type == "transfer" and not target_account_id:
+    if tx_type == "transfer" and not target_account_id:
         raise Exception("Target account is required for transfers")
 
-    await create_transaction(
-        user_id=user["user_id"],
-        account_id=account_id,
-        target_account_id=target_account_id,
-        amount=amount,
-        tx_type=tx_type,
-        mode=mode,
-        category_code=category_code,
-        subcategory_code=subcategory_code,
-        description=description,
-        is_recurring=is_recurring,
-        frequency=frequency,
-        interval=interval,
-        start_date=start_date,
-        end_date=end_date,
-        request=request,
-    )
+    try:
+        await create_transaction(
+            user_id=user["user_id"],
+            account_id=account_id,
+            target_account_id=target_account_id,
+            amount=amount,
+            tx_type=tx_type,
+            mode=mode,
+            category_code=category_code,
+            subcategory_code=subcategory_code,
+            description=description,
+            is_recurring=is_recurring,
+            frequency=frequency,
+            interval=interval,
+            start_date=start_date,
+            end_date=end_date,
+            request=request,
+        )
+    except Exception as exc:
+        accounts = await get_accounts(user["user_id"])
+        notifications = await get_user_notifications(user["user_id"])
+        return templates.TemplateResponse(
+            "transactions_add.html",
+            {
+                "request": request,
+                "user": user,
+                "accounts": accounts,
+                "notifications": notifications,
+                "active_page": "addtransaction",
+                "error": str(exc),
+            },
+            status_code=400,
+        )
 
     return RedirectResponse("/transactions", status_code=303)
 
@@ -105,6 +128,10 @@ async def transactions_list_page(
     date_to: str | None = Query(None),
     category_code: str | None = Query(None),
     subcategory_code: str | None = Query(None),
+    search: str | None = Query(None),
+    amount: float | None = Query(None),
+    sort_by: str | None = Query(None),
+    sort_dir: str | None = Query(None),
 ):
     user = request.session.get("user")
 
@@ -116,10 +143,77 @@ async def transactions_list_page(
         date_to=date_to,
         category_code=category_code,
         subcategory_code=subcategory_code,
+        search=search,
+        amount=amount,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
     )
 
     accounts = await get_accounts(user["user_id"])
+    notifications = await get_user_notifications(user["user_id"])
     account_map = {str(acc["_id"]): acc["name"] for acc in accounts}
+
+    # --------------------------------------------------
+    # MERGE SELF TRANSFERS INTO SINGLE ROW
+    # --------------------------------------------------
+    transfer_groups = {}
+    merged = []
+    for tx in transactions:
+        transfer_id = tx.get("transfer_id")
+        if not transfer_id:
+            merged.append(tx)
+            continue
+        transfer_groups.setdefault(str(transfer_id), []).append(tx)
+
+    for items in transfer_groups.values():
+        source = next((t for t in items if t.get("type") == "transfer_out"), None)
+        target = next((t for t in items if t.get("type") == "transfer_in"), None)
+        base = source or target or items[0]
+        merged.append(
+            {
+                "_id": base.get("_id"),
+                "transfer_id": base.get("transfer_id"),
+                "type": "transfer",
+                "amount": base.get("amount", 0),
+                "description": base.get("description", "Transfer"),
+                "created_at": base.get("created_at"),
+                "deleted_at": base.get("deleted_at"),
+                "category": None,
+                "subcategory": None,
+                "from_account": (source or base).get("account_id"),
+                "to_account": (target or base).get("account_id") or base.get("target_account_id"),
+                "source": base.get("source"),
+                "is_failed": bool(base.get("is_failed")),
+                "failure_reason": base.get("failure_reason"),
+                "retry_status": base.get("retry_status", "pending"),
+            }
+        )
+
+    transactions = merged
+
+    # --------------------------------------------------
+    # SORT AFTER MERGE (TRANSFER ROWS)
+    # --------------------------------------------------
+    if sort_by:
+        reverse = (sort_dir or "desc").lower() == "desc"
+
+        def sort_key(tx):
+            if sort_by == "date":
+                return tx.get("created_at") or datetime.min.replace(tzinfo=timezone.utc)
+            if sort_by == "amount":
+                return tx.get("amount") or 0
+            if sort_by == "account":
+                account_id = str(tx.get("account_id") or tx.get("from_account") or "")
+                return account_map.get(account_id, "")
+            if sort_by == "category":
+                cat = tx.get("category") or {}
+                return cat.get("name", "")
+            if sort_by == "subcategory":
+                sub = tx.get("subcategory") or {}
+                return sub.get("name", "")
+            return tx.get("created_at") or datetime.min.replace(tzinfo=timezone.utc)
+
+        transactions = sorted(transactions, key=sort_key, reverse=reverse)
 
     # --------------------------------------------------
     # UI FLAGS (NO JINJA LOGIC)
@@ -134,17 +228,28 @@ async def transactions_list_page(
             tx["created_at"] = created_at
 
         tx["is_deleted"] = tx.get("deleted_at") is not None
+        tx["is_failed"] = bool(tx.get("is_failed"))
+        tx["retry_status"] = tx.get("retry_status", "pending")
+        tx["can_retry"] = (
+            tx["is_failed"]
+            and tx.get("failure_reason") == "insufficient_funds"
+            and tx["retry_status"] != "resolved"
+        )
 
         tx["can_modify"] = (
             not tx["is_deleted"]
             and created_at
             and is_within_edit_window(created_at)
         )
+        if tx["is_failed"]:
+            tx["can_modify"] = False
 
         tx["can_restore"] = (
             tx["is_deleted"]
             and can_restore_today(tx["deleted_at"])
         )
+        if tx["is_failed"]:
+            tx["can_restore"] = False
 
         tx["lock_time"] = (
             created_at + timedelta(days=EDIT_WINDOW_DAYS)
@@ -152,6 +257,11 @@ async def transactions_list_page(
         )
 
         tx["is_month_closed"] = False  # future feature
+
+    def _sort_link(field: str):
+        current_dir = (sort_dir or "desc").lower()
+        next_dir = "asc" if (sort_by == field and current_dir == "desc") else "desc"
+        return str(request.url.include_query_params(sort_by=field, sort_dir=next_dir))
 
     return templates.TemplateResponse(
         "transactions_list.html",
@@ -161,6 +271,7 @@ async def transactions_list_page(
             "transactions": transactions,
             "accounts": accounts,
             "account_map": account_map,
+            "notifications": notifications,
             "filters": {
                 "account_id": account_id,
                 "tx_type": tx_type,
@@ -168,6 +279,21 @@ async def transactions_list_page(
                 "date_to": date_to,
                 "category_code": category_code,
                 "subcategory_code": subcategory_code,
+                "search": search,
+                "amount": amount,
+            },
+            "active_filter_count": sum(
+                1 for v in [account_id, tx_type, date_from, date_to, category_code, subcategory_code, search, amount]
+                if v
+            ),
+            "sort_by": sort_by or "date",
+            "sort_dir": (sort_dir or "desc").lower(),
+            "sort_links": {
+                "date": _sort_link("date"),
+                "amount": _sort_link("amount"),
+                "account": _sort_link("account"),
+                "category": _sort_link("category"),
+                "subcategory": _sort_link("subcategory"),
             },
             "active_page": "listtransactions",
         },
@@ -178,7 +304,9 @@ async def transactions_list_page(
 async def delete_transaction_ui(
     request: Request,
     transaction_id: str = Form(...),
+    csrf_token: str = Form(...),
 ):
+    verify_csrf_token(request, csrf_token)
     user = request.session.get("user")
     print("Deleting TX ID:", transaction_id)
     await delete_transaction(
@@ -194,7 +322,9 @@ async def delete_transaction_ui(
 async def restore_transaction_ui(
     request: Request,
     transaction_id: str = Form(...),
+    csrf_token: str = Form(...),
 ):
+    verify_csrf_token(request, csrf_token)
     user = request.session.get("user")
     await restore_transaction(
         user_id=user["user_id"],
@@ -202,6 +332,50 @@ async def restore_transaction_ui(
         request=request,
     )
 
+    return RedirectResponse("/transactions/list", status_code=303)
+
+@router.post("/edit")
+@login_required
+async def edit_transaction_ui(
+    request: Request,
+    transaction_id: str = Form(...),
+    account_id: str = Form(...),
+    amount: float = Form(...),
+    category_code: str = Form(...),
+    subcategory_code: str = Form(...),
+    description: str = Form(""),
+    csrf_token: str = Form(...),
+):
+    verify_csrf_token(request, csrf_token)
+    user = request.session.get("user")
+    await edit_transaction(
+        user_id=user["user_id"],
+        transaction_id=transaction_id,
+        new_account_id=account_id,
+        new_amount=amount,
+        new_category_code=category_code,
+        new_subcategory_code=subcategory_code,
+        new_description=description,
+        request=request,
+    )
+
+    return RedirectResponse("/transactions/list", status_code=303)
+
+
+@router.post("/retry-failed")
+@login_required
+async def retry_failed_transaction_ui(
+    request: Request,
+    transaction_id: str = Form(...),
+    csrf_token: str = Form(...),
+):
+    verify_csrf_token(request, csrf_token)
+    user = request.session.get("user")
+    await retry_failed_recurring_transaction(
+        user_id=user["user_id"],
+        failed_transaction_id=transaction_id,
+        request=request,
+    )
     return RedirectResponse("/transactions/list", status_code=303)
 
 @router.get("", response_class=HTMLResponse)

@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% block title %}Profile | FinTracker{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/profile.css">
+{% endblock %}
+
+{% block content %}
+<section class="page page-profile">
+  <div class="profile-breadcrumb">Settings <span>/</span> Profile</div>
+
+  <div class="profile-layout">
+    <aside class="profile-side card">
+      <div class="profile-avatar">
+        <span>{{ (profile.full_name or profile.username or "U") | first | upper }}</span>
+      </div>
+      <h2 class="profile-name">{{ profile.full_name or profile.username or "User" }}</h2>
+      <p class="profile-email">{{ profile.email or "Email unavailable" }}</p>
+
+      <nav class="profile-nav">
+        <a class="profile-nav-item active" href="/profile"><i class="fa-solid fa-user"></i> Profile Overview</a>
+        <a
+          class="profile-nav-item"
+          href="{{ profile.password_reset_url }}"
+          {% if profile.is_external %}target="_blank" rel="noopener noreferrer"{% endif %}
+        >
+          <i class="fa-solid fa-lock"></i>
+          {{ "Manage Password" if profile.is_external else "Reset Password" }}
+        </a>
+        <span class="profile-nav-item disabled"><i class="fa-solid fa-bell"></i> Notification Settings</span>
+        <span class="profile-nav-item disabled"><i class="fa-solid fa-shield-halved"></i> Account Security</span>
+      </nav>
+
+      <div class="profile-danger-zone">
+        <button
+          type="button"
+          class="danger-btn telegram {% if profile.telegram_chat_id %}registered{% else %}unregistered{% endif %}"
+          data-telegram-open
+          data-telegram-registered="{{ 'true' if profile.telegram_chat_id else 'false' }}"
+          data-telegram-enabled="{{ 'true' if profile.telegram_enabled else 'false' }}"
+          data-telegram-bot-username="{{ profile.telegram_bot_username or '' }}"
+          data-telegram-mobile="{{ profile.telegram_mobile or '' }}"
+          data-telegram-username="{{ profile.telegram_username or '' }}"
+          {% if not profile.telegram_enabled %}disabled title="Telegram integration is disabled by admin"{% endif %}
+        >
+          <i class="fa-brands fa-telegram"></i> Register Telegram
+        </button>
+        <button type="button" class="danger-btn warning" disabled>
+          <i class="fa-solid fa-user-slash"></i> Disable Account
+        </button>
+        <button type="button" class="danger-btn critical" disabled>
+          <i class="fa-solid fa-trash"></i> Delete Account
+        </button>
+      </div>
+    </aside>
+
+    <main class="profile-main">
+      <div class="stats-grid">
+        <div class="card stat-card">
+          <p class="stat-label">Accounts</p>
+          <p class="stat-value">{{ profile.stats.accounts_count }}</p>
+        </div>
+        <div class="card stat-card">
+          <p class="stat-label">Transactions This Month</p>
+          <p class="stat-value">{{ profile.stats.tx_this_month }}</p>
+        </div>
+        <div class="card stat-card">
+          <p class="stat-label">Active Recurring</p>
+          <p class="stat-value">{{ profile.stats.recurring_active }}</p>
+        </div>
+        <div class="card stat-card">
+          <p class="stat-label">Unread Alerts</p>
+          <p class="stat-value">{{ profile.stats.unread_notifications }}</p>
+        </div>
+      </div>
+
+      <div class="card overview-card">
+        <div class="card-head">
+          <h3>Profile Overview</h3>
+          <span class="provider-badge">{{ profile.auth_source_label }}</span>
+        </div>
+
+        <div class="overview-grid">
+          <div class="overview-item">
+            <i class="fa-solid fa-user"></i>
+            <div>
+              <p class="label">Full Name</p>
+              <p class="value">{{ profile.full_name or "-" }}</p>
+            </div>
+          </div>
+          <div class="overview-item">
+            <i class="fa-solid fa-at"></i>
+            <div>
+              <p class="label">Username</p>
+              <p class="value">{{ profile.username or "-" }}</p>
+            </div>
+          </div>
+          <div class="overview-item">
+            <i class="fa-solid fa-envelope"></i>
+            <div>
+              <p class="label">Email</p>
+              <p class="value">{{ profile.email or "-" }}</p>
+            </div>
+          </div>
+          <div class="overview-item">
+            <i class="fa-solid fa-phone"></i>
+            <div>
+              <p class="label">Phone</p>
+              <p class="value">{{ profile.phone or "-" }}</p>
+            </div>
+          </div>
+          <div class="overview-item">
+            <i class="fa-solid fa-fingerprint"></i>
+            <div>
+              <p class="label">Auth Provider</p>
+              <p class="value">{{ profile.auth_provider | upper }}</p>
+            </div>
+          </div>
+          <div class="overview-item">
+            <i class="fa-solid fa-calendar-days"></i>
+            <div>
+              <p class="label">Member Since</p>
+              <p class="value">
+                {{ profile.member_since | localtime(request) | dateformat if profile.member_since else "-" }}
+              </p>
+            </div>
+          </div>
+          <div class="overview-item">
+            <i class="fa-solid fa-right-to-bracket"></i>
+            <div>
+              <p class="label">Last Login</p>
+              <p class="value">
+                {{ profile.last_login_at | localtime(request) | datetimeformat if profile.last_login_at else "-" }}
+              </p>
+            </div>
+          </div>
+          <div class="overview-item">
+            <i class="fa-solid fa-user-shield"></i>
+            <div>
+              <p class="label">Role</p>
+              <p class="value">{{ "Administrator" if profile.is_admin else "Standard User" }}</p>
+            </div>
+          </div>
+          <div class="overview-item">
+            <i class="fa-solid fa-circle-check"></i>
+            <div>
+              <p class="label">Account Status</p>
+              <p class="value">{{ "Active" if profile.is_active else "Disabled" }}</p>
+            </div>
+          </div>
+          {% if profile.external_id %}
+          <div class="overview-item">
+            <i class="fa-solid fa-link"></i>
+            <div>
+              <p class="label">External ID</p>
+              <p class="value">{{ profile.external_id }}</p>
+            </div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card overview-card">
+        <div class="card-head">
+          <h3>Preferences</h3>
+        </div>
+        <div class="overview-grid">
+          <div class="overview-item">
+            <i class="fa-solid fa-clock"></i>
+            <div>
+              <p class="label">Timezone</p>
+              <p class="value">{{ profile.timezone }}</p>
+            </div>
+          </div>
+          <div class="overview-item">
+            <i class="fa-solid fa-circle-half-stroke"></i>
+            <div>
+              <p class="label">Theme</p>
+              <p class="value">{{ profile.theme | upper }}</p>
+            </div>
+          </div>
+          <div class="overview-item">
+            <i class="fa-solid fa-bell"></i>
+            <div>
+              <p class="label">Notifications</p>
+              <p class="value">{{ "Enabled" if profile.notifications_enabled else "Disabled" }}</p>
+            </div>
+          </div>
+          <div class="overview-item">
+            <i class="fa-solid fa-key"></i>
+            <div>
+              <p class="label">Password Updated</p>
+              <p class="value">
+                {{ profile.password_updated_at | localtime(request) | dateformat if profile.password_updated_at else "-" }}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</section>
+{% endblock %}

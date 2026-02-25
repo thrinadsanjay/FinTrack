@@ -1,0 +1,41 @@
+name: Dev CI Pipeline
+
+on:
+  push:
+    branches:
+      - dev
+
+jobs:
+  test-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Tests
+        run: |
+          pip install -r requirements.txt
+          pytest
+
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Set Version
+        id: version
+        run: echo "VERSION=v1.0.${{ github.run_number }}" >> $GITHUB_ENV
+
+      - name: Build Image
+        run: |
+          docker build -t ghcr.io/${{ github.repository }}/fintracker:${{ env.VERSION }} .
+
+      - name: Push Image
+        run: |
+          docker push ghcr.io/${{ github.repository }}/fintracker:${{ env.VERSION }}
+
+      - name: Merge dev → main
+        uses: devmasx/merge-branch@v1.4.0
+        with:
+          type: now
+          from_branch: dev
+          target_branch: main
+          github_token: ${{ secrets.GITHUB_TOKEN }}

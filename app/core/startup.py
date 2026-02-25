@@ -5,6 +5,7 @@ Startup tasks:
 """
 
 from datetime import datetime
+from app.core.config import settings
 from app.db.mongo import db
 from app.services.users import create_local_user
 from app.core.setup_vars import (
@@ -19,6 +20,11 @@ async def ensure_admin_exists() -> bool:
     """
     Create default admin user if missing.
     """
+    if settings.is_production and DEFAULT_ADMIN_PASSWORD == "admin123":
+        raise RuntimeError(
+            "Set FT_DEFAULT_ADMIN_PASSWORD in production before startup."
+        )
+
     existing = await db.users.find_one({
         "username": DEFAULT_ADMIN_USERNAME,
         "auth_provider": "local",

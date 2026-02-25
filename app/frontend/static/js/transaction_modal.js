@@ -1,6 +1,7 @@
 document.addEventListener("DOMContentLoaded", () => {
   const modal = document.getElementById("edit-modal");
   const cancelBtn = document.getElementById("edit-cancel");
+  const cancelAlt = document.getElementById("edit-cancel-alt");
 
   const txId = document.getElementById("edit-transaction-id");
   const accountSel = document.getElementById("edit-account");
@@ -79,9 +80,16 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  cancelBtn.addEventListener("click", () => {
+  function closeModal() {
     modal.classList.add("hidden");
-  });
+  }
+
+  if (cancelBtn) {
+    cancelBtn.addEventListener("click", closeModal);
+  }
+  if (cancelAlt) {
+    cancelAlt.addEventListener("click", closeModal);
+  }
 
   categorySel.addEventListener("change", () => {
     reset(subcategorySel, "-- Select Subcategory --");

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}{{ FT_APP_NAME }} ¦ Account Disabled{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/login.css">
+{% endblock %}
+{% block content %}
+<div class="login-bg">
+  <div class="login-card animate-in">
+    <h2 class="login-title">Account Disabled</h2>
+    <p class="login-subtitle">
+      Your account has been disabled. Reach out to admin for access.
+    </p>
+
+    <div class="login-options" style="justify-content:center; gap:12px;">
+      <a href="/help-support" class="btn-primary">Go To Home Page</a>
+      <a href="/help-support" class="btn-secondary">
+        Help &amp; Support
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,27 +1,207 @@
 <!-- DESKTOP NAVBAR -->
 <header class="navbar desktop-nav">
+  {% set notifications = notifications | default([]) %}
+  {% set notif_total = notifications | length %}
+  {% set notif_count = notifications | selectattr("is_read", "equalto", false) | list | length %}
   <div class="nav-left">
     <span class="logo head">FinTracker</span>
 
-    <a href="/" class="{% if active_page == 'dashboard' %}active{% endif %}">
-      Dashboard
-    </a>
-    <a href="/transactions" class="{% if active_page == 'addtransaction' %}active{% endif %}">
-      New
-    </a>
-    <a href="/transactions/list" class="{% if active_page == 'listtransactions' %}active{% endif %}">
-      Transactions
-    </a>
-    <a href="/accounts" class="{% if active_page == 'accounts' %}active{% endif %}">
-      Accounts
-    </a>
+    <nav class="nav-links">
+      <a href="/" class="{% if active_page == 'dashboard' %}active{% endif %}">
+        Dashboard
+      </a>
+      <a href="/transactions" class="{% if active_page == 'addtransaction' %}active{% endif %}">
+        New
+      </a>
+      <a href="/transactions/list" class="{% if active_page == 'listtransactions' %}active{% endif %}">
+        Transactions
+      </a>
+      <a href="/recurring" class="{% if active_page == 'recurring' %}active{% endif %}">
+        Recurring
+      </a>
+      <a href="/accounts" class="{% if active_page == 'accounts' %}active{% endif %}">
+        Accounts
+      </a>
+      {% if user.is_admin %}
+      <a href="/admin" class="{% if active_page == 'admin' %}active{% endif %}">
+        Admin
+      </a>
+      {% endif %}
+    </nav>
   </div>
 
   <div class="nav-right">
-    <span class="user">Welcome {{ user.username }}</span>
-    <a href="/logout" class="logout">Logout</a>
+    <button
+      type="button"
+      class="theme-toggle"
+      data-theme-toggle
+      aria-label="Toggle theme"
+      title="Toggle theme"
+    >
+      <i class="fa-solid fa-moon" data-theme-icon></i>
+    </button>
+    <div class="notif">
+      <button type="button" class="notif-btn" data-notif-toggle aria-expanded="false">
+        <i class="fa fa-bell"></i>
+        {% if notif_count > 0 %}
+          <span class="notif-count">{{ notif_count }}</span>
+        {% endif %}
+      </button>
+    </div>
+    <div class="profile">
+      <button type="button" class="profile-btn" data-profile-toggle aria-expanded="false">
+        <span class="avatar">{{ user.username | default("U") | first | upper }}</span>
+        <span class="profile-name">{{ user.username | default("User") }}</span>
+        <i class="fa fa-chevron-down"></i>
+      </button>
+    </div>
   </div>
 </header>
+
+<!-- MOBILE TOP BAR -->
+<header class="navbar mobile-top">
+  <div class="nav-left">
+    <span class="logo head">FinTracker</span>
+  </div>
+  <div class="nav-right">
+    <button
+      type="button"
+      class="theme-toggle"
+      data-theme-toggle
+      aria-label="Toggle theme"
+      title="Toggle theme"
+    >
+      <i class="fa-solid fa-moon" data-theme-icon></i>
+    </button>
+    <div class="notif">
+      <button type="button" class="notif-btn" data-notif-toggle aria-expanded="false">
+        <i class="fa fa-bell"></i>
+        {% if notif_count > 0 %}
+          <span class="notif-count">{{ notif_count }}</span>
+        {% endif %}
+      </button>
+    </div>
+    <div class="profile">
+      <button type="button" class="profile-btn icon-only" data-profile-toggle aria-expanded="false">
+        <span class="avatar">{{ user.username | default("U") | first | upper }}</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<div class="notif-panel" data-notif-panel data-count="{{ notif_total }}">
+  <div class="notif-header">
+    <span>Notifications</span>
+    {% if notif_count > 0 %}
+      <button type="button" class="notif-read-all" data-notif-read-all>Mark all read</button>
+    {% endif %}
+  </div>
+  {% if notif_total > 0 %}
+    <ul class="notif-list">
+      {% for n in notifications %}
+        {% set notif_dt = n.updated_at or n.created_at %}
+        <li
+          class="notif-item notif-{{ n.type | default('info') }} {% if not n.is_read %}notif-unread{% endif %}"
+          data-notif-id="{{ n.id }}"
+          data-notif-read="{{ 'true' if n.is_read else 'false' }}"
+          data-notif-key="{{ n.key | default('') }}"
+        >
+          <div class="notif-title-row">
+            <div class="notif-title">{{ n.title }}</div>
+            {% if not n.is_read %}
+              <button type="button" class="notif-mark-read" data-notif-mark>Mark as read</button>
+            {% endif %}
+          </div>
+          <div class="notif-message">{{ n.message }}</div>
+          {% if notif_dt %}
+            <div class="notif-time">{{ notif_dt.strftime('%d %b %Y, %I:%M %p') }}</div>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <div class="notif-empty">You're all caught up.</div>
+  {% endif %}
+</div>
+
+<div class="profile-menu" data-profile-menu>
+  <div class="profile-header">
+    <div class="avatar avatar-lg">{{ user.username | default("U") | first | upper }}</div>
+    <div>
+      <div class="profile-title">{{ user.username | default("User") }}</div>
+      <div class="profile-subtitle">Signed in</div>
+    </div>
+  </div>
+  <div class="profile-links">
+    <a href="/profile" class="profile-link">Profile</a>
+    <a href="#" class="profile-link">Preferences</a>
+    <a href="#" class="profile-link">Security</a>
+    <a href="/help-support" class="profile-link">Help & support</a>
+    <a href="/logout" class="profile-link danger">Logout</a>
+  </div>
+</div>
+
+<div class="telegram-modal hidden" data-telegram-modal>
+  <div class="telegram-modal-card">
+    <div class="telegram-modal-head">
+      <h3>Register Telegram</h3>
+      <button type="button" class="telegram-close" data-telegram-close aria-label="Close">×</button>
+    </div>
+    <p class="telegram-help">
+      1. Enter your mobile number and click <strong>Send OTP</strong>.<br>
+      2. Click <strong>Open Telegram Bot</strong> below and tap <strong>Start</strong> in Telegram.<br>
+      3. Come back and click <strong>Send OTP</strong> again.<br>
+      4. Enter the OTP from Telegram and click <strong>Verify OTP</strong>.<br>
+      Bot: <strong data-telegram-bot-name>@your_bot_name</strong>
+    </p>
+    <div class="telegram-start-help hidden" data-telegram-start-help>
+      <p class="telegram-start-text">
+        One-time setup required. Open the bot using this secure link so we can verify your account.
+      </p>
+      <div class="action-row">
+        <a href="#" target="_blank" rel="noopener noreferrer" class="btn-secondary" data-telegram-open-bot>Open Telegram Bot</a>
+      </div>
+    </div>
+    <div class="telegram-form">
+      <label>Mobile Number
+        <input type="text" data-telegram-mobile placeholder="+1xxxxxxxxxx">
+      </label>
+      <div class="action-row">
+        <button type="button" class="btn-primary" data-telegram-send-otp>Send OTP</button>
+      </div>
+      <label>Enter OTP
+        <input type="text" data-telegram-otp placeholder="6-digit OTP" maxlength="6">
+      </label>
+      <div class="action-row">
+        <button type="button" class="btn-primary" data-telegram-verify-otp>Verify OTP</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="telegram-change-modal hidden" data-telegram-change-modal>
+  <div class="telegram-change-card">
+    <h3>Telegram Already Registered</h3>
+    <p class="telegram-change-text">
+      Your account is already linked with Telegram. Choose what you want to do next.
+    </p>
+    <div class="telegram-change-meta">
+      <div class="telegram-change-row" data-telegram-change-user-row>
+        <span class="telegram-change-label">Telegram Username</span>
+        <strong class="telegram-change-value" data-telegram-change-user></strong>
+      </div>
+      <div class="telegram-change-row">
+        <span class="telegram-change-label">Registered Mobile</span>
+        <strong class="telegram-change-value" data-telegram-change-mobile></strong>
+      </div>
+    </div>
+    <div class="action-row">
+      <button type="button" class="btn-primary" data-telegram-change-yes>Yes, Change</button>
+      <button type="button" class="btn-secondary telegram-deregister-btn" data-telegram-change-deregister>Deregister</button>
+      <button type="button" class="btn-secondary" data-telegram-change-no>No</button>
+    </div>
+  </div>
+</div>
 
 <!-- MOBILE BOTTOM NAV -->
 <nav class="mobile-nav" data-mobile-nav>
@@ -30,13 +210,19 @@
     <span>Home</span>
   </a>
 
-  <a href="/transactions/list" class="{% if active_page == 'listtransactions' %}active{% endif %}">
-    <i class="fa fa-list"></i>
-    <span>Txns</span>
+  <a href="/transactions" class="{% if active_page == 'addtransaction' %}active{% endif %}">
+    <i class="fa fa-plus"></i>
+    <span>Add</span>
   </a>
 
-  <a href="/transactions" class="add-btn {% if active_page == 'addtransaction' %}active{% endif %}">
-    <i class="fa fa-plus"></i>
+  <a href="/transactions/list" class="{% if active_page == 'listtransactions' %}active{% endif %}">
+    <i class="fa fa-list"></i>
+    <span>Transactions</span>
+  </a>
+
+  <a href="/recurring" class="{% if active_page == 'recurring' %}active{% endif %}">
+    <i class="fa fa-repeat"></i>
+    <span>Recurring</span>
   </a>
 
   <a href="/accounts" class="{% if active_page == 'accounts' %}active{% endif %}">
@@ -44,8 +230,15 @@
     <span>Accounts</span>
   </a>
 
-  <a href="/logout">
-    <i class="fa fa-user"></i>
-    <span>Me</span>
+  {% if user.is_admin %}
+  <a href="/admin" class="{% if active_page == 'admin' %}active{% endif %}">
+    <i class="fa fa-user-shield"></i>
+    <span>Admin</span>
   </a>
+  {% endif %}
+
+  <!-- <button type="button" class="mobile-profile" data-profile-toggle aria-expanded="false">
+    <i class="fa fa-user"></i>
+    <span>Profile</span>
+  </button> -->
 </nav>

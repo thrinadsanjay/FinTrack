@@ -117,10 +117,11 @@ class KeycloakService:
             algorithms=["RS256"],
             audience=self.audience,
             issuer=self.issuer,
-            leeway=60,
             options={
                 "require": ["exp", "iat", "iss", "aud", "sub"],
                 "verify_at_hash": False,
+                # python-jose expects leeway inside options, not as a top-level arg.
+                "leeway": 60,
             },
         )
 

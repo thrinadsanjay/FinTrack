@@ -4,6 +4,12 @@ document.addEventListener("DOMContentLoaded", () => {
   const typeSelect = document.querySelector('select[name="tx_type"]');
   const categorySelect = document.getElementById("filter-category");
   const subcategorySelect = document.getElementById("filter-subcategory");
+  const quickButtons = document.querySelectorAll("[data-quick-filter]");
+  const form = document.getElementById("filterForm");
+  const dateFrom = document.querySelector('input[name="date_from"]');
+  const dateTo = document.querySelector('input[name="date_to"]');
+  const accountSelect = document.querySelector('select[name="account_id"]');
+  const searchInput = document.querySelector('input[name="search"]');
 
   function reset(select, placeholder) {
     select.innerHTML = `<option value="">${placeholder}</option>`;
@@ -76,6 +82,56 @@ document.addEventListener("DOMContentLoaded", () => {
     reset(subcategorySelect, "All");
     loadSubcategories(typeSelect.value, categorySelect.value);
   });
+
+  function formatDate(d) {
+    const month = `${d.getMonth() + 1}`.padStart(2, "0");
+    const day = `${d.getDate()}`.padStart(2, "0");
+    return `${d.getFullYear()}-${month}-${day}`;
+  }
+
+  function clearFilters() {
+    if (accountSelect) accountSelect.value = "";
+    if (typeSelect) typeSelect.value = "";
+    if (dateFrom) dateFrom.value = "";
+    if (dateTo) dateTo.value = "";
+    if (searchInput) searchInput.value = "";
+    reset(categorySelect, "All");
+    reset(subcategorySelect, "All");
+  }
+
+  function applyQuery(params) {
+    const qs = params.toString();
+    window.location.search = qs ? `?${qs}` : "";
+  }
+
+  quickButtons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (!form) return;
+      const now = new Date();
+      clearFilters();
+      const filter = btn.dataset.quickFilter;
+      const params = new URLSearchParams();
+
+      if (filter === "last7") {
+        const start = new Date(now);
+        start.setDate(now.getDate() - 6);
+        params.set("date_from", formatDate(start));
+        params.set("date_to", formatDate(now));
+      }
+
+      if (filter === "month") {
+        const start = new Date(now.getFullYear(), now.getMonth(), 1);
+        params.set("date_from", formatDate(start));
+        params.set("date_to", formatDate(now));
+      }
+
+      if (filter === "transfers") {
+        params.set("tx_type", "transfer");
+      }
+
+      applyQuery(params);
+    });
+  });
 });
 
 
@@ -101,13 +157,6 @@ document.addEventListener("DOMContentLoaded", () => {
       toggle.click();
     }
   });
-
-  // Auto-open if filters are active
-  if (window.location.search.length > 1) {
-    wrapper.classList.remove("collapsed");
-    wrapper.classList.add("expanded");
-    toggle.classList.add("active");
-  }
 
   // Auto-close after submit
   form.addEventListener("submit", () => {

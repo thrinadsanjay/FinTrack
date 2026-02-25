@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block title %}{{ FT_APP_NAME }} ¦ Help & Support{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/help_support.css">
+{% endblock %}
+{% block content %}
+<section class="page page-help" data-help-page data-user-authenticated="{{ 'true' if user else 'false' }}">
+  <div class="help-wrap">
+    <header class="help-hero">
+      <div>
+        <h1>Help &amp; Support</h1>
+        <p>Find answers quickly, contact support, and chat from one place.</p>
+      </div>
+      <div class="hero-actions">
+        <a href="/" class="btn-secondary">Home</a>
+        {% if user %}<a href="/profile" class="btn-secondary">Profile</a>{% endif %}
+      </div>
+    </header>
+
+    <section class="help-tiles" aria-label="Help Sections">
+      <button type="button" class="help-tile active" data-help-target="contact">
+        <i class="fa-regular fa-envelope"></i>
+        <span>Contact Support</span>
+      </button>
+      <button type="button" class="help-tile" data-help-target="faq">
+        <i class="fa-regular fa-circle-question"></i>
+        <span>FAQ</span>
+      </button>
+      <button type="button" class="help-tile" data-help-target="chat">
+        <i class="fa-regular fa-comments"></i>
+        <span>Chat</span>
+      </button>
+      {% if user %}
+      <button type="button" class="help-tile" data-help-target="account">
+        <i class="fa-regular fa-user"></i>
+        <span>My Account</span>
+      </button>
+      {% endif %}
+    </section>
+
+    <div class="help-layout">
+      <section class="help-panels">
+        <article class="help-panel active" data-help-panel="contact">
+          <h2>Contact Support</h2>
+          <p class="help-muted">Reach out to our support team for access, billing, or application issues.</p>
+
+          <div class="contact-grid">
+            <div class="contact-card">
+              <label>Support Email</label>
+              <p>{{ support_email or FT_SUPPORT_EMAIL }}</p>
+              <a class="btn-primary" href="mailto:{{ support_email or FT_SUPPORT_EMAIL }}">Send Email</a>
+            </div>
+
+            <div class="contact-card">
+              <label>Contact Number</label>
+              <p>{{ support_phone or FT_SUPPORT_PHONE }}</p>
+              <a class="btn-secondary mobile-call" href="tel:{{ (support_phone or FT_SUPPORT_PHONE) | replace(' ', '') }}">
+                Call
+              </a>
+            </div>
+          </div>
+        </article>
+
+        <article class="help-panel" data-help-panel="faq">
+          <h2>FAQ</h2>
+          <div class="faq-list">
+            <details>
+              <summary>Why is my account disabled?</summary>
+              <p>Account access can be restricted by administrators. Contact support for reactivation.</p>
+            </details>
+            <details>
+              <summary>How do I get admin access?</summary>
+              <p>Admin access is granted via Keycloak role/group assignment by your platform administrator.</p>
+            </details>
+            <details>
+              <summary>Why do I see login/session issues?</summary>
+              <p>Clear browser cookies or login again. If issue persists, share your username and time with support.</p>
+            </details>
+            <details>
+              <summary>Where can I report a bug?</summary>
+              <p>Use the support email with steps, screenshots, and expected behavior for faster resolution.</p>
+            </details>
+          </div>
+        </article>
+
+        <article class="help-panel" data-help-panel="chat">
+          <h2>Chat Support</h2>
+          <p class="help-muted">Use the launcher to open chat at the bottom-right.</p>
+          <button type="button" class="btn-primary" data-open-chat>
+            Open Chat
+          </button>
+        </article>
+
+        {% if user %}
+        <article class="help-panel" data-help-panel="account">
+          <h2>My Account</h2>
+          <div class="account-grid">
+            <p><strong>Name:</strong> {{ user.full_name or user.username or "User" }}</p>
+            <p><strong>Username:</strong> {{ user.username or "-" }}</p>
+            <p><strong>Email:</strong> {{ user.email or "-" }}</p>
+            <p><strong>Provider:</strong> {{ user.auth_provider or "-" }}</p>
+          </div>
+          <div class="help-actions">
+            <a href="/" class="btn-secondary">Go To Home Page</a>
+            <a href="/profile" class="btn-secondary">Open Profile</a>
+          </div>
+        </article>
+        {% endif %}
+      </section>
+
+      <aside class="help-side">
+        <article class="side-card">
+          <h3>Need Immediate Help?</h3>
+          <p>Start with email support for account access and incident issues.</p>
+          <a href="mailto:{{ support_email or FT_SUPPORT_EMAIL }}" class="btn-primary">Email Support</a>
+        </article>
+
+        <article class="side-card compact">
+          <h3>Quick Facts</h3>
+          <ul>
+            <li>Response channel: Email</li>
+            <li>Support number: {{ support_phone or FT_SUPPORT_PHONE }}</li>
+            <li>FAQ and chat available on this page</li>
+          </ul>
+        </article>
+
+        {% if not user %}
+        <article class="side-card compact">
+          <h3>Already have access?</h3>
+          <p>Sign in to view account-specific support options.</p>
+          <a href="/login" class="btn-secondary">Sign In</a>
+        </article>
+        {% endif %}
+      </aside>
+    </div>
+  </div>
+
+  <button type="button" class="chat-fab" aria-label="Open chat" data-chat-toggle>
+    <i class="fa-regular fa-comments"></i>
+  </button>
+
+  <section class="chat-box" data-chat-box hidden>
+    <header class="chat-header">
+      <strong>Support Chat</strong>
+      <div class="chat-header-actions">
+        <button type="button" aria-label="Close chat" data-chat-close>×</button>
+      </div>
+    </header>
+
+    <div class="chat-body" id="chatBody"></div>
+
+    <div class="typing-indicator" id="typingIndicator" hidden>
+      <span></span><span></span><span></span>
+    </div>
+
+    <div class="chat-options" id="chatOptions"></div>
+
+    <form class="chat-input" id="chatForm">
+      <input type="text" id="chatInput" placeholder="Type your message..." autocomplete="off" />
+      <button type="submit">Send</button>
+    </form>
+  </section>
+</section>
+<script src="/static/js/help_support.js" defer></script>
+<script src="/static/js/chat.js"></script>
+{% endblock %}

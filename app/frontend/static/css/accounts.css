@@ -1,67 +1,278 @@
-table {
-  max-width: 90vw;
-  border-collapse: collapse;
-
-  margin: 10px;
-}
-
-th, td {
-  padding: 5px;
-  border-bottom: 1px solid #b8b9bb;
-  text-align: center;
-  vertical-align: middle;
-}
-
-th {
-  font-weight: 600;
-  background-color: #f3f4f6;
-}
-
-
-
-.accounts-tbody tr td input, 
-.accounts-tbody tr td select {
-  justify-content: center;
-  border: none;
-  background-color: transparent;
-  text-align: center;
-  -webkit-appearance: none;
-  color: black;
-}
-
-.accounts-tbody tr td input.editing, 
-.accounts-tbody tr td select.editing {
-  border: 1px solid black;
-  background-color: white;
-  border-radius: 1px;
-}
-
-.action-btns {
+.page-accounts {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.page-accounts > .title-row {
+  position: sticky;
+  top: var(--page-sticky-top);
+  z-index: 26;
+  padding: 8px 8px 10px;
+  margin: -2px -2px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-surface-strong) 74%, transparent),
+    color-mix(in srgb, var(--color-surface) 34%, transparent)
+  );
+  backdrop-filter: blur(8px);
+  border-radius: 12px;
+}
+
+.accounts-page {
+  max-width: 100%;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.accounts-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+.account-card {
+  width: 100%;
+}
+
+.account-table-card {
+  padding-bottom: 10px;
+}
+
+.account-card-title {
+  font-size: 1.08rem;
+  margin-bottom: 12px;
+}
+
+.account-toggle {
+  width: 100%;
+  display: flex;
   align-items: center;
-  border: none;
-  position: absolute;
-  /* white-space: nowrap; */
+  justify-content: space-between;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-surface-strong) 82%, transparent);
+  color: var(--color-text);
+  font-weight: 700;
 }
 
-.icon-btn {
-  color: white;
-  border: none;
-  cursor: pointer;
-  font-size: 16px;
-  padding: 5px;
-  margin: 0 2px;
+.account-toggle .chev {
+  transition: transform 0.2s ease;
 }
 
-.edit-btn {background-color: #9ebaf5;}
-.edit-btn:hover {background-color: #7a8bc4;}
-.save-btn {background-color: #16a34a;}
-.save-btn:hover {background-color: #15803d;}
-.delete-btn {background-color: #dc2626;}
-.delete-btn:hover {background-color: #b91c1c;}
-.cancel-btn {background-color: #f3f4f6; color: #dc2626;}
-.cancel-btn:hover {background-color: #fff; color: #b91c1c;}
+.account-toggle.open .chev {
+  transform: rotate(180deg);
+}
 
+.account-form {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 
+.account-form-collapsed {
+  display: none !important;
+}
 
+.account-form-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.account-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.account-field label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--color-muted);
+}
+
+.account-field input,
+.account-field select {
+  min-height: 36px;
+  border-radius: 9px;
+}
+
+.account-primary {
+  align-self: flex-end;
+  min-width: 150px;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-strong));
+  color: #fff;
+  font-weight: 600;
+}
+
+.account-table {
+  max-height: 72vh;
+  overflow: auto;
+  border-radius: 12px;
+}
+
+.accounts-table {
+  min-width: 700px;
+}
+
+.accounts-table .col-meta {
+  display: none;
+}
+
+.accounts-table td input,
+.accounts-table td select {
+  border: 1px solid transparent;
+  background: transparent;
+  min-height: 34px;
+  padding: 5px 7px;
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.accounts-table td input:focus,
+.accounts-table td select:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12);
+}
+
+.accounts-table .col-name input {
+  font-weight: 700;
+}
+
+.accounts-table .editable:disabled {
+  color: var(--color-text);
+  opacity: 1;
+}
+
+.accounts-table .editable.editing {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-surface-strong) 86%, transparent);
+}
+
+.accounts-table .action-btns {
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+
+.edit-btn {
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+}
+
+.save-btn {
+  color: var(--color-success);
+  background: color-mix(in srgb, var(--color-success) 20%, transparent);
+}
+
+.cancel-btn {
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-surface-strong) 82%, transparent);
+}
+
+.delete-btn {
+  color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 20%, transparent);
+}
+
+@media (max-width: 940px) {
+  .account-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .account-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .account-primary {
+    width: 100%;
+    align-self: stretch;
+  }
+
+  .accounts-table {
+    min-width: 0;
+    width: 100%;
+    table-layout: fixed;
+    background: transparent;
+  }
+
+  .accounts-table thead {
+    display: none;
+  }
+
+  .accounts-table tbody,
+  .accounts-table tr,
+  .accounts-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .accounts-table .account-row {
+    display: grid;
+    grid-template-columns: 1fr 84px;
+    grid-template-rows: auto auto;
+    gap: 4px 6px;
+    margin-bottom: 10px;
+    padding: 10px;
+    border-radius: 12px;
+    border: 1px solid color-mix(in srgb, var(--color-border) 78%, transparent);
+    background: color-mix(in srgb, var(--color-surface-strong) 88%, transparent);
+  }
+
+  .accounts-table td {
+    border: none;
+    padding: 0;
+  }
+
+  .accounts-table .col-name {
+    grid-column: 1 / 2;
+    grid-row: 1 / 2;
+  }
+
+  .accounts-table .col-actions {
+    grid-column: 2 / 3;
+    grid-row: 1 / 2;
+    justify-content: flex-end;
+    align-items: flex-start;
+  }
+
+  .accounts-table .col-bank,
+  .accounts-table .col-type,
+  .accounts-table .col-balance {
+    display: none;
+  }
+
+  .accounts-table .col-meta {
+    display: flex;
+    grid-column: 1 / 2;
+    grid-row: 2 / 3;
+    align-items: center;
+    gap: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    font-size: 0.85rem;
+    color: #334155;
+  }
+
+  .accounts-table .meta-balance {
+    margin-left: auto;
+    font-weight: 700;
+    color: #0f172a;
+  }
+
+  .accounts-table .action-btns .icon-btn,
+  .accounts-table .action-btns .edit-btn,
+  .accounts-table .action-btns .delete-btn,
+  .accounts-table .action-btns .save-btn,
+  .accounts-table .action-btns .cancel-btn {
+    width: 28px;
+    height: 28px;
+    font-size: 12px;
+  }
+}

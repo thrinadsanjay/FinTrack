@@ -1,0 +1,63 @@
+name: Production Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Set Version
+        run: echo "VERSION=${{ github.sha }}" >> $GITHUB_ENV
+
+      - name: Deploy to Oracle VM
+        uses: appleboy/ssh-action@v0.1.6
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /home/ubuntu/fintracker
+
+            echo "Deploying version ${{ github.sha }}"
+
+            # Save current version
+            CURRENT_VERSION=$(grep "^VERSION=" .env | cut -d '=' -f2)
+            if [ -n "$CURRENT_VERSION" ]; then
+              echo "$CURRENT_VERSION" > .previous_version
+            fi
+
+            # Pull image
+            docker pull ghcr.io/${{ github.repository }}/fintracker:${{ github.sha }}
+
+            # Update .env
+            if grep -q "^VERSION=" .env; then
+              sed -i "s/^VERSION=.*/VERSION=${{ github.sha }}/" .env
+            else
+              echo "VERSION=${{ github.sha }}" >> .env
+            fi
+
+            # Restart
+            docker compose up -d
+
+            sleep 10
+
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost/health)
+
+            if [ "$STATUS" != "200" ]; then
+              echo "Health check failed. Rolling back..."
+              ./rollback.sh
+              exit 1
+            fi
+
+      - name: Notify Success
+        if: success()
+        run: echo "Deployment Successful"
+
+      - name: Notify Failure
+        if: failure()
+        run: echo "Deployment Failed"

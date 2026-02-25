@@ -16,20 +16,47 @@ This module MUST NOT:
 """
 
 from bson import ObjectId
-from datetime import datetime, timedelta, timezone, date
+from datetime import datetime, timezone, date
 from app.db.mongo import db
 from app.services.audit import audit_log
-from app.core.guards import (
-    is_within_edit_window,
-    can_restore_today,
-    RESTORE_WINDOW_HOURS,
+from app.helpers.recurring_schedule import (
+    calculate_next_run,
+    calculate_next_occurrence,
 )
-from app.core.guards import (
-    is_within_edit_window,
-    can_restore_today,
-    RESTORE_WINDOW_HOURS,
+from app.helpers.account_balances import (
+    apply_account_delta,
+    apply_transfer_deltas,
+    delta_for_delete,
+    delta_for_edit,
+    delta_for_tx,
+)
+from app.helpers.transaction_queries import (
+    build_transactions_query,
+    resolve_transactions_sort,
+)
+from app.helpers.transaction_retry import (
+    is_retry_insufficient_funds,
+    build_retry_pending_update,
+    build_retry_resolved_update,
+)
+from app.helpers.transaction_docs import (
+    build_failed_transaction_doc,
+    build_single_transaction_doc,
+    build_transfer_transaction_docs,
+)
+from app.helpers.notification_payloads import (
+    retry_failed_payload,
+    retry_success_payload,
+    tx_added_payload,
+    tx_deleted_payload,
+    tx_failed_insufficient_payload,
+    tx_restored_payload,
+    tx_updated_payload,
 )
 from app.services.recurring_deposit import RecurringDepositService
+from app.helpers.transaction_inputs import parse_date_value, validate_category
+from app.services.notifications import upsert_notification
+from app.services.metrics import increment_transaction
 
 UTC = timezone.utc
 
@@ -253,14 +280,14 @@ async def create_transaction(
     is_recurring: bool = False,
     frequency: str | None = None,
     interval: int = 1,
-    start_date: date | None = None,
-    end_date: date | None = None,
+    start_date: date | str | None = None,
+    end_date: date | str | None = None,
     request=None,
 ):
     """
     High-level transaction creator.
-    - Always creates a real transaction immediately
-    - Optionally creates a recurring rule
+    - Creates an immediate transaction for one-time entries
+    - For recurring entries, creates only the rule (scheduler posts transactions)
     """
 
     if amount <= 0:
@@ -271,11 +298,125 @@ async def create_transaction(
     # -----------------------------
     # Validate category & subcategory
     # -----------------------------
-    category, subcategory = await _validate_category(
+    category, subcategory = await validate_category(
         category_code=category_code,
         subcategory_code=subcategory_code,
         tx_type=tx_type,
     )
+
+    source_account = await db.accounts.find_one(
+        {"_id": ObjectId(account_id), "user_id": user_oid, "deleted_at": None},
+        {"balance": 1, "name": 1},
+    )
+    if not source_account:
+        raise Exception("Account not found")
+
+    target_account = None
+    if tx_type == "transfer":
+        if not target_account_id:
+            raise Exception("Target account required")
+        target_account = await db.accounts.find_one(
+            {"_id": ObjectId(target_account_id), "user_id": user_oid, "deleted_at": None},
+            {"balance": 1, "name": 1},
+        )
+        if not target_account:
+            raise Exception("Target account not found")
+        if str(target_account["_id"]) == str(source_account["_id"]):
+            raise Exception("Source and target cannot be same")
+
+    recurring_due_today = False
+    if is_recurring:
+        if not frequency:
+            raise Exception("Recurring frequency is required")
+
+        start_date_value = parse_date_value(start_date)
+        end_date_value = parse_date_value(end_date)
+        if not start_date_value:
+            raise Exception("Start date is required")
+        if end_date_value and end_date_value < start_date_value:
+            raise Exception("End date cannot be before start date")
+
+        # Always create the recurring rule first.
+        await _add_recurring_transaction(
+            user_oid=user_oid,
+            account_id=account_id,
+            amount=amount,
+            tx_type=tx_type,
+            mode=mode,
+            description=description,
+            category=category,
+            subcategory=subcategory,
+            frequency=frequency,
+            interval=interval,
+            start_date=start_date_value,
+            end_date=end_date_value,
+            source_transaction_id=None,
+        )
+
+        next_due = calculate_next_occurrence(
+            start_date=start_date_value,
+            frequency=frequency,
+            today=datetime.now(UTC).date(),
+            include_today=True,
+            skip_missed=True,
+        )
+        recurring_due_today = next_due.date() == datetime.now(UTC).date()
+        if not recurring_due_today:
+            return None
+
+    # Fail debit/transfer when funds are insufficient, but keep a retryable failed row.
+    if tx_type == "debit" and source_account.get("balance", 0) < amount:
+        failed_id = await _add_failed_transaction(
+            user_oid=user_oid,
+            account_id=account_id,
+            amount=amount,
+            tx_type=tx_type,
+            mode=mode,
+            description=description,
+            category=category,
+            subcategory=subcategory,
+            source="manual",
+            failure_reason="insufficient_funds",
+            request=request,
+        )
+        await upsert_notification(
+            user_id=user_oid,
+            **tx_failed_insufficient_payload(
+                failed_id=str(failed_id),
+                is_transfer=False,
+                account_name=source_account.get("name", "Account"),
+                balance=source_account.get("balance", 0),
+                amount=amount,
+            ),
+        )
+        return failed_id
+
+    if tx_type == "transfer" and source_account.get("balance", 0) < amount:
+        failed_id = await _add_failed_transaction(
+            user_oid=user_oid,
+            account_id=account_id,
+            amount=amount,
+            tx_type="transfer_out",
+            mode=mode,
+            description=description,
+            category=category,
+            subcategory=subcategory,
+            source="manual_transfer",
+            failure_reason="insufficient_funds",
+            target_account_id=target_account_id,
+            request=request,
+        )
+        await upsert_notification(
+            user_id=user_oid,
+            **tx_failed_insufficient_payload(
+                failed_id=str(failed_id),
+                is_transfer=True,
+                account_name=source_account.get("name", "Account"),
+                balance=source_account.get("balance", 0),
+                amount=amount,
+            ),
+        )
+        return failed_id
 
     # -----------------------------
     # Create transaction (now)
@@ -305,49 +446,18 @@ async def create_transaction(
             request=request,
         )
 
-    # -----------------------------
-    # Create recurring rule (if needed)
-    # -----------------------------
-    if is_recurring:
-        if not frequency:
-            raise Exception("Recurring frequency is required")
-
-        await _add_recurring_transaction(
-            user_oid=user_oid,
-            account_id=account_id,
-            amount=amount,
+    await upsert_notification(
+        user_id=user_oid,
+        **tx_added_payload(
+            tx_id=str(tx_id),
             tx_type=tx_type,
-            mode=mode,
-            description=description,
-            category=category,
-            subcategory=subcategory,
-            frequency=frequency,
-            interval=interval,
-            start_date=start_date,
-            end_date=end_date,
-            source_transaction_id=tx_id,
-        )
+            amount=amount,
+        ),
+    )
+    increment_transaction()
 
     return tx_id
 
-async def _validate_category(*, category_code: str, subcategory_code: str, tx_type: str):
-    category = await db.categories.find_one(
-        {"code": category_code, "type": tx_type, "is_system": True}
-    )
-    if not category:
-        raise Exception("Invalid category")
-
-    sub = next(
-        (s for s in category["subcategories"] if s["code"] == subcategory_code),
-        None,
-    )
-    if not sub:
-        raise Exception("Invalid subcategory")
-
-    return (
-        {"code": category["code"], "name": category["name"]},
-        {"code": sub["code"], "name": sub["name"]},
-    )
 
 async def _add_single_transaction(
     *,
@@ -364,23 +474,22 @@ async def _add_single_transaction(
     now = datetime.now(UTC)
     account_oid = ObjectId(account_id)
 
-    delta = amount if tx_type == "credit" else -amount
+    delta = delta_for_tx(tx_type, amount)
 
-    tx_doc = {
-        "user_id": user_oid,
-        "account_id": account_oid,
-        "type": tx_type,
-        "mode": mode,
-        "amount": amount,
-        "description": description,
-        "category": category,
-        "subcategory": subcategory,
-        "created_at": now,
-        "deleted_at": None,
-    }
+    tx_doc = build_single_transaction_doc(
+        user_id=user_oid,
+        account_id=account_oid,
+        tx_type=tx_type,
+        mode=mode,
+        amount=amount,
+        description=description,
+        category=category,
+        subcategory=subcategory,
+        created_at=now,
+    )
 
     result = await db.transactions.insert_one(tx_doc)
-    await db.accounts.update_one({"_id": account_oid}, {"$inc": {"balance": delta}})
+    await apply_account_delta(db=db, account_id=account_oid, delta=delta)
 
     await audit_log(
         action="TRANSACTION_CREATED",
@@ -389,6 +498,51 @@ async def _add_single_transaction(
         meta={"transaction_id": str(result.inserted_id), "amount": amount},
     )
 
+    return result.inserted_id
+
+
+async def _add_failed_transaction(
+    *,
+    user_oid: ObjectId,
+    account_id: str,
+    amount: float,
+    tx_type: str,
+    mode: str,
+    description: str,
+    category: dict,
+    subcategory: dict,
+    source: str,
+    failure_reason: str,
+    target_account_id: str | None = None,
+    request=None,
+):
+    now = datetime.now(UTC)
+    tx_doc = build_failed_transaction_doc(
+        user_id=user_oid,
+        account_id=ObjectId(account_id),
+        tx_type=tx_type,
+        mode=mode,
+        amount=amount,
+        description=description,
+        category=category,
+        subcategory=subcategory,
+        source=source,
+        failure_reason=failure_reason,
+        created_at=now,
+        target_account_id=ObjectId(target_account_id) if target_account_id else None,
+    )
+
+    result = await db.transactions.insert_one(tx_doc)
+    await audit_log(
+        action="TRANSACTION_FAILED",
+        request=request,
+        user={"user_id": str(user_oid)},
+        meta={
+            "transaction_id": str(result.inserted_id),
+            "amount": amount,
+            "reason": failure_reason,
+        },
+    )
     return result.inserted_id
 
 
@@ -416,37 +570,27 @@ async def _add_transfer_transaction(
     transfer_id = ObjectId()
     now = datetime.now(UTC)
 
-    await db.transactions.insert_many([
-        {
-            "transfer_id": transfer_id,
-            "user_id": user_oid,
-            "account_id": source_oid,
-            "type": "transfer_out",
-            "mode": mode,
-            "amount": amount,
-            "description": description,
-            "category": category,
-            "subcategory": subcategory,
-            "created_at": now,
-            "deleted_at": None,
-        },
-        {
-            "transfer_id": transfer_id,
-            "user_id": user_oid,
-            "account_id": target_oid,
-            "type": "transfer_in",
-            "mode": mode,
-            "amount": amount,
-            "description": description,
-            "category": category,
-            "subcategory": subcategory,
-            "created_at": now,
-            "deleted_at": None,
-        },
-    ])
+    await db.transactions.insert_many(
+        build_transfer_transaction_docs(
+            transfer_id=transfer_id,
+            user_id=user_oid,
+            source_account_id=source_oid,
+            target_account_id=target_oid,
+            mode=mode,
+            amount=amount,
+            description=description,
+            category=category,
+            subcategory=subcategory,
+            created_at=now,
+        )
+    )
 
-    await db.accounts.update_one({"_id": source_oid}, {"$inc": {"balance": -amount}})
-    await db.accounts.update_one({"_id": target_oid}, {"$inc": {"balance": amount}})
+    await apply_transfer_deltas(
+        db=db,
+        source_account_id=source_oid,
+        target_account_id=target_oid,
+        amount=amount,
+    )
 
     return transfer_id
 
@@ -462,19 +606,12 @@ async def _add_recurring_transaction(
     subcategory: dict,
     frequency: str,
     interval: int,
-    start_date: date | None,
-    end_date: date | None,
-    source_transaction_id: ObjectId,
+    start_date: date | str | None,
+    end_date: date | str | None,
+    source_transaction_id: ObjectId | None = None,
 ):
-    start_date_value = (
-    datetime.fromisoformat(start_date).date()
-    if start_date else date.today()
-    )
-
-    end_date_value = (
-        datetime.fromisoformat(end_date).date()
-        if end_date else None
-    )
+    start_date_value = parse_date_value(start_date) or date.today()
+    end_date_value = parse_date_value(end_date)
 
 
     await RecurringDepositService.create(
@@ -507,6 +644,10 @@ async def get_user_transactions(
     date_to: str | None = None,
     category_code: str | None = None,
     subcategory_code: str | None = None,
+    search: str | None = None,
+    amount: float | None = None,
+    sort_by: str | None = None,
+    sort_dir: str | None = None,
 ):
     """
     Fetch user transactions for UI listing.
@@ -518,47 +659,23 @@ async def get_user_transactions(
 
 
 
-    user_oid = ObjectId(user_id)
-    now = datetime.now(timezone.utc)
-
-    query = {
-        "user_id": user_oid,
-        "$or": [
-            {"deleted_at": None},
-            {"deleted_at": {"$gte": now - timedelta(hours=RESTORE_WINDOW_HOURS)}},
-        ],
-    }
-
-    if account_id:
-        query["account_id"] = ObjectId(account_id)
-
-    if tx_type:
-        if tx_type == "transfer":
-            query["type"] = {"$in": ["transfer_in", "transfer_out"]}
-        else:
-            query["type"] = tx_type
-
-    if category_code:
-        query["category.code"] = category_code
-
-    if subcategory_code:
-        query["subcategory.code"] = subcategory_code
-
-    if date_from or date_to:
-        query["created_at"] = {}
-        if date_from:
-            query["created_at"]["$gte"] = datetime.fromisoformat(date_from).replace(
-                tzinfo=timezone.utc
-            )
-        if date_to:
-            query["created_at"]["$lte"] = datetime.fromisoformat(date_to).replace(
-                tzinfo=timezone.utc
-            )
+    query = build_transactions_query(
+        user_id=user_id,
+        account_id=account_id,
+        tx_type=tx_type,
+        date_from=date_from,
+        date_to=date_to,
+        category_code=category_code,
+        subcategory_code=subcategory_code,
+        search=search,
+        amount=amount,
+    )
+    sort_field, direction = resolve_transactions_sort(sort_by, sort_dir)
 
     cursor = (
         db.transactions
         .find(query)
-        .sort("created_at", -1)
+        .sort(sort_field, direction)
     )
 
     transactions = []
@@ -592,6 +709,8 @@ async def delete_transaction(
     )
     if not tx:
         raise Exception("Transaction not found")
+    if tx.get("is_failed"):
+        raise Exception("Failed transactions cannot be deleted")
 
     if tx.get("transfer_id"):
         raise Exception("Transfers must be deleted as a unit")
@@ -599,12 +718,8 @@ async def delete_transaction(
     if not is_within_edit_window(tx["created_at"]):
         raise Exception("Edit window expired")
 
-    delta = -tx["amount"] if tx["type"] == "credit" else tx["amount"]
-
-    await db.accounts.update_one(
-        {"_id": tx["account_id"]},
-        {"$inc": {"balance": delta}},
-    )
+    delta = delta_for_delete(tx["type"], tx["amount"])
+    await apply_account_delta(db=db, account_id=tx["account_id"], delta=delta)
 
     await db.transactions.update_one(
         {"_id": tx_oid},
@@ -616,6 +731,16 @@ async def delete_transaction(
         request=request,
         user={"user_id": user_id},
         meta={"transaction_id": transaction_id},
+    )
+
+    stamp = now.strftime("%Y%m%d%H%M%S%f")
+    await upsert_notification(
+        user_id=user_oid,
+        **tx_deleted_payload(
+            transaction_id=transaction_id,
+            stamp=stamp,
+            amount=tx.get("amount", 0),
+        ),
     )
 
 # ======================================================
@@ -647,12 +772,8 @@ async def restore_transaction(
     if not can_restore_today(tx["deleted_at"]):
         raise Exception("Restore window expired")
 
-    delta = tx["amount"] if tx["type"] == "credit" else -tx["amount"]
-
-    await db.accounts.update_one(
-        {"_id": tx["account_id"]},
-        {"$inc": {"balance": delta}},
-    )
+    delta = delta_for_tx(tx["type"], tx["amount"])
+    await apply_account_delta(db=db, account_id=tx["account_id"], delta=delta)
 
     await db.transactions.update_one(
         {"_id": tx_oid},
@@ -669,6 +790,16 @@ async def restore_transaction(
         request=request,
         user={"user_id": user_id},
         meta={"transaction_id": transaction_id},
+    )
+
+    stamp = now.strftime("%Y%m%d%H%M%S%f")
+    await upsert_notification(
+        user_id=user_oid,
+        **tx_restored_payload(
+            transaction_id=transaction_id,
+            stamp=stamp,
+            amount=tx.get("amount", 0),
+        ),
     )
 
 # ======================================================
@@ -701,21 +832,15 @@ async def edit_transaction(
     )
     if not tx:
         raise Exception("Transaction not found")
+    if tx.get("is_failed"):
+        raise Exception("Failed transactions cannot be edited")
 
     if not is_within_edit_window(tx["created_at"]):
         raise Exception("Edit window expired")
 
     old_amount = tx["amount"]
-    delta = (
-        new_amount - old_amount
-        if tx["type"] == "credit"
-        else old_amount - new_amount
-    )
-
-    await db.accounts.update_one(
-        {"_id": tx["account_id"]},
-        {"$inc": {"balance": delta}},
-    )
+    delta = delta_for_edit(tx["type"], old_amount, new_amount)
+    await apply_account_delta(db=db, account_id=tx["account_id"], delta=delta)
 
     await db.transactions.update_one(
         {"_id": tx_oid},
@@ -736,10 +861,228 @@ async def edit_transaction(
         meta={"transaction_id": transaction_id},
     )
 
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
+    await upsert_notification(
+        user_id=user_oid,
+        **tx_updated_payload(
+            transaction_id=transaction_id,
+            stamp=stamp,
+            new_amount=new_amount,
+        ),
+    )
+
+
+async def retry_failed_recurring_transaction(
+    *,
+    user_id: str,
+    failed_transaction_id: str,
+    request=None,
+) -> bool:
+    user_oid = ObjectId(user_id)
+    failed_oid = ObjectId(failed_transaction_id)
+    now = datetime.now(UTC)
+
+    failed_tx = await db.transactions.find_one(
+        {
+            "_id": failed_oid,
+            "user_id": user_oid,
+            "deleted_at": None,
+            "is_failed": True,
+        }
+    )
+    if not failed_tx:
+        raise Exception("Failed recurring transaction not found")
+
+    retry_status = failed_tx.get("retry_status", "pending")
+    if retry_status == "resolved":
+        return True
+
+    account = await db.accounts.find_one(
+        {"_id": failed_tx["account_id"], "user_id": user_oid, "deleted_at": None},
+        {"balance": 1, "name": 1},
+    )
+    if not account:
+        raise Exception("Account not found")
+
+    amount = failed_tx.get("amount", 0)
+    tx_type = failed_tx.get("type")
+    source = failed_tx.get("source", "")
+    if is_retry_insufficient_funds(
+        tx_type=tx_type,
+        balance=account.get("balance", 0),
+        amount=amount,
+    ):
+        await db.transactions.update_one(
+            {"_id": failed_oid},
+            build_retry_pending_update(now=now),
+        )
+        await upsert_notification(
+            user_id=user_oid,
+            **retry_failed_payload(
+                failed_id=str(failed_oid),
+                account_name=account.get("name", "Account"),
+                balance=account.get("balance", 0),
+                amount=amount,
+            ),
+        )
+        return False
+
+    existing_success = await db.transactions.find_one(
+        {
+            "user_id": user_oid,
+            "retry_of": failed_oid,
+            "deleted_at": None,
+            "is_failed": {"$ne": True},
+        },
+        {"_id": 1},
+    )
+    if existing_success:
+        await db.transactions.update_one(
+            {"_id": failed_oid},
+            build_retry_resolved_update(
+                now=now,
+                retry_transaction_id=existing_success["_id"],
+            ),
+        )
+        return True
+
+    retry_reference = None
+    if source == "recurring":
+        recurring_id = failed_tx.get("recurring_id")
+        scheduled_for = failed_tx.get("scheduled_for")
+        if not recurring_id or not scheduled_for:
+            raise Exception("Failed transaction is missing recurring context")
+        if scheduled_for.tzinfo is None:
+            scheduled_for = scheduled_for.replace(tzinfo=UTC)
+
+        recurring_rule = await db.recurring_deposits.find_one(
+            {"_id": recurring_id, "user_id": user_oid}
+        )
+        if not recurring_rule:
+            raise Exception("Recurring rule not found for retry")
+
+        success_tx = build_single_transaction_doc(
+            user_id=failed_tx["user_id"],
+            account_id=failed_tx["account_id"],
+            tx_type=tx_type,
+            mode=failed_tx.get("mode", "online"),
+            amount=amount,
+            description=failed_tx.get("description", ""),
+            category=failed_tx.get("category"),
+            subcategory=failed_tx.get("subcategory"),
+            created_at=now,
+            source="recurring_retry",
+            recurring_id=recurring_id,
+            scheduled_for=scheduled_for,
+            retry_of=failed_oid,
+        )
+        insert_result = await db.transactions.insert_one(success_tx)
+        retry_reference = insert_result.inserted_id
+
+        delta = delta_for_tx(tx_type, amount)
+        await apply_account_delta(db=db, account_id=failed_tx["account_id"], delta=delta)
+
+        next_run = calculate_next_run(
+            last_run=scheduled_for.date(),
+            start_date=recurring_rule["start_date"].date(),
+            frequency=recurring_rule["frequency"],
+        )
+        await db.recurring_deposits.update_one(
+            {"_id": recurring_id},
+            {
+                "$set": {
+                    "last_run": scheduled_for,
+                    "next_run": next_run,
+                }
+            },
+        )
+    elif tx_type == "transfer_out":
+        target_account_id = failed_tx.get("target_account_id")
+        if not target_account_id:
+            raise Exception("Target account missing for failed transfer")
+        target_account = await db.accounts.find_one(
+            {"_id": target_account_id, "user_id": user_oid, "deleted_at": None},
+            {"_id": 1},
+        )
+        if not target_account:
+            raise Exception("Target account not found for retry")
+
+        transfer_id = ObjectId()
+        await db.transactions.insert_many(
+            build_transfer_transaction_docs(
+                transfer_id=transfer_id,
+                user_id=failed_tx["user_id"],
+                source_account_id=failed_tx["account_id"],
+                target_account_id=target_account_id,
+                mode=failed_tx.get("mode", "online"),
+                amount=amount,
+                description=failed_tx.get("description", ""),
+                category=failed_tx.get("category"),
+                subcategory=failed_tx.get("subcategory"),
+                created_at=now,
+                source="manual_transfer_retry",
+                retry_of=failed_oid,
+            )
+        )
+        await apply_transfer_deltas(
+            db=db,
+            source_account_id=failed_tx["account_id"],
+            target_account_id=target_account_id,
+            amount=amount,
+        )
+        retry_reference = transfer_id
+    else:
+        success_tx = build_single_transaction_doc(
+            user_id=failed_tx["user_id"],
+            account_id=failed_tx["account_id"],
+            tx_type=tx_type,
+            mode=failed_tx.get("mode", "online"),
+            amount=amount,
+            description=failed_tx.get("description", ""),
+            category=failed_tx.get("category"),
+            subcategory=failed_tx.get("subcategory"),
+            created_at=now,
+            source="manual_retry",
+            retry_of=failed_oid,
+        )
+        insert_result = await db.transactions.insert_one(success_tx)
+        retry_reference = insert_result.inserted_id
+        delta = delta_for_tx(tx_type, amount)
+        await apply_account_delta(db=db, account_id=failed_tx["account_id"], delta=delta)
+
+    await db.transactions.update_one(
+        {"_id": failed_oid},
+        build_retry_resolved_update(
+            now=now,
+            retry_transaction_id=retry_reference,
+        ),
+    )
+
+    await upsert_notification(
+        user_id=user_oid,
+        **retry_success_payload(
+            failed_id=str(failed_oid),
+            description=failed_tx.get("description", "Transaction"),
+            amount=amount,
+        ),
+    )
+
+    await audit_log(
+        action="RECURRING_RETRY_SUCCESS",
+        request=request,
+        user={"user_id": user_id},
+        meta={
+            "failed_transaction_id": failed_transaction_id,
+            "retry_transaction_id": str(retry_reference),
+        },
+    )
+    return True
+
 __all__ = [
     "create_transaction",
     "get_user_transactions",
     "delete_transaction",
     "restore_transaction",
     "edit_transaction",
+    "retry_failed_recurring_transaction",
 ]
