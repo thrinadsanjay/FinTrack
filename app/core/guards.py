@@ -63,12 +63,17 @@ def admin_required(f):
             return RedirectResponse("/account-disabled", status_code=303)
         db_user = await db.users.find_one(
             {"_id": ObjectId(user_id), "deleted_at": None, "is_active": True},
-            {"_id": 1},
+            {"_id": 1, "is_admin": 1},
         )
         if not db_user:
             request.session.clear()
             return RedirectResponse("/account-disabled", status_code=303)
-        if not user.get("is_admin"):
+
+        # Enforce current DB role, not stale session role.
+        if not bool(db_user.get("is_admin")):
+            if isinstance(user, dict):
+                user["is_admin"] = False
+                request.session["user"] = user
             return RedirectResponse("/", status_code=303)
         return await f(request, *args, **kwargs)
     return decorated_function

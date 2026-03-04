@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from bson import ObjectId
 from app.db.mongo import db
+from app.services.telegram import send_notification_alert
 
 
 async def upsert_notification(
@@ -25,15 +26,18 @@ async def upsert_notification(
         "updated_at": now,
     }
 
+    content_changed = (
+        not existing
+        or existing.get("type") != notif_type
+        or existing.get("title") != title
+        or existing.get("message") != message
+    )
+
     if is_read is not None:
         set_payload["is_read"] = is_read
     else:
         # Keep read state when content is unchanged; mark unread only for new/updated alerts.
-        if not existing or (
-            existing.get("type") != notif_type
-            or existing.get("title") != title
-            or existing.get("message") != message
-        ):
+        if content_changed:
             set_payload["is_read"] = False
 
     await db.notifications.update_one(
@@ -44,6 +48,15 @@ async def upsert_notification(
         },
         upsert=True,
     )
+
+    if content_changed:
+        await send_notification_alert(
+            user_id=user_id,
+            key=key,
+            notif_type=notif_type,
+            title=title,
+            message=message,
+        )
 
 
 async def list_notifications(

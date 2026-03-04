@@ -358,6 +358,40 @@
 }
 
 .table-card .table-scroll {
+  border-radius: 12px;
+}
+
+.table-card tbody td {
+  vertical-align: middle;
+}
+
+.table-card .col-actions,
+.table-card .recurring-col-actions {
+  white-space: nowrap;
+  border-bottom-color: transparent;
+}
+
+.table-card .col-actions .row-menu,
+.table-card .recurring-col-actions .row-menu {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.table-card .col-actions .row-menu form,
+.table-card .recurring-col-actions .row-menu form {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+}
+
+.table-card .col-actions .row-menu > *,
+.table-card .recurring-col-actions .row-menu > * {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.table-card .table-scroll {
   max-height: 72vh;
 }
 
@@ -534,6 +568,17 @@
 
 .recurring-header {
   margin-bottom: 8px;
+  z-index: 30;
+  background: color-mix(in srgb, var(--color-surface-strong) 96%, transparent);
+  backdrop-filter: none;
+}
+
+.page-recurring .list-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: color-mix(in srgb, var(--color-surface-strong) 96%, transparent);
+  backdrop-filter: none;
 }
 
 .active-chip {
@@ -644,6 +689,31 @@
 
 .recurring-col-actions .row-menu {
   gap: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.recurring-col-actions {
+  vertical-align: middle;
+}
+
+.recurring-col-actions .row-menu form {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+}
+
+.recurring-col-actions .row-menu > * {
+  display: inline-flex;
+  align-items: center;
+}
+
+.recurring-col-actions .icon-btn,
+.recurring-col-actions .edit-transaction-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 @media (max-width: 1024px) {

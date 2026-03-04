@@ -142,7 +142,13 @@
                 <input type="text" name="smtp_username" value="{{ admin_settings.smtp.username }}">
               </label>
               <label>Password
-                <input type="password" name="smtp_password" value="{{ admin_settings.smtp.password }}">
+                <input
+                  type="password"
+                  name="smtp_password"
+                  value=""
+                  placeholder="{% if admin_settings.smtp.password %}Configured (hidden). Enter only to change.{% else %}Enter SMTP password{% endif %}"
+                  autocomplete="new-password"
+                >
               </label>
               <label>From Email
                 <input type="email" name="smtp_from_email" value="{{ admin_settings.smtp.from_email }}">
@@ -167,10 +173,61 @@
                 <input type="text" name="telegram_bot_username" value="{{ admin_settings.telegram.bot_username }}">
               </label>
               <label>Bot Token
-                <input type="text" name="telegram_bot_token" value="{{ admin_settings.telegram.bot_token }}">
+                <input
+                  type="password"
+                  name="telegram_bot_token"
+                  value=""
+                  placeholder="{% if admin_settings.telegram.bot_token %}Configured (hidden). Enter only to change.{% else %}Enter Telegram bot token{% endif %}"
+                  autocomplete="new-password"
+                >
               </label>
-              <label>Chat ID
-                <input type="text" name="telegram_chat_id" value="{{ admin_settings.telegram.chat_id }}">
+              <label class="full">Webhook URL
+                <input
+                  type="text"
+                  name="telegram_webhook_url"
+                  data-telegram-webhook-url
+                  value="{{ admin_settings.telegram.webhook_url or '' }}"
+                  placeholder="https://your-public-domain/api/telegram/webhook"
+                >
+              </label>
+              <label class="toggle inline">
+                <input type="checkbox" name="telegram_polling_enabled" {% if admin_settings.telegram.polling_enabled %}checked{% endif %}>
+                <span>Polling Fallback (LAN Dev)</span>
+              </label>
+              <label class="full">Webhook Controls
+                <div class="action-row">
+                  <button type="button" class="btn-action" data-telegram-webhook-set>Set Webhook</button>
+                  <button type="button" class="btn-action" data-telegram-webhook-info>Check Webhook</button>
+                  <button type="button" class="btn-action warn" data-telegram-webhook-delete>Delete Webhook</button>
+                </div>
+              </label>
+              <label class="full">Polling Controls
+                <div class="action-row">
+                  <button type="button" class="btn-action" data-telegram-poll-run-once>Run Poll Now</button>
+                  <button type="button" class="btn-action" data-telegram-poll-status>Check Poll Status</button>
+                </div>
+              </label>
+              <div class="telegram-poll-widget full" data-telegram-poll-widget>
+                <div class="telegram-poll-title">Polling Health</div>
+                <div class="telegram-poll-grid">
+                  <div><span>Status</span><strong data-telegram-poll-health-status>Unknown</strong></div>
+                  <div><span>Last Poll</span><strong data-telegram-poll-health-time>-</strong></div>
+                  <div><span>Last Update ID</span><strong data-telegram-poll-health-update>-</strong></div>
+                  <div><span>Processed</span><strong data-telegram-poll-health-processed>0 updates / 0 messages</strong></div>
+                  <div><span>Config</span><strong data-telegram-poll-health-config>-</strong></div>
+                  <div><span>Webhook</span><strong data-telegram-poll-health-webhook>-</strong></div>
+                </div>
+                <div class="telegram-poll-error" data-telegram-poll-health-error hidden></div>
+              </div>
+              <label class="full">Broadcast Message
+                <div class="action-row">
+                  <input
+                    type="text"
+                    data-telegram-broadcast-message
+                    placeholder="Enter your message"
+                  >
+                  <button type="button" class="btn-action" data-telegram-broadcast>Send</button>
+                </div>
               </label>
             </div>
           </section>

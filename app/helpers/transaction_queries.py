@@ -1,9 +1,13 @@
 import re
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from bson import ObjectId
 
 from app.core.guards import RESTORE_WINDOW_HOURS
+from app.core.time import DEFAULT_TZ
+
+APP_ZONE = ZoneInfo(DEFAULT_TZ)
 
 
 def build_transactions_query(
@@ -58,13 +62,23 @@ def build_transactions_query(
     if date_from or date_to:
         created_at_filter: dict = {}
         if date_from:
-            created_at_filter["$gte"] = datetime.fromisoformat(date_from).replace(
-                tzinfo=timezone.utc
+            local_start = datetime.fromisoformat(date_from).replace(
+                hour=0,
+                minute=0,
+                second=0,
+                microsecond=0,
+                tzinfo=APP_ZONE,
             )
+            created_at_filter["$gte"] = local_start.astimezone(timezone.utc)
         if date_to:
-            created_at_filter["$lte"] = datetime.fromisoformat(date_to).replace(
-                tzinfo=timezone.utc
+            local_end = datetime.fromisoformat(date_to).replace(
+                hour=23,
+                minute=59,
+                second=59,
+                microsecond=999999,
+                tzinfo=APP_ZONE,
             )
+            created_at_filter["$lte"] = local_end.astimezone(timezone.utc)
         query["created_at"] = created_at_filter
 
     return query

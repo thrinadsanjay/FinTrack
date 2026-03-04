@@ -17,6 +17,8 @@ def _now() -> datetime:
 
 
 def default_admin_settings() -> dict:
+    default_base = str(settings.FT_BASE_URL or "").strip().rstrip("/")
+    default_telegram_webhook = f"{default_base}/api/telegram/webhook" if default_base else ""
     return {
         "application": {
             "enabled": True,
@@ -41,7 +43,9 @@ def default_admin_settings() -> dict:
             "enabled": False,
             "bot_username": "",
             "bot_token": "",
-            "chat_id": "",
+            "webhook_url": default_telegram_webhook,
+            "webhook_secret": "",
+            "polling_enabled": False,
         },
         "push_notifications": {
             "enabled": False,

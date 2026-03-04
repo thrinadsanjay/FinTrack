@@ -105,6 +105,7 @@ FinTrack/
 | `FT_LOG_DIR` | No | `logs` | `/var/log/fintracker` | Log directory |
 | `FT_LOG_FILE` | No | `logs/app.log` | `/var/log/fintracker/app.log` | Log file path |
 | `SCHEDULER_RUN_TIME` | No | `5:41 AM IST` | `11:00 PM UTC` | Daily recurring-job runtime (parsed by scheduler helper) |
+| `FT_NOTIFICATION_ALERT_INTERVAL_SECONDS` | No | `300` | `120` | Interval in seconds for background alert sweep that pushes eligible bell alerts to Telegram |
 | `FT_DEFAULT_ADMIN_USERNAME` | No | `admin` | `admin` | Initial admin username on first boot |
 | `FT_DEFAULT_ADMIN_PASSWORD` | No | `admin123` | `ChangeMeNow!` | Initial admin password on first boot |
 | `FT_DEFAULT_ADMIN_EMAIL` | No | `admin@example.com` | `admin@example.com` | Initial admin email on first boot |
@@ -172,6 +173,7 @@ FT_DEBUG_LOG=false
 FT_LOG_DIR=logs
 FT_LOG_FILE=logs/app.log
 SCHEDULER_RUN_TIME=5:41 AM IST
+FT_NOTIFICATION_ALERT_INTERVAL_SECONDS=300
 
 # -------------------------------
 # Bootstrap admin (optional)
@@ -226,6 +228,48 @@ source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
+
+## Telegram Transaction Flow
+
+Users can add one-time transactions from Telegram using a guided flow that mirrors the UI:
+
+1. Type selection (`Income` / `Expense` / `Transfer`)
+2. Category selection (based on selected type)
+3. Subcategory selection (based on selected category)
+4. Source account selection
+5. Target account selection (for transfer only)
+6. Mode, amount, description, confirm
+
+### Prerequisites
+
+1. In Admin > Settings > Telegram Integration:
+   - Enable Telegram
+   - Set `Bot Username`
+   - Set `Bot Token`
+   - Set `Webhook URL` (`https://<public-domain>/api/telegram/webhook`) for webhook mode
+2. User must link Telegram from Profile > Register Telegram.
+3. Configure delivery mode:
+
+Webhook mode (public HTTPS):
+
+- Use Admin buttons: `Set Webhook`, `Check Webhook`, `Delete Webhook`
+- Or CLI:
+
+```bash
+curl -X POST "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" \
+  -d "url=https://<YOUR_DOMAIN>/api/telegram/webhook"
+```
+
+Polling fallback mode (LAN/dev):
+
+- Enable `Polling Fallback (LAN Dev)` in Telegram Integration and Save.
+- Ensure webhook is deleted (use `Delete Webhook`) because Telegram does not allow webhook + polling together.
+
+### User Commands
+
+- `/start` or `/help` -> show bot help and quick actions
+- `Add Transaction` or `/addtransaction` -> start flow
+- `Cancel` or `/cancel` -> cancel in-progress flow
 
 ## CI/CD Pipeline (GitHub Actions)
 
