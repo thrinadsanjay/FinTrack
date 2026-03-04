@@ -31,6 +31,7 @@ from app.routers import (
     recurring_deposit,
     chat,
     ai_chat,
+    telegram_bot,
 )
 from app.web.home import router as web_router
 from app.web.auth import router as web_auth_router
@@ -44,6 +45,8 @@ from app.web.help_support import router as web_help_support_router
 from app.web.templates import templates
 
 from app.schedulers.recurring_scheduler import run_recurring_transactions
+from app.schedulers.notification_scheduler import run_notification_alert_sweep
+from app.services.telegram_polling import run_telegram_poll_once
 
 from app.helpers.recurring_schedule import parse_scheduler_time
 
@@ -173,6 +176,7 @@ app.include_router(categories.router, prefix="/api/categories", tags=["Categorie
 app.include_router(recurring_deposit.router, prefix="/api/recurring-deposits", tags=["Recurring Deposits"])
 app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
 app.include_router(ai_chat.router, prefix="/api/aichat", tags=["AI Chat"])
+app.include_router(telegram_bot.router, prefix="/api/telegram", tags=["Telegram"])
 
 # WEB ROUTES
 app.include_router(web_router)
@@ -193,6 +197,10 @@ app.include_router(web_help_support_router)
 scheduler = AsyncIOScheduler(timezone="UTC")
 run_time = os.getenv("SCHEDULER_RUN_TIME", "5:41 AM IST")
 hour, minute, timezone = parse_scheduler_time(run_time)
+notification_alert_interval_seconds = max(
+    60,
+    int(os.getenv("FT_NOTIFICATION_ALERT_INTERVAL_SECONDS", "300")),
+)
 
 # ======================================================
 # STARTUP / SHUTDOWN
@@ -220,8 +228,31 @@ async def on_startup():
         replace_existing=True,
     )
 
+    scheduler.add_job(
+        run_telegram_poll_once,
+        trigger="interval",
+        seconds=8,
+        id="telegram-polling",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+
+    scheduler.add_job(
+        run_notification_alert_sweep,
+        trigger="interval",
+        seconds=notification_alert_interval_seconds,
+        id="notification-alert-sweep",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+
     scheduler.start()
-    logger.info("⏱ Recurring transaction scheduler started")
+    logger.info(
+        "⏱ Background schedulers started (recurring + telegram polling + notification sweep/%ss)",
+        notification_alert_interval_seconds,
+    )
 
 
 @app.on_event("shutdown")

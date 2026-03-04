@@ -1,4 +1,4 @@
-from datetime import datetime, timezone, timedelta
+from datetime import timezone, timedelta
 from bson import ObjectId
 
 from app.db.mongo import db
@@ -6,10 +6,10 @@ from app.helpers.dashboard_time import start_of_today_utc, next_month_start
 
 
 async def fetch_upcoming_bills(uid: ObjectId, account_map: dict) -> tuple[list[dict], list[dict], dict]:
-    now = datetime.now(timezone.utc)
     today_start = start_of_today_utc()
+    now = today_start
     tomorrow_start = today_start + timedelta(days=1)
-    next_month = next_month_start(now)
+    next_month = next_month_start(today_start)
     next_7_end = today_start + timedelta(days=7)
 
     recurring_cursor = db.recurring_deposits.find(

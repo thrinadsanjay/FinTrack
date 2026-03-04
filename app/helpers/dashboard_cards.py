@@ -2,7 +2,7 @@ from datetime import datetime, timezone, timedelta
 from bson import ObjectId
 
 from app.db.mongo import db
-from app.helpers.dashboard_time import start_of_day_utc
+from app.helpers.dashboard_time import APP_TIMEZONE, APP_ZONE
 
 
 async def fetch_total_balance(uid: ObjectId) -> float:
@@ -155,7 +155,7 @@ async def fetch_daily_trend(uid: ObjectId, trend_start: datetime, trend_end: dat
                             "$dateToString": {
                                 "format": "%Y-%m-%d",
                                 "date": "$created_at",
-                                "timezone": "UTC",
+                                "timezone": APP_TIMEZONE,
                             }
                         },
                         "type": "$type",
@@ -173,16 +173,17 @@ async def fetch_daily_trend(uid: ObjectId, trend_start: datetime, trend_end: dat
         daily_map.setdefault(day, {"credit": 0, "debit": 0})
         daily_map[day][tx_type] = row.get("total", 0) or 0
 
-    today = datetime.now(timezone.utc)
-    day_count = (start_of_day_utc(today) - trend_start).days + 1
+    start_local_date = trend_start.astimezone(APP_ZONE).date()
+    end_local_date = trend_end.astimezone(APP_ZONE).date()
+    day_count = max((end_local_date - start_local_date).days, 0)
     out: list[dict] = []
     for i in range(day_count):
-        day_dt = trend_start + timedelta(days=i)
-        day_key = day_dt.strftime("%Y-%m-%d")
+        day_local_date = start_local_date + timedelta(days=i)
+        day_key = day_local_date.strftime("%Y-%m-%d")
         out.append(
             {
                 "date": day_key,
-                "day": day_dt.day,
+                "day": day_local_date.day,
                 "income": daily_map.get(day_key, {}).get("credit", 0),
                 "expense": daily_map.get(day_key, {}).get("debit", 0),
             }
@@ -191,15 +192,17 @@ async def fetch_daily_trend(uid: ObjectId, trend_start: datetime, trend_end: dat
 
 
 async def fetch_monthly_trend_12m(uid: ObjectId, month_anchor: datetime) -> tuple[list[dict], dict[str, dict], str, str]:
-    start_year = month_anchor.year
-    start_month = month_anchor.month
+    anchor_local = month_anchor.astimezone(APP_ZONE)
+    start_year = anchor_local.year
+    start_month = anchor_local.month
     for _ in range(11):
         if start_month == 1:
             start_month = 12
             start_year -= 1
         else:
             start_month -= 1
-    month_start = datetime(start_year, start_month, 1, tzinfo=timezone.utc)
+    month_start_local = datetime(start_year, start_month, 1, tzinfo=APP_ZONE)
+    month_start = month_start_local.astimezone(timezone.utc)
 
     monthly_cursor = db.transactions.aggregate(
         [
@@ -219,7 +222,7 @@ async def fetch_monthly_trend_12m(uid: ObjectId, month_anchor: datetime) -> tupl
                             "$dateToString": {
                                 "format": "%Y-%m",
                                 "date": "$created_at",
-                                "timezone": "UTC",
+                                "timezone": APP_TIMEZONE,
                             }
                         },
                         "type": "$type",
@@ -238,29 +241,29 @@ async def fetch_monthly_trend_12m(uid: ObjectId, month_anchor: datetime) -> tupl
         monthly_map[month_key][tx_type] = row.get("total", 0) or 0
 
     trend_monthly: list[dict] = []
-    current = month_start
+    current_local = month_start_local
     for _ in range(12):
-        month_key = current.strftime("%Y-%m")
+        month_key = current_local.strftime("%Y-%m")
         credit = monthly_map.get(month_key, {}).get("credit", 0)
         debit = monthly_map.get(month_key, {}).get("debit", 0)
         trend_monthly.append(
             {
                 "month": month_key,
-                "month_short": current.strftime("%b"),
-                "month_label": current.strftime("%b %Y"),
+                "month_short": current_local.strftime("%b"),
+                "month_label": current_local.strftime("%b %Y"),
                 "income": credit,
                 "expense": debit,
                 "net": credit - debit,
             }
         )
-        next_month = (current.month % 12) + 1
-        next_year = current.year + (1 if current.month == 12 else 0)
-        current = datetime(next_year, next_month, 1, tzinfo=timezone.utc)
+        next_month = (current_local.month % 12) + 1
+        next_year = current_local.year + (1 if current_local.month == 12 else 0)
+        current_local = datetime(next_year, next_month, 1, tzinfo=APP_ZONE)
 
     range_label = ""
     if trend_monthly:
         range_label = f"{trend_monthly[0]['month_label']} - {trend_monthly[-1]['month_label']}"
-    till_label = month_anchor.strftime("%b %Y")
+    till_label = anchor_local.strftime("%b %Y")
     return trend_monthly, monthly_map, range_label, till_label
 
 

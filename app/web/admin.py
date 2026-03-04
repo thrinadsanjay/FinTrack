@@ -2,6 +2,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 from copy import deepcopy
+import secrets
+import logging
 import smtplib
 from email.message import EmailMessage
 from email.utils import parseaddr
@@ -12,13 +14,23 @@ from bson import ObjectId
 
 from app.core.guards import admin_required
 from app.core.csrf import verify_csrf_token
+from app.core.config import settings
 from app.db.mongo import db
 from app.services.users import list_users
+from app.services.audit import audit_log
 from app.services.admin_settings import get_admin_settings, save_admin_settings
+from app.services.telegram import (
+    send_message,
+    set_webhook,
+    get_webhook_info,
+    delete_webhook,
+)
+from app.services.telegram_polling import run_telegram_poll_once, get_telegram_poll_status
 from app.web.templates import templates
 
 router = APIRouter()
 LOGO_UPLOAD_DIR = Path("app/frontend/static/uploads/logos")
+logger = logging.getLogger(__name__)
 
 
 def _to_aware_utc(dt: datetime | None) -> datetime | None:
@@ -35,6 +47,15 @@ def _is_protected_local_admin(user_doc: dict) -> bool:
         and user_doc.get("auth_provider") == "local"
         and user_doc.get("is_admin")
     )
+
+
+def _audit_actor(request: Request) -> dict:
+    session_user = (request.session.get("user") or {}) if request else {}
+    return {
+        "user_id": str(session_user.get("user_id") or ""),
+        "username": session_user.get("username"),
+        "auth_provider": session_user.get("auth_provider"),
+    }
 
 
 @router.get("")
@@ -93,6 +114,10 @@ async def admin_dashboard(request: Request):
         db_status = "DOWN"
 
     admin_settings = await get_admin_settings()
+    telegram_cfg = (admin_settings.get("telegram") or {}).copy()
+    if not str(telegram_cfg.get("webhook_url") or "").strip():
+        telegram_cfg["webhook_url"] = _default_telegram_webhook_url()
+    admin_settings["telegram"] = telegram_cfg
 
     return templates.TemplateResponse(
         "admin.html",
@@ -128,6 +153,13 @@ def _bool_from_form(value: str | None) -> bool:
 def _is_email(value: str) -> bool:
     _, addr = parseaddr(value or "")
     return bool(addr and "@" in addr and "." in addr.split("@")[-1])
+
+
+def _default_telegram_webhook_url() -> str:
+    base = str(settings.FT_BASE_URL or "").strip().rstrip("/")
+    if not base:
+        return ""
+    return f"{base}/api/telegram/webhook"
 
 
 def _send_smtp_test_mail(*, host: str, port: int, username: str, password: str, from_email: str, to_email: str, tls: bool) -> None:
@@ -172,7 +204,8 @@ async def admin_save_settings(
     telegram_enabled: str | None = Form(None),
     telegram_bot_username: str = Form(""),
     telegram_bot_token: str = Form(""),
-    telegram_chat_id: str = Form(""),
+    telegram_webhook_url: str = Form(""),
+    telegram_polling_enabled: str | None = Form(None),
     push_enabled: str | None = Form(None),
     push_provider: str = Form("webpush"),
     push_vapid_public_key: str = Form(""),
@@ -196,6 +229,11 @@ async def admin_save_settings(
     verify_csrf_token(request, csrf_token)
     current_settings = await get_admin_settings()
     current_application = current_settings.get("application") or {}
+    current_smtp = current_settings.get("smtp") or {}
+    current_telegram = current_settings.get("telegram") or {}
+
+    submitted_smtp_password = smtp_password.strip()
+    submitted_telegram_token = telegram_bot_token.strip()
 
     settings_payload = {
         "application": {
@@ -213,15 +251,17 @@ async def admin_save_settings(
             "host": smtp_host.strip(),
             "port": smtp_port.strip(),
             "username": smtp_username.strip(),
-            "password": smtp_password.strip(),
+            "password": submitted_smtp_password or str(current_smtp.get("password") or "").strip(),
             "from_email": smtp_from_email.strip(),
             "tls": _bool_from_form(smtp_tls),
         },
         "telegram": {
             "enabled": _bool_from_form(telegram_enabled),
             "bot_username": telegram_bot_username.strip().lstrip("@"),
-            "bot_token": telegram_bot_token.strip(),
-            "chat_id": telegram_chat_id.strip(),
+            "bot_token": submitted_telegram_token or str(current_telegram.get("bot_token") or "").strip(),
+            "webhook_url": telegram_webhook_url.strip() or _default_telegram_webhook_url(),
+            "webhook_secret": str(current_telegram.get("webhook_secret") or "").strip(),
+            "polling_enabled": _bool_from_form(telegram_polling_enabled),
         },
         "push_notifications": {
             "enabled": _bool_from_form(push_enabled),
@@ -258,6 +298,15 @@ async def admin_save_settings(
         frozen_app["maintenance_message"] = maintenance_message.strip()
         frozen_settings["application"] = frozen_app
         await save_admin_settings(frozen_settings)
+        await audit_log(
+            action="ADMIN_SETTINGS_MAINTENANCE_UPDATED",
+            request=request,
+            user=_audit_actor(request),
+            meta={
+                "maintenance_mode": frozen_app.get("maintenance_mode"),
+                "maintenance_message_length": len(str(frozen_app.get("maintenance_message") or "")),
+            },
+        )
         return RedirectResponse("/admin#settings", status_code=303)
 
     if logo_file and logo_file.filename:
@@ -271,6 +320,23 @@ async def admin_save_settings(
             settings_payload["application"]["logo_url"] = f"/static/uploads/logos/{file_name}"
 
     await save_admin_settings(settings_payload)
+    await audit_log(
+        action="ADMIN_SETTINGS_UPDATED",
+        request=request,
+        user=_audit_actor(request),
+        meta={
+            "maintenance_mode": settings_payload["application"].get("maintenance_mode"),
+            "debug_mode": settings_payload["application"].get("debug_mode"),
+            "smtp_enabled": settings_payload["smtp"].get("enabled"),
+            "telegram_enabled": settings_payload["telegram"].get("enabled"),
+            "telegram_polling_enabled": settings_payload["telegram"].get("polling_enabled"),
+            "push_enabled": settings_payload["push_notifications"].get("enabled"),
+            "auth_enabled": settings_payload["authentication"].get("enabled"),
+            "db_enabled": settings_payload["database"].get("enabled"),
+            "backup_enabled": settings_payload["backup"].get("enabled"),
+            "logo_updated": bool(settings_payload["application"].get("logo_url")),
+        },
+    )
     return RedirectResponse("/admin#settings", status_code=303)
 
 
@@ -282,15 +348,19 @@ async def admin_test_smtp(request: Request):
     smtp = (payload or {}).get("smtp") or {}
     to_email = str((payload or {}).get("to_email") or "").strip()
 
+    current_settings = await get_admin_settings()
+    current_smtp = (current_settings.get("smtp") or {})
+
     enabled = bool(smtp.get("enabled"))
     host = str(smtp.get("host") or "").strip()
     port_raw = str(smtp.get("port") or "").strip()
     username = str(smtp.get("username") or "").strip()
-    password = str(smtp.get("password") or "")
+    password = str(smtp.get("password") or "").strip() or str(current_smtp.get("password") or "")
     from_email = str(smtp.get("from_email") or "").strip()
     tls = bool(smtp.get("tls"))
 
     if not enabled:
+        await audit_log(action="ADMIN_SMTP_TEST_BLOCKED", request=request, user=_audit_actor(request), meta={"reason": "smtp_disabled"})
         return JSONResponse({"detail": "Enable SMTP first."}, status_code=400)
     if not host:
         return JSONResponse({"detail": "SMTP host is required."}, status_code=400)
@@ -317,9 +387,229 @@ async def admin_test_smtp(request: Request):
             tls=tls,
         )
     except Exception as exc:
+        await audit_log(
+            action="ADMIN_SMTP_TEST_FAILED",
+            request=request,
+            user=_audit_actor(request),
+            meta={"to_email": to_email, "host": host, "port": port, "tls": tls, "error": str(exc)},
+        )
         return JSONResponse({"detail": f"SMTP test failed: {exc}"}, status_code=400)
 
+    await audit_log(
+        action="ADMIN_SMTP_TEST_SUCCESS",
+        request=request,
+        user=_audit_actor(request),
+        meta={"to_email": to_email, "host": host, "port": port, "tls": tls},
+    )
     return JSONResponse({"status": "ok"})
+
+
+@router.post("/settings/telegram/webhook/set")
+@admin_required
+async def admin_set_telegram_webhook(request: Request):
+    verify_csrf_token(request, request.headers.get("X-CSRF-Token"))
+    payload = await request.json()
+    telegram = (payload or {}).get("telegram") or {}
+    enabled = bool(telegram.get("enabled"))
+    bot_token = str(telegram.get("bot_token") or "").strip()
+    webhook_url = str(telegram.get("webhook_url") or "").strip()
+
+    if not bot_token:
+        current_settings = await get_admin_settings()
+        bot_token = str(((current_settings.get("telegram") or {}).get("bot_token") or "")).strip()
+
+    if not enabled:
+        return JSONResponse({"detail": "Enable Telegram integration first."}, status_code=400)
+    if not bot_token:
+        return JSONResponse({"detail": "Telegram bot token is required."}, status_code=400)
+    if not webhook_url:
+        return JSONResponse({"detail": "Webhook URL is required."}, status_code=400)
+    if not webhook_url.lower().startswith("https://"):
+        return JSONResponse({"detail": "Webhook URL must be HTTPS."}, status_code=400)
+
+    # Backward-compatible hardening: generate secret once and attach to setWebhook.
+    current_settings = await get_admin_settings()
+    telegram_current = (current_settings.get("telegram") or {}).copy()
+    webhook_secret = str(telegram_current.get("webhook_secret") or "").strip()
+    if not webhook_secret:
+        webhook_secret = secrets.token_urlsafe(32)
+        telegram_current["webhook_secret"] = webhook_secret
+        current_settings["telegram"] = telegram_current
+        await save_admin_settings(current_settings)
+
+    result = await set_webhook(
+        bot_token=bot_token,
+        webhook_url=webhook_url,
+        secret_token=webhook_secret,
+    )
+    if not bool((result or {}).get("ok")):
+        await audit_log(
+            action="ADMIN_TELEGRAM_WEBHOOK_SET_FAILED",
+            request=request,
+            user=_audit_actor(request),
+            meta={"webhook_url": webhook_url, "description": (result or {}).get("description")},
+        )
+        return JSONResponse({"detail": (result or {}).get("description") or "Failed to set webhook."}, status_code=400)
+    await audit_log(
+        action="ADMIN_TELEGRAM_WEBHOOK_SET",
+        request=request,
+        user=_audit_actor(request),
+        meta={"webhook_url": webhook_url},
+    )
+    return JSONResponse({"status": "ok", "result": result.get("result", True)})
+
+
+@router.post("/settings/telegram/webhook/info")
+@admin_required
+async def admin_get_telegram_webhook_info(request: Request):
+    verify_csrf_token(request, request.headers.get("X-CSRF-Token"))
+    payload = await request.json()
+    telegram = (payload or {}).get("telegram") or {}
+    bot_token = str(telegram.get("bot_token") or "").strip()
+    if not bot_token:
+        current_settings = await get_admin_settings()
+        bot_token = str(((current_settings.get("telegram") or {}).get("bot_token") or "")).strip()
+
+    if not bot_token:
+        return JSONResponse({"detail": "Telegram bot token is required."}, status_code=400)
+
+    result = await get_webhook_info(bot_token=bot_token)
+    if not bool((result or {}).get("ok")):
+        await audit_log(
+            action="ADMIN_TELEGRAM_WEBHOOK_INFO_FAILED",
+            request=request,
+            user=_audit_actor(request),
+            meta={"description": (result or {}).get("description")},
+        )
+        return JSONResponse({"detail": (result or {}).get("description") or "Failed to fetch webhook info."}, status_code=400)
+    await audit_log(
+        action="ADMIN_TELEGRAM_WEBHOOK_INFO_VIEWED",
+        request=request,
+        user=_audit_actor(request),
+        meta={"has_url": bool(((result or {}).get("result") or {}).get("url"))},
+    )
+    return JSONResponse({"status": "ok", "webhook": result.get("result") or {}})
+
+
+@router.post("/settings/telegram/webhook/delete")
+@admin_required
+async def admin_delete_telegram_webhook(request: Request):
+    verify_csrf_token(request, request.headers.get("X-CSRF-Token"))
+    payload = await request.json()
+    telegram = (payload or {}).get("telegram") or {}
+    bot_token = str(telegram.get("bot_token") or "").strip()
+    if not bot_token:
+        current_settings = await get_admin_settings()
+        bot_token = str(((current_settings.get("telegram") or {}).get("bot_token") or "")).strip()
+    drop_pending = bool((payload or {}).get("drop_pending_updates"))
+
+    if not bot_token:
+        return JSONResponse({"detail": "Telegram bot token is required."}, status_code=400)
+
+    result = await delete_webhook(bot_token=bot_token, drop_pending_updates=drop_pending)
+    if not bool((result or {}).get("ok")):
+        await audit_log(
+            action="ADMIN_TELEGRAM_WEBHOOK_DELETE_FAILED",
+            request=request,
+            user=_audit_actor(request),
+            meta={"description": (result or {}).get("description"), "drop_pending_updates": drop_pending},
+        )
+        return JSONResponse({"detail": (result or {}).get("description") or "Failed to delete webhook."}, status_code=400)
+    await audit_log(
+        action="ADMIN_TELEGRAM_WEBHOOK_DELETED",
+        request=request,
+        user=_audit_actor(request),
+        meta={"drop_pending_updates": drop_pending},
+    )
+    return JSONResponse({"status": "ok", "result": result.get("result", True)})
+
+
+@router.post("/settings/telegram/poll/status")
+@admin_required
+async def admin_telegram_poll_status(request: Request):
+    verify_csrf_token(request, request.headers.get("X-CSRF-Token"))
+    await audit_log(
+        action="ADMIN_TELEGRAM_POLL_STATUS_VIEWED",
+        request=request,
+        user=_audit_actor(request),
+    )
+    return JSONResponse({"status": "ok", "poll": get_telegram_poll_status()})
+
+
+@router.post("/settings/telegram/poll/run-once")
+@admin_required
+async def admin_telegram_poll_run_once(request: Request):
+    verify_csrf_token(request, request.headers.get("X-CSRF-Token"))
+    await run_telegram_poll_once()
+    await audit_log(
+        action="ADMIN_TELEGRAM_POLL_RUN_ONCE",
+        request=request,
+        user=_audit_actor(request),
+    )
+    return JSONResponse({"status": "ok", "poll": get_telegram_poll_status()})
+
+
+@router.post("/settings/telegram/broadcast")
+@admin_required
+async def admin_broadcast_telegram(request: Request):
+    verify_csrf_token(request, request.headers.get("X-CSRF-Token"))
+    payload = await request.json()
+    telegram = (payload or {}).get("telegram") or {}
+    message = str((payload or {}).get("message") or "").strip()
+
+    enabled = bool(telegram.get("enabled"))
+    bot_token = str(telegram.get("bot_token") or "").strip()
+    if not bot_token:
+        current_settings = await get_admin_settings()
+        bot_token = str(((current_settings.get("telegram") or {}).get("bot_token") or "")).strip()
+
+    if not enabled:
+        return JSONResponse({"detail": "Enable Telegram integration first."}, status_code=400)
+    if not bot_token:
+        return JSONResponse({"detail": "Telegram bot token is required."}, status_code=400)
+    if not message:
+        return JSONResponse({"detail": "Broadcast message is required."}, status_code=400)
+    if len(message) > 3000:
+        return JSONResponse({"detail": "Message is too long (max 3000 chars)."}, status_code=400)
+
+    cursor = db.users.find(
+        {
+            "deleted_at": None,
+            "telegram_chat_id": {"$exists": True, "$ne": ""},
+        },
+        {"telegram_chat_id": 1},
+    )
+    recipients = [u async for u in cursor]
+    total = len(recipients)
+    sent = 0
+    failed = 0
+
+    for recipient in recipients:
+        chat_id = str(recipient.get("telegram_chat_id") or "").strip()
+        if not chat_id:
+            continue
+        try:
+            await send_message(bot_token=bot_token, chat_id=chat_id, text=message)
+            sent += 1
+        except Exception as exc:
+            failed += 1
+            logger.warning("Telegram broadcast failed for chat_id=%s: %s", chat_id, exc)
+
+    await audit_log(
+        action="ADMIN_TELEGRAM_BROADCAST_SENT",
+        request=request,
+        user=_audit_actor(request),
+        meta={"total": total, "sent": sent, "failed": failed, "message_length": len(message)},
+    )
+
+    return JSONResponse(
+        {
+            "status": "ok",
+            "total": total,
+            "sent": sent,
+            "failed": failed,
+        }
+    )
 
 
 @router.post("/users/{user_id}/toggle-active")
@@ -364,6 +654,12 @@ async def admin_toggle_user_active(
     await db.users.update_one(
         {"_id": ObjectId(user_id)},
         {"$set": {"is_active": next_active, "updated_at": datetime.now(timezone.utc)}},
+    )
+    await audit_log(
+        action="ADMIN_USER_ACTIVE_TOGGLED",
+        request=request,
+        user=_audit_actor(request),
+        meta={"target_user_id": user_id, "is_active": next_active},
     )
     return RedirectResponse("/admin", status_code=303)
 
@@ -414,4 +710,10 @@ async def admin_toggle_user_admin(
         update_query["$unset"] = {"admin_override": ""}
 
     await db.users.update_one({"_id": ObjectId(user_id)}, update_query)
+    await audit_log(
+        action="ADMIN_USER_ROLE_TOGGLED",
+        request=request,
+        user=_audit_actor(request),
+        meta={"target_user_id": user_id, "is_admin": next_admin},
+    )
     return RedirectResponse("/admin", status_code=303)

@@ -2,26 +2,13 @@ from datetime import date, datetime, timezone, timedelta
 from bson import ObjectId
 
 from app.db.mongo import db
+from app.helpers.dashboard_time import (
+    start_of_today_utc,
+    start_of_month_utc,
+    next_month_start,
+    APP_ZONE,
+)
 from app.helpers.recurring_schedule import VALID_FREQUENCIES, calculate_next_run
-
-
-def _start_of_today_utc() -> datetime:
-    now = datetime.now(timezone.utc)
-    return datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
-
-
-def _start_of_month_utc() -> datetime:
-    now = datetime.now(timezone.utc)
-    return datetime(now.year, now.month, 1, tzinfo=timezone.utc)
-
-
-def _next_month_start(dt: datetime) -> datetime:
-    return datetime(
-        dt.year + (1 if dt.month == 12 else 0),
-        1 if dt.month == 12 else dt.month + 1,
-        1,
-        tzinfo=timezone.utc,
-    )
 
 
 def _as_utc(dt: datetime | None) -> datetime | None:
@@ -30,6 +17,13 @@ def _as_utc(dt: datetime | None) -> datetime | None:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
+
+
+def _as_app_local(dt: datetime | None) -> datetime | None:
+    utc_dt = _as_utc(dt)
+    if not utc_dt:
+        return None
+    return utc_dt.astimezone(APP_ZONE)
 
 
 def _recurring_rule_item(rule: dict, account_map: dict) -> dict:
@@ -117,7 +111,7 @@ def _merge_high_frequency_rows(items: list[dict]) -> list[dict]:
 def _group_recurring_items_by_date(items: list[dict], *, reverse: bool = False) -> list[dict]:
     grouped: dict[str, dict] = {}
     for item in items:
-        due_at = _as_utc(item.get("due_at")) or _as_utc(item.get("next_payment_at"))
+        due_at = _as_app_local(item.get("due_at")) or _as_app_local(item.get("next_payment_at"))
         if due_at:
             key = due_at.date().isoformat()
             label = due_at.strftime("%d %b %Y")
@@ -242,11 +236,11 @@ def _project_rule_amount_until_month_end(
 
 async def fetch_dashboard_recurring_overview(uid: ObjectId, account_map: dict) -> dict:
     now = datetime.now(timezone.utc)
-    today_start = _start_of_today_utc()
+    today_start = start_of_today_utc()
     tomorrow_start = today_start + timedelta(days=1)
     day_after_tomorrow_start = today_start + timedelta(days=2)
-    next_month_start = _next_month_start(today_start)
-    month_start = _start_of_month_utc()
+    month_end_exclusive = next_month_start(today_start)
+    month_start = start_of_month_utc()
 
     recurring_source_match = {"$in": ["recurring", "recurring_retry"]}
     recurring_rule_meta = {}
@@ -300,7 +294,7 @@ async def fetch_dashboard_recurring_overview(uid: ObjectId, account_map: dict) -
                 "deleted_at": None,
                 "source": recurring_source_match,
                 "is_failed": {"$ne": True},
-                "scheduled_for": {"$gte": month_start, "$lt": next_month_start},
+                "scheduled_for": {"$gte": month_start, "$lt": month_end_exclusive},
             }
         )
         .sort("scheduled_for", -1)
@@ -318,7 +312,7 @@ async def fetch_dashboard_recurring_overview(uid: ObjectId, account_map: dict) -
                     {"end_date": None},
                     {"end_date": {"$gte": tomorrow_start}},
                 ],
-                "next_run": {"$gte": tomorrow_start, "$lt": next_month_start},
+                "next_run": {"$gte": tomorrow_start, "$lt": month_end_exclusive},
             }
         )
         .sort("next_run", 1)
@@ -334,7 +328,7 @@ async def fetch_dashboard_recurring_overview(uid: ObjectId, account_map: dict) -
                 {"end_date": None},
                 {"end_date": {"$gte": today_start}},
             ],
-            "next_run": {"$lt": next_month_start},
+            "next_run": {"$lt": month_end_exclusive},
         },
         {
             "frequency": 1,
@@ -353,7 +347,7 @@ async def fetch_dashboard_recurring_overview(uid: ObjectId, account_map: dict) -
                 "deleted_at": None,
                 "source": recurring_source_match,
                 "is_failed": True,
-                "scheduled_for": {"$gte": month_start, "$lt": next_month_start},
+                "scheduled_for": {"$gte": month_start, "$lt": month_end_exclusive},
             }
         )
         .sort("scheduled_for", -1)
@@ -368,7 +362,7 @@ async def fetch_dashboard_recurring_overview(uid: ObjectId, account_map: dict) -
                     "deleted_at": None,
                     "source": recurring_source_match,
                     "is_failed": {"$ne": True},
-                    "scheduled_for": {"$gte": month_start, "$lt": next_month_start},
+                    "scheduled_for": {"$gte": month_start, "$lt": month_end_exclusive},
                 }
             },
             {
@@ -430,7 +424,7 @@ async def fetch_dashboard_recurring_overview(uid: ObjectId, account_map: dict) -
                 rule=rule,
                 window_start_inclusive=day_after_tomorrow_start,
                 account_map=account_map,
-                window_end_exclusive=next_month_start,
+                window_end_exclusive=month_end_exclusive,
             )
         )
 
@@ -531,7 +525,7 @@ async def fetch_dashboard_recurring_overview(uid: ObjectId, account_map: dict) -
         projected_value = _project_rule_amount_until_month_end(
             rule=rule,
             from_dt=today_start,
-            month_end_exclusive=next_month_start,
+            month_end_exclusive=month_end_exclusive,
         )
         projected_remaining_this_month += projected_value
         if (rule.get("frequency") or "").lower() == "daily":
@@ -560,7 +554,7 @@ async def fetch_dashboard_recurring_overview(uid: ObjectId, account_map: dict) -
             "source": recurring_source_match,
             "is_failed": True,
             "retry_status": {"$ne": "resolved"},
-            "scheduled_for": {"$gte": month_start, "$lt": next_month_start},
+            "scheduled_for": {"$gte": month_start, "$lt": month_end_exclusive},
         }
     )
 
@@ -584,7 +578,7 @@ async def fetch_dashboard_recurring_overview(uid: ObjectId, account_map: dict) -
         "remaining_amount": remaining_amount,
         "total_scheduled_amount": total_scheduled_amount,
         "paid_progress_percent": paid_progress_percent,
-        "next_due_label": next_due_dt.strftime("%d %b %Y") if next_due_dt else None,
+        "next_due_label": _as_app_local(next_due_dt).strftime("%d %b %Y") if next_due_dt else None,
         "failed_month_count": failed_month_count,
         "has_failures": failed_month_count > 0,
         "generated_at": now,

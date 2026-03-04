@@ -140,6 +140,10 @@
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12);
 }
 
+.accounts-table td {
+  vertical-align: middle;
+}
+
 .accounts-table .col-name input {
   font-weight: 700;
 }
@@ -155,8 +159,24 @@
 }
 
 .accounts-table .action-btns {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
   flex-wrap: nowrap;
   gap: 4px;
+  border-bottom-color: transparent;
+}
+
+.accounts-table .col-actions {
+  white-space: nowrap;
+  border-bottom-color: transparent;
+}
+
+.accounts-table .action-btns > * {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .edit-btn {

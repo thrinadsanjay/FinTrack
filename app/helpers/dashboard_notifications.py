@@ -2,7 +2,7 @@ from datetime import datetime, timezone, timedelta
 from bson import ObjectId
 
 from app.db.mongo import db
-from app.helpers.dashboard_time import start_of_today_utc
+from app.helpers.dashboard_time import start_of_today_utc, app_now
 from app.services.notifications import upsert_notification, list_notifications
 
 
@@ -81,7 +81,7 @@ async def persist_dashboard_notifications(
     ).sort("next_run", 1)
 
     active_scheduled_today_keys = set()
-    today_key = today_start.strftime("%Y-%m-%d")
+    today_key = app_now().strftime("%Y-%m-%d")
 
     async for rule in recurring_today_cursor:
         rule_id = str(rule.get("_id"))

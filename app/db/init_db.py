@@ -52,6 +52,8 @@ async def init_indexes():
     # Telegram OTP verification
     await db.telegram_otp_verifications.create_index([("user_id", 1)], unique=True)
     await db.telegram_otp_verifications.create_index([("expires_at", 1)], expireAfterSeconds=0)
+    await db.telegram_tx_sessions.create_index([("chat_id", 1)], unique=True)
+    await db.telegram_tx_sessions.create_index([("updated_at", -1)])
 
 
     

@@ -90,7 +90,9 @@ p {
 }
 
 .app-shell {
-  min-height: 100dvh;
+  height: calc(100vh - var(--page-viewport-offset));
+  height: calc(100dvh - var(--page-viewport-offset));
+  min-height: calc(100dvh - var(--page-viewport-offset));
   display: flex;
   flex-direction: column;
   transition: transform 0.22s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.22s ease;
