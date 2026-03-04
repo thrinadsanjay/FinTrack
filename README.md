@@ -10,6 +10,9 @@ It provides a server-rendered web app (Jinja2) plus JSON APIs for accounts, tran
 - Transaction management: credit, debit, and self-transfer flows
 - Recurring workflows: scheduled recurring transaction materialization
 - Analytics dashboard: balances, cashflow trends, top spending categories, alerts
+- Admin Center: overview, users, support requests, and centralized runtime settings
+- Support chat: user-to-admin live support conversations in Admin dashboard
+- Telegram integration: user linking, OTP verification, transaction flow, and alerts
 - Audit logging for critical security and business actions
 
 ## System Architecture
@@ -114,6 +117,7 @@ FinTrack/
 Notes:
 - Admin UI Settings are saved in MongoDB (`app_settings` collection). Env vars above provide startup defaults/fallbacks.
 - If you disable local admin bootstrap, ensure Keycloak admin role/group mapping is configured correctly.
+- Business-day boundaries for dashboard/alerts are aligned to `Asia/Kolkata` (IST).
 
 ### Docker Compose Companion Variables
 
@@ -240,6 +244,9 @@ Users can add one-time transactions from Telegram using a guided flow that mirro
 5. Target account selection (for transfer only)
 6. Mode, amount, description, confirm
 
+It also supports quick natural-language parsing.  
+Example: `100 swiggy order from kotak` -> bot infers likely type/category/subcategory/account/mode and asks for confirmation before saving.
+
 ### Prerequisites
 
 1. In Admin > Settings > Telegram Integration:
@@ -253,6 +260,7 @@ Users can add one-time transactions from Telegram using a guided flow that mirro
 Webhook mode (public HTTPS):
 
 - Use Admin buttons: `Set Webhook`, `Check Webhook`, `Delete Webhook`
+- `Set Webhook` now configures a webhook secret token for request verification.
 - Or CLI:
 
 ```bash
@@ -264,6 +272,46 @@ Polling fallback mode (LAN/dev):
 
 - Enable `Polling Fallback (LAN Dev)` in Telegram Integration and Save.
 - Ensure webhook is deleted (use `Delete Webhook`) because Telegram does not allow webhook + polling together.
+
+### Telegram Alerts
+
+When Telegram is enabled and user is linked, selected in-app alerts are mirrored to Telegram:
+
+- Transactions scheduled for today
+- Low balance warnings / balance threshold alerts
+- Insufficient funds / recurring failures
+
+Delivery is driven by background sweep interval:
+
+- `FT_NOTIFICATION_ALERT_INTERVAL_SECONDS` (default `300`)
+
+### Telegram Commands
+
+- `/start` -> start/help prompt
+- `/help` -> available features and usage
+- `/addtransaction` or `Add Transaction` -> guided transaction flow
+- `/last5` -> last 5 transactions
+- `/balance` -> total + per-account balances
+- `/summary` -> current month income/expense summary
+- `/cancel` -> cancel active Telegram transaction flow
+
+## Admin Settings Overview
+
+Admin > Settings includes runtime-configurable modules:
+
+- Application (name, logo URL/upload, support contacts, debug, maintenance mode/message)
+- SMTP (with test mail action)
+- Telegram (bot username/token, webhook URL/actions, polling health widget, broadcast)
+- Push Notifications
+- Authentication integration
+- Database settings
+- Backup settings
+
+Security and behavior notes:
+
+- Secrets are write-only in UI (SMTP password, Telegram bot token are hidden on read).
+- Existing secrets are retained when those fields are left blank on save.
+- Maintenance mode enforces read-only behavior for most write operations.
 
 ### User Commands
 
