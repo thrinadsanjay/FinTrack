@@ -4,6 +4,7 @@ from fastapi import APIRouter, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.core.csrf import verify_csrf_token
+from app.core.errors import AppError
 from app.core.guards import login_required
 from app.services.dashboard import get_user_notifications
 from app.services.recurring_deposit import RecurringDepositService
@@ -119,13 +120,13 @@ async def edit_recurring_rule(
             end_date=parsed_end_date,
             request=request,
         )
-    except Exception as exc:
+    except AppError as exc:
         return await _render_recurring_page(
             request=request,
             status=status,
             edit_id=recurring_id,
             error=str(exc),
-            status_code=400,
+            status_code=exc.status_code,
         )
 
     return RedirectResponse(f"/recurring?status={status}", status_code=303)
@@ -147,12 +148,12 @@ async def pause_recurring_rule(
             recurring_id=recurring_id,
             request=request,
         )
-    except Exception as exc:
+    except AppError as exc:
         return await _render_recurring_page(
             request=request,
             status=status,
             error=str(exc),
-            status_code=400,
+            status_code=exc.status_code,
         )
     return RedirectResponse(f"/recurring?status={status}", status_code=303)
 
@@ -173,12 +174,12 @@ async def resume_recurring_rule(
             recurring_id=recurring_id,
             request=request,
         )
-    except Exception as exc:
+    except AppError as exc:
         return await _render_recurring_page(
             request=request,
             status=status,
             error=str(exc),
-            status_code=400,
+            status_code=exc.status_code,
         )
     return RedirectResponse(f"/recurring?status={status}", status_code=303)
 
@@ -199,11 +200,11 @@ async def end_recurring_rule(
             recurring_id=recurring_id,
             request=request,
         )
-    except Exception as exc:
+    except AppError as exc:
         return await _render_recurring_page(
             request=request,
             status=status,
             error=str(exc),
-            status_code=400,
+            status_code=exc.status_code,
         )
     return RedirectResponse(f"/recurring?status={status}", status_code=303)

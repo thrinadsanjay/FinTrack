@@ -6,6 +6,137 @@
   }
 })();
 
+(function pushNotificationsBootstrap() {
+  const body = document.body;
+  const userId = String((body && body.dataset && body.dataset.userId) || "").trim();
+  if (!userId) return;
+  if (!("serviceWorker" in navigator) || !("Notification" in window)) return;
+
+  const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+  function base64UrlToUint8Array(base64String) {
+    const pad = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + pad).replace(/-/g, '+').replace(/_/g, '/');
+    const raw = window.atob(base64);
+    const output = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i += 1) output[i] = raw.charCodeAt(i);
+    return output;
+  }
+
+  async function fetchPushConfig() {
+    const res = await fetch('/notifications/push/config', { credentials: 'same-origin' });
+    if (!res.ok) return null;
+    const data = await res.json().catch(() => null);
+    return data?.push || null;
+  }
+
+  async function saveWebPushSubscription(subscription) {
+    await fetch('/notifications/push/subscribe', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': csrf,
+      },
+      body: JSON.stringify({ subscription }),
+    });
+  }
+
+  async function saveFcmToken(token) {
+    await fetch('/notifications/push/fcm/register', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': csrf,
+      },
+      body: JSON.stringify({ token }),
+    });
+  }
+
+  async function ensureWebPushSubscription(pushCfg) {
+    if (!("PushManager" in window) || !pushCfg.vapid_public_key) return;
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: base64UrlToUint8Array(pushCfg.vapid_public_key),
+      });
+    }
+    if (sub) {
+      const subJson = sub.toJSON();
+      const endpoint = String((subJson || {}).endpoint || '');
+      const cacheKey = 'ft-push-endpoint-v1';
+      const savedEndpoint = localStorage.getItem(cacheKey) || '';
+      if (endpoint && endpoint !== savedEndpoint) {
+        await saveWebPushSubscription(subJson);
+        localStorage.setItem(cacheKey, endpoint);
+      }
+    }
+  }
+
+  async function ensureFirebaseToken(pushCfg) {
+    const firebaseConfig = pushCfg?.firebase_config || {};
+    const required = ['apiKey', 'projectId', 'messagingSenderId', 'appId'];
+    if (!required.every((k) => String(firebaseConfig[k] || '').trim())) {
+      return;
+    }
+    if (!pushCfg.vapid_public_key) return;
+
+    const [{ initializeApp }, { getMessaging, getToken }] = await Promise.all([
+      import('https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js'),
+      import('https://www.gstatic.com/firebasejs/12.10.0/firebase-messaging.js'),
+    ]);
+
+    const app = initializeApp(firebaseConfig, 'fintrack-push');
+    const messaging = getMessaging(app);
+    const reg = await navigator.serviceWorker.ready;
+    const token = await getToken(messaging, {
+      vapidKey: pushCfg.vapid_public_key,
+      serviceWorkerRegistration: reg,
+    });
+
+    if (!token) return;
+    const cacheKey = 'ft-fcm-token-v1';
+    const savedToken = localStorage.getItem(cacheKey) || '';
+    if (token !== savedToken) {
+      await saveFcmToken(token);
+      localStorage.setItem(cacheKey, token);
+    }
+  }
+
+  async function ensurePushSubscription() {
+    try {
+      const pushCfg = await fetchPushConfig();
+      if (!pushCfg || !pushCfg.enabled) return;
+
+      let permission = Notification.permission;
+      if (permission === 'default') {
+        permission = await Notification.requestPermission();
+      }
+      if (permission !== 'granted') return;
+
+      const provider = String(pushCfg.provider || 'webpush').toLowerCase();
+      if (provider === 'firebase') {
+        await ensureFirebaseToken(pushCfg);
+      } else {
+        await ensureWebPushSubscription(pushCfg);
+      }
+    } catch (err) {
+      console.warn('Push bootstrap failed:', err);
+    }
+  }
+
+  navigator.serviceWorker.addEventListener('message', (event) => {
+    const data = (event && event.data) || {};
+    if (data.type !== 'ft-open-url') return;
+    if (data.url) window.location.href = String(data.url);
+  });
+
+  ensurePushSubscription();
+})();
+
 (function themeMode() {
   const key = "ft-theme-mode";
   const root = document.documentElement;

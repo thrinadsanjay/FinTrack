@@ -1,4 +1,7 @@
 :root {
+  --app-font-family: "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --app-font-size: 15px;
+  --app-line-height: 1.45;
   --color-bg-1: #d6e0ef;
   --color-bg-2: #a2bfdc;
   --color-bg-3: #d9f2ec;
@@ -20,6 +23,9 @@
   --radius-card: 16px;
   --radius-control: 10px;
   --content-bottom-gap: 62px;
+  --page-max-width: 1920px;
+  --page-padding-x: clamp(8px, 1.2vw, 14px);
+  --page-padding-y: 8px;
   --page-sticky-top: 0px;
   --page-viewport-offset: 128px;
 }
@@ -70,7 +76,11 @@ body {
 
 body {
   color: var(--color-text);
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  font-family: var(--app-font-family);
+  font-size: var(--app-font-size);
+  line-height: var(--app-line-height);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
   background:
     radial-gradient(circle at 8% 8%, color-mix(in srgb, var(--color-bg-2) 32%, transparent), transparent 40%),
     radial-gradient(circle at 90% 88%, color-mix(in srgb, var(--color-bg-3) 30%, transparent), transparent 42%),
@@ -107,7 +117,7 @@ p {
   overflow: auto;
   overflow-x: hidden;
   scrollbar-gutter: stable both-edges;
-  padding: 8px clamp(8px, 1.2vw, 14px) calc(var(--content-bottom-gap) + env(safe-area-inset-bottom));
+  padding: var(--page-padding-y) var(--page-padding-x) calc(var(--content-bottom-gap) + env(safe-area-inset-bottom));
 }
 
 body.user-authenticated {
@@ -162,9 +172,11 @@ body.maintenance-on form :is(input, select, textarea, button):disabled {
 
 .page {
   width: 100%;
-  max-width: 100%;
+  max-width: var(--page-max-width);
   margin: 0 auto;
   padding-inline: 1px;
+  min-width: 0;
+  min-height: 100%;
 }
 
 .title-row {
@@ -204,6 +216,67 @@ body.maintenance-on form :is(input, select, textarea, button):disabled {
   box-shadow: 0 10px 28px var(--color-shadow);
   backdrop-filter: blur(6px);
   padding: 14px;
+}
+
+.form-alert {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.form-alert-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.form-alert-text {
+  line-height: 1.35;
+}
+
+.form-alert-error {
+  color: color-mix(in srgb, var(--color-danger) 85%, var(--color-text));
+  background: color-mix(in srgb, var(--color-danger) 12%, transparent);
+  border-color: color-mix(in srgb, var(--color-danger) 38%, var(--color-border));
+}
+
+.form-alert-error .form-alert-icon {
+  color: #ffffff;
+  background: color-mix(in srgb, var(--color-danger) 80%, #000000 10%);
+}
+
+.form-alert-success {
+  color: color-mix(in srgb, var(--color-success) 86%, var(--color-text));
+  background: color-mix(in srgb, var(--color-success) 12%, transparent);
+  border-color: color-mix(in srgb, var(--color-success) 38%, var(--color-border));
+}
+
+.form-alert-success .form-alert-icon {
+  color: #ffffff;
+  background: color-mix(in srgb, var(--color-success) 82%, #000000 10%);
+}
+
+.form-alert-info {
+  color: color-mix(in srgb, var(--color-primary) 86%, var(--color-text));
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  border-color: color-mix(in srgb, var(--color-primary) 36%, var(--color-border));
+}
+
+.form-alert-info .form-alert-icon {
+  color: #ffffff;
+  background: color-mix(in srgb, var(--color-primary) 82%, #000000 10%);
 }
 
 .table-scroll {
@@ -1278,4 +1351,74 @@ input[type="number"] {
   .notif-flyout-item {
     transition: none;
   }
+}
+
+/* Persistent navbar height across pages */
+.desktop-nav {
+  min-height: 56px;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.navbar {
+  min-height: 56px;
+}
+
+@media (max-width: 768px) {
+  .mobile-top {
+    min-height: 52px;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  .navbar {
+    min-height: 52px;
+  }
+}
+
+
+body.biometric-lock-active {
+  overflow: hidden;
+}
+
+.biometric-lock-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2500;
+  display: grid;
+  place-items: center;
+  padding: 14px;
+  background: rgba(3, 8, 20, 0.64);
+  backdrop-filter: blur(4px);
+}
+
+.biometric-lock-overlay.hidden {
+  display: none !important;
+}
+
+.biometric-lock-card {
+  width: min(420px, 100%);
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--color-border) 92%, #c7d3e2);
+  background: color-mix(in srgb, var(--color-surface-strong) 94%, transparent);
+  box-shadow: 0 18px 40px var(--color-shadow);
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.biometric-lock-card h3 {
+  font-size: 1.08rem;
+  margin: 0;
+}
+
+.biometric-lock-message {
+  color: var(--color-muted);
+  margin: 0;
+}
+
+.biometric-lock-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
 }

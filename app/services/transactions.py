@@ -57,6 +57,8 @@ from app.services.recurring_deposit import RecurringDepositService
 from app.helpers.transaction_inputs import parse_date_value, validate_category
 from app.services.notifications import upsert_notification
 from app.services.metrics import increment_transaction
+from app.helpers.money import round_money
+from app.core.errors import ValidationError, NotFoundError, ConflictError
 
 UTC = timezone.utc
 
@@ -102,7 +104,7 @@ UTC = timezone.utc
 #     """
 
 #     if amount <= 0:
-#         raise Exception("Amount must be positive")
+#         raise ValidationError("Amount must be positive")
 
 #     # is_recurring = recurring is not None
 
@@ -133,24 +135,24 @@ UTC = timezone.utc
 #         {"_id": source_oid, "user_id": user_oid, "deleted_at": None}
 #     )
 #     if not source:
-#         raise Exception("Account not found")
+#         raise NotFoundError("Account not found")
 
 #     # ======================================================
 #     # TRANSFER (UNCHANGED)
 #     # ======================================================
 #     if tx_type == "transfer":
 #         if not target_account_id:
-#             raise Exception("Target account required")
+#             raise ValidationError("Target account required")
 
 #         target_oid = ObjectId(target_account_id)
 #         if target_oid == source_oid:
-#             raise Exception("Source and target cannot be same")
+#             raise ValidationError("Source and target cannot be same")
 
 #         target = await db.accounts.find_one(
 #             {"_id": target_oid, "user_id": user_oid, "deleted_at": None}
 #         )
 #         if not target:
-#             raise Exception("Target account not found")
+#             raise NotFoundError("Target account not found")
 
 #         if source["balance"] < amount:
 #             raise Exception("Insufficient balance")
@@ -291,7 +293,9 @@ async def create_transaction(
     """
 
     if amount <= 0:
-        raise Exception("Amount must be positive")
+        raise ValidationError("Amount must be positive")
+
+    amount = round_money(amount)
 
     user_oid = ObjectId(user_id)
 
@@ -309,32 +313,32 @@ async def create_transaction(
         {"balance": 1, "name": 1},
     )
     if not source_account:
-        raise Exception("Account not found")
+        raise NotFoundError("Account not found")
 
     target_account = None
     if tx_type == "transfer":
         if not target_account_id:
-            raise Exception("Target account required")
+            raise ValidationError("Target account required")
         target_account = await db.accounts.find_one(
             {"_id": ObjectId(target_account_id), "user_id": user_oid, "deleted_at": None},
             {"balance": 1, "name": 1},
         )
         if not target_account:
-            raise Exception("Target account not found")
+            raise NotFoundError("Target account not found")
         if str(target_account["_id"]) == str(source_account["_id"]):
-            raise Exception("Source and target cannot be same")
+            raise ValidationError("Source and target cannot be same")
 
     recurring_due_today = False
     if is_recurring:
         if not frequency:
-            raise Exception("Recurring frequency is required")
+            raise ValidationError("Recurring frequency is required")
 
         start_date_value = parse_date_value(start_date)
         end_date_value = parse_date_value(end_date)
         if not start_date_value:
-            raise Exception("Start date is required")
+            raise ValidationError("Start date is required")
         if end_date_value and end_date_value < start_date_value:
-            raise Exception("End date cannot be before start date")
+            raise ValidationError("End date cannot be before start date")
 
         # Always create the recurring rule first.
         await _add_recurring_transaction(
@@ -559,13 +563,13 @@ async def _add_transfer_transaction(
     request=None,
 ):
     if not target_account_id:
-        raise Exception("Target account required")
+        raise ValidationError("Target account required")
 
     source_oid = ObjectId(source_account_id)
     target_oid = ObjectId(target_account_id)
 
     if source_oid == target_oid:
-        raise Exception("Source and target cannot be same")
+        raise ValidationError("Source and target cannot be same")
 
     transfer_id = ObjectId()
     now = datetime.now(UTC)
@@ -708,15 +712,15 @@ async def delete_transaction(
         {"_id": tx_oid, "user_id": user_oid, "deleted_at": None}
     )
     if not tx:
-        raise Exception("Transaction not found")
+        raise NotFoundError("Transaction not found")
     if tx.get("is_failed"):
-        raise Exception("Failed transactions cannot be deleted")
+        raise ConflictError("Failed transactions cannot be deleted")
 
     if tx.get("transfer_id"):
-        raise Exception("Transfers must be deleted as a unit")
+        raise ConflictError("Transfers must be deleted as a unit")
 
     if not is_within_edit_window(tx["created_at"]):
-        raise Exception("Edit window expired")
+        raise ConflictError("Edit window expired")
 
     delta = delta_for_delete(tx["type"], tx["amount"])
     await apply_account_delta(db=db, account_id=tx["account_id"], delta=delta)
@@ -767,10 +771,10 @@ async def restore_transaction(
         {"_id": tx_oid, "user_id": user_oid}
     )
     if not tx or not tx.get("deleted_at"):
-        raise Exception("Transaction not deleted")
+        raise ConflictError("Transaction not deleted")
 
     if not can_restore_today(tx["deleted_at"]):
-        raise Exception("Restore window expired")
+        raise ConflictError("Restore window expired")
 
     delta = delta_for_tx(tx["type"], tx["amount"])
     await apply_account_delta(db=db, account_id=tx["account_id"], delta=delta)
@@ -827,16 +831,20 @@ async def edit_transaction(
     tx_oid = ObjectId(transaction_id)
     new_account_oid = ObjectId(new_account_id)
 
+    new_amount = round_money(new_amount)
+    if new_amount <= 0:
+        raise ValidationError("Amount must be positive")
+
     tx = await db.transactions.find_one(
         {"_id": tx_oid, "user_id": user_oid, "deleted_at": None}
     )
     if not tx:
-        raise Exception("Transaction not found")
+        raise NotFoundError("Transaction not found")
     if tx.get("is_failed"):
-        raise Exception("Failed transactions cannot be edited")
+        raise ConflictError("Failed transactions cannot be edited")
 
     if not is_within_edit_window(tx["created_at"]):
-        raise Exception("Edit window expired")
+        raise ConflictError("Edit window expired")
 
     old_amount = tx["amount"]
     delta = delta_for_edit(tx["type"], old_amount, new_amount)
@@ -891,7 +899,7 @@ async def retry_failed_recurring_transaction(
         }
     )
     if not failed_tx:
-        raise Exception("Failed recurring transaction not found")
+        raise NotFoundError("Failed recurring transaction not found")
 
     retry_status = failed_tx.get("retry_status", "pending")
     if retry_status == "resolved":
@@ -902,7 +910,7 @@ async def retry_failed_recurring_transaction(
         {"balance": 1, "name": 1},
     )
     if not account:
-        raise Exception("Account not found")
+        raise NotFoundError("Account not found")
 
     amount = failed_tx.get("amount", 0)
     tx_type = failed_tx.get("type")
@@ -951,7 +959,7 @@ async def retry_failed_recurring_transaction(
         recurring_id = failed_tx.get("recurring_id")
         scheduled_for = failed_tx.get("scheduled_for")
         if not recurring_id or not scheduled_for:
-            raise Exception("Failed transaction is missing recurring context")
+            raise ConflictError("Failed transaction is missing recurring context")
         if scheduled_for.tzinfo is None:
             scheduled_for = scheduled_for.replace(tzinfo=UTC)
 
@@ -959,7 +967,7 @@ async def retry_failed_recurring_transaction(
             {"_id": recurring_id, "user_id": user_oid}
         )
         if not recurring_rule:
-            raise Exception("Recurring rule not found for retry")
+            raise NotFoundError("Recurring rule not found for retry")
 
         success_tx = build_single_transaction_doc(
             user_id=failed_tx["user_id"],
@@ -999,13 +1007,13 @@ async def retry_failed_recurring_transaction(
     elif tx_type == "transfer_out":
         target_account_id = failed_tx.get("target_account_id")
         if not target_account_id:
-            raise Exception("Target account missing for failed transfer")
+            raise ConflictError("Target account missing for failed transfer")
         target_account = await db.accounts.find_one(
             {"_id": target_account_id, "user_id": user_oid, "deleted_at": None},
             {"_id": 1},
         )
         if not target_account:
-            raise Exception("Target account not found for retry")
+            raise NotFoundError("Target account not found for retry")
 
         transfer_id = ObjectId()
         await db.transactions.insert_many(

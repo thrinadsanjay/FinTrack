@@ -1,7 +1,11 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from bson import ObjectId
+
 from app.db.mongo import db
 from app.services.telegram import send_notification_alert
+from app.services.web_push import send_push_notification_alert
+
+TELEGRAM_MIRROR_COOLDOWN_MINUTES = 5
 
 
 async def upsert_notification(
@@ -16,7 +20,7 @@ async def upsert_notification(
     now = datetime.now(timezone.utc)
     existing = await db.notifications.find_one(
         {"user_id": user_id, "key": key},
-        {"type": 1, "title": 1, "message": 1},
+        {"type": 1, "title": 1, "message": 1, "channels": 1, "updated_at": 1},
     )
 
     set_payload = {
@@ -50,12 +54,73 @@ async def upsert_notification(
     )
 
     if content_changed:
-        await send_notification_alert(
+        channels = dict((existing or {}).get("channels") or {})
+        tg = dict(channels.get("telegram") or {})
+        last_sent_at = tg.get("last_sent_at")
+        can_send_telegram = True
+        if last_sent_at and isinstance(last_sent_at, datetime):
+            if (now - last_sent_at) < timedelta(minutes=TELEGRAM_MIRROR_COOLDOWN_MINUTES):
+                can_send_telegram = False
+
+        if can_send_telegram:
+            sent = await send_notification_alert(
+                user_id=user_id,
+                key=key,
+                notif_type=notif_type,
+                title=title,
+                message=message,
+            )
+            telegram_state = {
+                "last_attempt_at": now,
+                "last_sent_at": now if sent else tg.get("last_sent_at"),
+                "status": "sent" if sent else "failed",
+                "error": None if sent else "delivery_failed_or_not_eligible",
+            }
+        else:
+            telegram_state = {
+                "last_attempt_at": now,
+                "last_sent_at": tg.get("last_sent_at"),
+                "status": "skipped_cooldown",
+                "error": None,
+            }
+
+        push_result = await send_push_notification_alert(
             user_id=user_id,
             key=key,
             notif_type=notif_type,
             title=title,
             message=message,
+        )
+        push_state = {
+            "last_attempt_at": now,
+            "status": str(push_result.get("status") or "failed"),
+            "error": push_result.get("error"),
+            "sent": int(push_result.get("sent") or 0),
+            "failed": int(push_result.get("failed") or 0),
+        }
+
+        channels["telegram"] = telegram_state
+        channels["push"] = push_state
+        channels["in_app"] = {
+            "last_updated_at": now,
+            "status": "sent",
+        }
+        await db.notifications.update_one(
+            {"user_id": user_id, "key": key},
+            {"$set": {"channels": channels, "updated_at": now}},
+            upsert=True,
+        )
+    else:
+        await db.notifications.update_one(
+            {"user_id": user_id, "key": key},
+            {
+                "$set": {
+                    "channels.in_app.last_updated_at": now,
+                    "channels.in_app.status": "sent",
+                    "updated_at": now,
+                }
+            },
+            upsert=True,
         )
 
 

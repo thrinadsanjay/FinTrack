@@ -26,6 +26,7 @@ from app.services.telegram import (
     delete_webhook,
 )
 from app.services.telegram_polling import run_telegram_poll_once, get_telegram_poll_status
+from app.services.web_push import send_push_notification_alert
 from app.web.templates import templates
 
 router = APIRouter()
@@ -119,6 +120,16 @@ async def admin_dashboard(request: Request):
         telegram_cfg["webhook_url"] = _default_telegram_webhook_url()
     admin_settings["telegram"] = telegram_cfg
 
+    settings_status = str(request.query_params.get("settings") or "").strip().lower()
+    admin_alert_success = None
+    admin_alert_error = None
+    if settings_status == "updated":
+        admin_alert_success = "Settings saved successfully."
+    elif settings_status == "maintenance_updated":
+        admin_alert_success = "Maintenance settings updated successfully."
+    elif settings_status == "failed":
+        admin_alert_error = "Unable to save settings. Please retry."
+
     return templates.TemplateResponse(
         "admin.html",
         {
@@ -141,6 +152,8 @@ async def admin_dashboard(request: Request):
                 "db_status": db_status,
             },
             "admin_settings": admin_settings,
+            "admin_alert_success": admin_alert_success,
+            "admin_alert_error": admin_alert_error,
             "users": users_sorted[:100],
         },
     )
@@ -187,6 +200,7 @@ def _send_smtp_test_mail(*, host: str, port: int, username: str, password: str, 
 async def admin_save_settings(
     request: Request,
     csrf_token: str = Form(...),
+    settings_section: str | None = Form(None),
     app_name: str = Form(""),
     logo_url: str = Form(""),
     support_email: str = Form(""),
@@ -210,6 +224,14 @@ async def admin_save_settings(
     push_provider: str = Form("webpush"),
     push_vapid_public_key: str = Form(""),
     push_vapid_private_key: str = Form(""),
+    push_firebase_api_key: str = Form(""),
+    push_firebase_auth_domain: str = Form(""),
+    push_firebase_project_id: str = Form(""),
+    push_firebase_storage_bucket: str = Form(""),
+    push_firebase_messaging_sender_id: str = Form(""),
+    push_firebase_app_id: str = Form(""),
+    push_firebase_measurement_id: str = Form(""),
+    push_firebase_service_account_json: str = Form(""),
     auth_enabled: str | None = Form(None),
     auth_provider: str = Form("keycloak"),
     auth_keycloak_url: str = Form(""),
@@ -231,9 +253,11 @@ async def admin_save_settings(
     current_application = current_settings.get("application") or {}
     current_smtp = current_settings.get("smtp") or {}
     current_telegram = current_settings.get("telegram") or {}
+    current_push = current_settings.get("push_notifications") or {}
 
     submitted_smtp_password = smtp_password.strip()
     submitted_telegram_token = telegram_bot_token.strip()
+    submitted_firebase_service_account_json = push_firebase_service_account_json.strip()
 
     settings_payload = {
         "application": {
@@ -268,6 +292,16 @@ async def admin_save_settings(
             "provider": push_provider.strip(),
             "vapid_public_key": push_vapid_public_key.strip(),
             "vapid_private_key": push_vapid_private_key.strip(),
+            "firebase_service_account_json": submitted_firebase_service_account_json or str(current_push.get("firebase_service_account_json") or "").strip(),
+            "firebase_config": {
+                "apiKey": push_firebase_api_key.strip(),
+                "authDomain": push_firebase_auth_domain.strip(),
+                "projectId": push_firebase_project_id.strip(),
+                "storageBucket": push_firebase_storage_bucket.strip(),
+                "messagingSenderId": push_firebase_messaging_sender_id.strip(),
+                "appId": push_firebase_app_id.strip(),
+                "measurementId": push_firebase_measurement_id.strip(),
+            },
         },
         "authentication": {
             "enabled": _bool_from_form(auth_enabled),
@@ -291,6 +325,19 @@ async def admin_save_settings(
         },
     }
 
+    section_key_raw = str(settings_section or "").strip().lower()
+    section_key_map = {
+        "application": "application",
+        "smtp": "smtp",
+        "telegram": "telegram",
+        "push": "push_notifications",
+        "push_notifications": "push_notifications",
+        "authentication": "authentication",
+        "database": "database",
+        "backup": "backup",
+    }
+    selected_section = section_key_map.get(section_key_raw)
+
     if bool(current_application.get("maintenance_mode")):
         frozen_settings = deepcopy(current_settings)
         frozen_app = (frozen_settings.get("application") or {}).copy()
@@ -307,9 +354,9 @@ async def admin_save_settings(
                 "maintenance_message_length": len(str(frozen_app.get("maintenance_message") or "")),
             },
         )
-        return RedirectResponse("/admin#settings", status_code=303)
+        return RedirectResponse("/admin?settings=maintenance_updated#settings", status_code=303)
 
-    if logo_file and logo_file.filename:
+    if (selected_section in {None, "application"}) and logo_file and logo_file.filename:
         safe_ext = Path(logo_file.filename).suffix.lower()
         if safe_ext in {".png", ".jpg", ".jpeg", ".svg", ".webp"}:
             LOGO_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -318,6 +365,21 @@ async def admin_save_settings(
             content = await logo_file.read()
             target.write_bytes(content)
             settings_payload["application"]["logo_url"] = f"/static/uploads/logos/{file_name}"
+
+    if selected_section:
+        merged_settings = deepcopy(current_settings)
+        merged_settings[selected_section] = settings_payload[selected_section]
+        await save_admin_settings(merged_settings)
+        await audit_log(
+            action="ADMIN_SETTINGS_UPDATED",
+            request=request,
+            user=_audit_actor(request),
+            meta={
+                "section": selected_section,
+                "section_saved": True,
+            },
+        )
+        return RedirectResponse(f"/admin?settings=updated&section={selected_section}#settings", status_code=303)
 
     await save_admin_settings(settings_payload)
     await audit_log(
@@ -335,9 +397,10 @@ async def admin_save_settings(
             "db_enabled": settings_payload["database"].get("enabled"),
             "backup_enabled": settings_payload["backup"].get("enabled"),
             "logo_updated": bool(settings_payload["application"].get("logo_url")),
+            "section": "all",
         },
     )
-    return RedirectResponse("/admin#settings", status_code=303)
+    return RedirectResponse("/admin?settings=updated#settings", status_code=303)
 
 
 @router.post("/settings/smtp/test")
@@ -402,6 +465,45 @@ async def admin_test_smtp(request: Request):
         meta={"to_email": to_email, "host": host, "port": port, "tls": tls},
     )
     return JSONResponse({"status": "ok"})
+
+
+@router.post("/settings/push/test")
+@admin_required
+async def admin_test_push(request: Request):
+    verify_csrf_token(request, request.headers.get("X-CSRF-Token"))
+    session_user = request.session.get("user") or {}
+    user_id = str(session_user.get("user_id") or "").strip()
+    if not ObjectId.is_valid(user_id):
+        return JSONResponse({"detail": "Invalid user session."}, status_code=400)
+
+    payload = await request.json()
+    title = str((payload or {}).get("title") or "FinTracker Test Notification").strip() or "FinTracker Test Notification"
+    message = str((payload or {}).get("message") or "This is a push test from Admin Settings.").strip() or "This is a push test from Admin Settings."
+
+    result = await send_push_notification_alert(
+        user_id=ObjectId(user_id),
+        key=f"admin_push_test:{uuid4().hex}",
+        notif_type="info",
+        title=title,
+        message=message,
+    )
+
+    sent = int(result.get("sent") or 0)
+    failed = int(result.get("failed") or 0)
+    status = str(result.get("status") or "failed")
+
+    await audit_log(
+        action="ADMIN_PUSH_TEST",
+        request=request,
+        user=_audit_actor(request),
+        meta={"status": status, "sent": sent, "failed": failed, "error": result.get("error")},
+    )
+
+    if sent <= 0:
+        detail = str(result.get("error") or "No active push subscription found for current admin user.")
+        return JSONResponse({"detail": f"Push test failed: {detail}", "result": result}, status_code=400)
+
+    return JSONResponse({"status": "ok", "result": result})
 
 
 @router.post("/settings/telegram/webhook/set")
@@ -547,6 +649,78 @@ async def admin_telegram_poll_run_once(request: Request):
         user=_audit_actor(request),
     )
     return JSONResponse({"status": "ok", "poll": get_telegram_poll_status()})
+
+
+@router.post("/settings/telegram/delivery/status")
+@admin_required
+async def admin_telegram_delivery_status(request: Request):
+    verify_csrf_token(request, request.headers.get("X-CSRF-Token"))
+
+    query = {
+        "channels.telegram": {"$exists": True},
+    }
+
+    total = await db.notifications.count_documents(query)
+    sent = await db.notifications.count_documents({**query, "channels.telegram.status": "sent"})
+    failed = await db.notifications.count_documents({**query, "channels.telegram.status": "failed"})
+    cooldown = await db.notifications.count_documents({**query, "channels.telegram.status": "skipped_cooldown"})
+
+    recent_cursor = (
+        db.notifications
+        .find(
+            {**query, "channels.telegram.status": "failed"},
+            {
+                "_id": 1,
+                "user_id": 1,
+                "key": 1,
+                "type": 1,
+                "title": 1,
+                "message": 1,
+                "updated_at": 1,
+                "channels.telegram": 1,
+            },
+        )
+        .sort("updated_at", -1)
+        .limit(8)
+    )
+    recent_failures = []
+    async for item in recent_cursor:
+        tg = (item.get("channels") or {}).get("telegram") or {}
+        recent_failures.append(
+            {
+                "id": str(item.get("_id")),
+                "user_id": str(item.get("user_id") or ""),
+                "key": str(item.get("key") or ""),
+                "type": str(item.get("type") or ""),
+                "title": str(item.get("title") or ""),
+                "message": str(item.get("message") or ""),
+                "updated_at": item.get("updated_at").isoformat() if item.get("updated_at") else None,
+                "telegram_error": str(tg.get("error") or ""),
+                "last_attempt_at": tg.get("last_attempt_at").isoformat() if tg.get("last_attempt_at") else None,
+                "last_sent_at": tg.get("last_sent_at").isoformat() if tg.get("last_sent_at") else None,
+            }
+        )
+
+    await audit_log(
+        action="ADMIN_TELEGRAM_DELIVERY_STATUS_VIEWED",
+        request=request,
+        user=_audit_actor(request),
+        meta={"total": total, "sent": sent, "failed": failed, "cooldown": cooldown},
+    )
+
+    return JSONResponse(
+        {
+            "status": "ok",
+            "delivery": {
+                "total": total,
+                "sent": sent,
+                "failed": failed,
+                "cooldown": cooldown,
+                "recent_failures": recent_failures,
+                "checked_at": datetime.now(timezone.utc).isoformat(),
+            },
+        }
+    )
 
 
 @router.post("/settings/telegram/broadcast")

@@ -8,6 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, Request, Form, Query
 from fastapi.responses import RedirectResponse, HTMLResponse
 from app.core.csrf import verify_csrf_token
+from app.core.errors import AppError, ValidationError
 from app.web.templates import templates
 from app.services.recurring_deposit import RecurringDepositService
 from app.services.accounts import get_accounts
@@ -73,10 +74,10 @@ async def add_transaction(
 
     if is_recurring:
         if not frequency:
-            raise Exception("Recurring frequency is required")
+            raise ValidationError("Recurring frequency is required")
 
     if tx_type == "transfer" and not target_account_id:
-        raise Exception("Target account is required for transfers")
+        raise ValidationError("Target account is required for transfers")
 
     try:
         await create_transaction(
@@ -96,7 +97,7 @@ async def add_transaction(
             end_date=end_date,
             request=request,
         )
-    except Exception as exc:
+    except AppError as exc:
         accounts = await get_accounts(user["user_id"])
         notifications = await get_user_notifications(user["user_id"])
         return templates.TemplateResponse(
@@ -107,9 +108,24 @@ async def add_transaction(
                 "accounts": accounts,
                 "notifications": notifications,
                 "active_page": "addtransaction",
-                "error": str(exc),
+                "error": exc.detail,
             },
-            status_code=400,
+            status_code=exc.status_code,
+        )
+    except Exception:
+        accounts = await get_accounts(user["user_id"])
+        notifications = await get_user_notifications(user["user_id"])
+        return templates.TemplateResponse(
+            "transactions_add.html",
+            {
+                "request": request,
+                "user": user,
+                "accounts": accounts,
+                "notifications": notifications,
+                "active_page": "addtransaction",
+                "error": "Unable to add transaction right now. Please retry.",
+            },
+            status_code=500,
         )
 
     return RedirectResponse("/transactions", status_code=303)
@@ -129,11 +145,18 @@ async def transactions_list_page(
     category_code: str | None = Query(None),
     subcategory_code: str | None = Query(None),
     search: str | None = Query(None),
-    amount: float | None = Query(None),
+    amount: str | None = Query(None),
     sort_by: str | None = Query(None),
     sort_dir: str | None = Query(None),
 ):
     user = request.session.get("user")
+
+    amount_value: float | None = None
+    if amount is not None and amount.strip() != "":
+        try:
+            amount_value = float(amount)
+        except ValueError:
+            amount_value = None
 
     transactions = await get_user_transactions(
         user_id=user["user_id"],
@@ -144,7 +167,7 @@ async def transactions_list_page(
         category_code=category_code,
         subcategory_code=subcategory_code,
         search=search,
-        amount=amount,
+        amount=amount_value,
         sort_by=sort_by,
         sort_dir=sort_dir,
     )
@@ -280,7 +303,7 @@ async def transactions_list_page(
                 "category_code": category_code,
                 "subcategory_code": subcategory_code,
                 "search": search,
-                "amount": amount,
+                "amount": amount or "",
             },
             "active_filter_count": sum(
                 1 for v in [account_id, tx_type, date_from, date_to, category_code, subcategory_code, search, amount]
@@ -308,7 +331,6 @@ async def delete_transaction_ui(
 ):
     verify_csrf_token(request, csrf_token)
     user = request.session.get("user")
-    print("Deleting TX ID:", transaction_id)
     await delete_transaction(
         user_id=user["user_id"],
         transaction_id=transaction_id,

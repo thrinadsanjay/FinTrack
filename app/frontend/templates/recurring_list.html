@@ -29,7 +29,7 @@
     </div>
     <div class="recurring-stat-card">
       <span class="label">Pending this month</span>
-      <strong>₹ {{ stats.month_pending }}</strong>
+      <strong>₹ {{ stats.month_pending | money }}</strong>
     </div>
   </div>
 
@@ -42,6 +42,9 @@
     </div>
   </div>
 
+  {% set alert_error = error %}
+  {% include "partials/form_alert.html" %}
+
   {% if edit_rule and edit_rule.status != "ended" %}
   <div class="card recurring-edit-card">
     <h3 class="card-title">Edit recurring rule</h3>
@@ -53,7 +56,7 @@
       <div class="filter-grid recurring-edit-grid">
         <div class="form-field field--idle">
           <label>Amount</label>
-          <input type="number" step="0.01" name="amount" value="{{ edit_rule.amount }}" required>
+          <input type="number" step="0.01" name="amount" value="{{ edit_rule.amount | money }}" required>
         </div>
 
         <div class="form-field field--idle">
@@ -121,7 +124,7 @@
             <td class="recurring-col-type" data-label="Type">
               <span class="recurring-type recurring-type-{{ rule.type }}">{{ rule.type | upper }}</span>
             </td>
-            <td class="recurring-col-amount" data-label="Amount">₹ {{ rule.amount }}</td>
+            <td class="recurring-col-amount" data-label="Amount">₹ {{ rule.amount | money }}</td>
             <td class="recurring-col-frequency" data-label="Frequency">{{ rule.frequency }}</td>
             <td class="recurring-col-next" data-label="Next run">
               {% if rule.next_run %}

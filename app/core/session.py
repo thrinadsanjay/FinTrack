@@ -8,5 +8,5 @@ def add_session_middleware(app):
         secret_key=settings.FT_SESSION_SECRET,
         https_only=settings.is_production,
         same_site="lax",
-        max_age=60 * 60 * 8,
+        max_age=settings.FT_SESSION_MAX_AGE_SECONDS,
     )

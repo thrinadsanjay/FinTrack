@@ -170,11 +170,11 @@
           <!-- AMOUNT -->
           <td data-label="Amount" class="col-amount">
             {% if tx.type == "debit" %}
-            <span class="amount-text debit">₹{{ tx.amount }}</span>
+            <span class="amount-text debit">₹{{ tx.amount | money }}</span>
             {% elif tx.type == "credit" %}
-            <span class="amount-text credit">₹{{ tx.amount }}</span>
+            <span class="amount-text credit">₹{{ tx.amount | money }}</span>
             {% elif tx.type == "transfer" %}
-            <span class="amount-text transfer">₹{{ tx.amount }}</span>
+            <span class="amount-text transfer">₹{{ tx.amount | money }}</span>
             {% endif %}
             {% if tx.is_failed %}
             <span class="failed-pill">
@@ -282,7 +282,7 @@
 
             {% if tx.type != "transfer" %}
             <button type="button" class="edit-transaction-btn" data-id="{{ tx._id }}" data-account="{{ tx.account_id }}"
-              data-amount="{{ tx.amount }}" data-category="{{ tx.category.code }}"
+              data-amount="{{ tx.amount | money }}" data-category="{{ tx.category.code }}"
               data-subcategory="{{ tx.subcategory.code }}" data-type="{{ tx.type }}"
               data-description="{{ tx.description | e }}" title="Edit transaction"><i class="fa-solid fa-pen"></i>
             </button>

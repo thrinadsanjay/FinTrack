@@ -302,6 +302,13 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
+  window.addEventListener("ft:chat-prefill", (event) => {
+    const text = String((event && event.detail && event.detail.text) || "").trim();
+    if (!text || !chatInput) return;
+    chatInput.value = text;
+    chatInput.focus();
+  });
+
   async function initialize() {
     try {
       await syncSupportMessages({ initial: true });

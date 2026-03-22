@@ -422,3 +422,43 @@ Change these immediately in production.
   verify consistent external URL, HTTPS termination, and secret stability
 - Cannot connect to MongoDB:
   check `FT_MONGO_URI`, network reachability, and container/service status
+
+## FCM Push Setup and Test
+
+Push Notifications supports two providers:
+
+- `webpush`: browser Push API with VAPID keys
+- `firebase`: Firebase Cloud Messaging (FCM)
+
+### Configure FCM in Admin
+
+1. Open `Admin -> Settings -> Push Notifications`.
+2. Set `Enabled = true`.
+3. Set `Provider = firebase`.
+4. Fill Firebase Web config values:
+   - `Firebase API Key`
+   - `Firebase Auth Domain`
+   - `Firebase Project ID`
+   - `Firebase Storage Bucket`
+   - `Firebase Messaging Sender ID`
+   - `Firebase App ID`
+   - `Firebase Measurement ID` (optional)
+5. Fill `VAPID Public Key`.
+6. Fill `Firebase Service Account JSON` (full service account JSON content).
+7. Save settings.
+
+### Test FCM delivery
+
+1. Login in browser as a user and allow notification permission.
+2. Open any app page once so token registration runs.
+3. Go to `Admin -> Settings -> Push Notifications`.
+4. Click `Test Push`.
+5. Verify success toast and browser/device notification.
+
+If delivery fails, validate:
+
+- Notification permission is granted
+- Push provider is `firebase`
+- Runtime has `firebase-admin` installed
+- Service account JSON is valid and from same Firebase project
+- VAPID public key belongs to the same Firebase project

@@ -4,6 +4,7 @@ from app.db.mongo import db
 async def init_indexes():
     # Users
     await db.users.create_index("email", unique=True)
+    await db.users.create_index([("passkeys.credential_id", 1)], unique=True, sparse=True)
     # Accounts
     await db.accounts.create_index([("user_id", 1)])
     # Drop legacy unique index on name (if exists) to avoid cross-user collisions
@@ -41,6 +42,13 @@ async def init_indexes():
     await db.notifications.create_index([("user_id", 1), ("updated_at", -1)])
     await db.notifications.create_index([("user_id", 1), ("key", 1)], unique=True)
 
+    # Web push subscriptions
+    await db.push_subscriptions.create_index([("user_id", 1), ("is_active", 1)])
+    await db.push_subscriptions.create_index([("endpoint", 1)], unique=True)
+    await db.push_subscriptions.create_index([("fcm_token", 1)], unique=True, sparse=True)
+    await db.push_subscriptions.create_index([("provider", 1), ("updated_at", -1)])
+    await db.push_subscriptions.create_index([("updated_at", -1)])
+
     # Chat / support messages
     await db.chat_logs.create_index([("channel", 1), ("timestamp", -1)])
     await db.chat_logs.create_index([("channel", 1), ("user_id", 1), ("timestamp", -1)])
@@ -52,6 +60,8 @@ async def init_indexes():
     # Telegram OTP verification
     await db.telegram_otp_verifications.create_index([("user_id", 1)], unique=True)
     await db.telegram_otp_verifications.create_index([("expires_at", 1)], expireAfterSeconds=0)
+    await db.telegram_register_intents.create_index([("chat_id", 1)], unique=True)
+    await db.telegram_register_intents.create_index([("created_at", -1)])
     await db.telegram_tx_sessions.create_index([("chat_id", 1)], unique=True)
     await db.telegram_tx_sessions.create_index([("updated_at", -1)])
 

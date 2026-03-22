@@ -20,3 +20,6 @@ python-dateutil
 apscheduler
 prometheus-client
 openai
+webauthn
+pywebpush
+firebase-admin

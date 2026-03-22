@@ -52,6 +52,16 @@ def default_admin_settings() -> dict:
             "provider": "webpush",
             "vapid_public_key": "",
             "vapid_private_key": "",
+            "firebase_service_account_json": "",
+            "firebase_config": {
+                "apiKey": "",
+                "authDomain": "",
+                "projectId": "",
+                "storageBucket": "",
+                "messagingSenderId": "",
+                "appId": "",
+                "measurementId": "",
+            },
         },
         "authentication": {
             "enabled": True,

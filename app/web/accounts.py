@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Request, Form
 from fastapi.responses import RedirectResponse
 from app.core.csrf import verify_csrf_token
+from app.core.errors import AppError
 from app.web.templates import templates
 from app.core.guards import login_required
 from app.services.accounts import (
@@ -76,7 +77,7 @@ async def add_account(
             balance=balance,
             request=request,
         )
-    except Exception as e:
+    except AppError as e:
         return templates.TemplateResponse(
             "accounts.html",
             {
@@ -88,7 +89,7 @@ async def add_account(
                 "notifications": await get_user_notifications(user["user_id"]),
                 "active_page": "accounts",
             },
-            status_code=400,
+            status_code=e.status_code,
         )
 
     return RedirectResponse("/accounts", status_code=303)
@@ -160,7 +161,7 @@ async def remove_account(
             account_id=account_id,
             request=request,
         )
-    except Exception as e:
+    except AppError as e:
         return templates.TemplateResponse(
             "accounts.html",
             {
@@ -172,7 +173,7 @@ async def remove_account(
                 "notifications": await get_user_notifications(user["user_id"]),
                 "active_page": "accounts",
             },
-            status_code=400,
+            status_code=e.status_code,
         )
 
     return RedirectResponse("/accounts", status_code=303)

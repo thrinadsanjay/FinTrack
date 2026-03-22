@@ -16,6 +16,7 @@ from app.services.admin_settings import get_maintenance_state
 
 from app.core.config import settings
 from app.core.csrf import CsrfValidationError
+from app.core.errors import AppError
 from app.core.logging import setup_logging
 from app.core.session import add_session_middleware
 from app.core.startup import ensure_admin_exists, define_categories
@@ -276,6 +277,22 @@ async def csrf_exception_handler(request: Request, exc: CsrfValidationError):
     return JSONResponse({"detail": str(exc)}, status_code=403)
 
 
+@app.exception_handler(AppError)
+async def app_error_handler(request: Request, exc: AppError):
+    accept = request.headers.get("accept", "")
+    if "text/html" in accept:
+        return templates.TemplateResponse(
+            "app_error.html",
+            {
+                "request": request,
+                "error": exc.detail,
+            },
+            status_code=exc.status_code,
+        )
+    payload = {"detail": exc.detail}
+    if exc.code:
+        payload["code"] = exc.code
+    return JSONResponse(payload, status_code=exc.status_code)
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     logger.exception("Unhandled application error on %s", request.url.path, exc_info=exc)

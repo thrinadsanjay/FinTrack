@@ -23,6 +23,7 @@
   class="{% if current_user %}user-authenticated{% else %}user-guest{% endif %}{% if request.state.maintenance_mode %} maintenance-on{% endif %}"
   data-maintenance-mode="{{ 'true' if request.state.maintenance_mode else 'false' }}"
   data-maintenance-message="{{ request.state.maintenance_message or '' }}"
+  data-user-id="{{ current_user.user_id if current_user else '' }}"
 >
   {% if current_user %}
     {% with user=current_user %}
@@ -58,5 +59,6 @@
   {% include "partials/footer.html" %}
   <script src="/static/js/navbar.js?v={{ FT_APP_VERSION }}" defer></script>
   <script src="/static/js/app_shell.js?v={{ FT_APP_VERSION }}" defer></script>
+  {% if current_user %}<script src="/static/js/app_biometric_lock.js?v={{ FT_APP_VERSION }}" defer></script>{% endif %}
 </body>
 </html>

@@ -511,3 +511,11 @@ body.help-support-locked .app-content {
 body.chat-open {
   overflow: hidden;
 }
+.help-account-notice {
+  border: 1px solid color-mix(in srgb, #ef4444 45%, var(--help-border));
+  background: color-mix(in srgb, #ef4444 14%, var(--help-surface-soft));
+  color: color-mix(in srgb, #ffffff 88%, #ef4444);
+  border-radius: var(--help-radius-sm);
+  padding: 10px 12px;
+  font-weight: 600;
+}

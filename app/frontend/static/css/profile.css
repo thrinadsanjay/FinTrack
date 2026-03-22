@@ -134,6 +134,12 @@
   color: color-mix(in srgb, #0f172a 80%, #229ed9);
 }
 
+.danger-btn.passkey {
+  border-color: color-mix(in srgb, #14b8a6 55%, var(--color-border));
+  background: color-mix(in srgb, #14b8a6 14%, var(--color-chip-bg));
+  color: color-mix(in srgb, #0f172a 78%, #14b8a6);
+}
+
 .profile-main {
   display: grid;
   gap: 10px;
@@ -326,4 +332,422 @@
   .overview-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.profile-danger-zone form {
+  margin: 0;
+}
+
+.profile-danger-zone form .danger-btn {
+  width: 100%;
+}
+
+/* Clear semantic colors for profile nav/actions in both dark and light themes */
+.profile-nav-item {
+  border: 1px solid color-mix(in srgb, var(--color-border) 90%, transparent);
+  background: color-mix(in srgb, var(--color-surface-strong) 76%, transparent);
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.profile-nav-item:hover,
+.profile-nav-item:focus-visible {
+  border-color: color-mix(in srgb, var(--color-primary) 44%, var(--color-border));
+  background: color-mix(in srgb, var(--color-primary) 12%, var(--color-surface));
+  color: color-mix(in srgb, var(--color-text) 92%, var(--color-primary));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 14%, transparent);
+  outline: none;
+}
+
+.profile-nav-item.active {
+  border-color: color-mix(in srgb, var(--color-primary) 60%, var(--color-border));
+  background: color-mix(in srgb, var(--color-primary) 22%, var(--color-surface));
+  color: color-mix(in srgb, var(--color-text) 94%, var(--color-primary));
+  font-weight: 700;
+}
+
+.profile-nav-item.active i {
+  color: color-mix(in srgb, var(--color-primary) 72%, var(--color-text));
+}
+
+.profile-nav-item.disabled {
+  border: 1px dashed color-mix(in srgb, var(--color-border) 86%, transparent);
+  background: color-mix(in srgb, var(--color-surface) 78%, transparent);
+  color: color-mix(in srgb, var(--color-muted) 90%, var(--color-text));
+  opacity: 0.86;
+  cursor: not-allowed;
+}
+
+.profile-nav-item.disabled i {
+  color: color-mix(in srgb, var(--color-muted) 84%, transparent);
+}
+
+.danger-btn.warning {
+  border-color: color-mix(in srgb, #f59e0b 58%, var(--color-border));
+  background: color-mix(in srgb, #f59e0b 14%, var(--color-chip-bg));
+  color: color-mix(in srgb, #0f172a 78%, #f59e0b);
+}
+
+.danger-btn.warning:hover,
+.danger-btn.warning:focus-visible {
+  border-color: color-mix(in srgb, #f59e0b 72%, var(--color-border));
+  background: color-mix(in srgb, #f59e0b 20%, var(--color-chip-bg));
+  box-shadow: 0 0 0 2px color-mix(in srgb, #f59e0b 20%, transparent);
+  outline: none;
+}
+
+.danger-btn.critical {
+  border-color: color-mix(in srgb, #ef4444 58%, var(--color-border));
+  background: color-mix(in srgb, #ef4444 14%, var(--color-chip-bg));
+  color: color-mix(in srgb, #0f172a 78%, #ef4444);
+}
+
+.danger-btn.critical:hover,
+.danger-btn.critical:focus-visible {
+  border-color: color-mix(in srgb, #ef4444 74%, var(--color-border));
+  background: color-mix(in srgb, #ef4444 20%, var(--color-chip-bg));
+  box-shadow: 0 0 0 2px color-mix(in srgb, #ef4444 20%, transparent);
+  outline: none;
+}
+
+@media (prefers-color-scheme: light) {
+  .profile-nav-item.disabled {
+    opacity: 0.94;
+  }
+}
+
+/* Dark theme contrast fix for profile danger buttons */
+html[data-theme="dark"] .profile-danger-zone .danger-btn {
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+html[data-theme="dark"] .profile-danger-zone .danger-btn i {
+  color: inherit;
+}
+
+html[data-theme="dark"] .profile-danger-zone .danger-btn.telegram.unregistered {
+  border-color: #31c86a;
+  background: rgba(49, 200, 106, 0.18);
+  color: #d9ffe8;
+}
+
+html[data-theme="dark"] .profile-danger-zone .danger-btn.telegram.registered {
+  border-color: #38bdf8;
+  background: rgba(56, 189, 248, 0.2);
+  color: #dff5ff;
+}
+
+html[data-theme="dark"] .profile-danger-zone .danger-btn.passkey {
+  border-color: #2dd4bf;
+  background: rgba(45, 212, 191, 0.2);
+  color: #dcfffb;
+}
+
+html[data-theme="dark"] .profile-danger-zone .danger-btn.warning {
+  border-color: #f6b63f;
+  background: rgba(246, 182, 63, 0.2);
+  color: #ffe9be;
+}
+
+html[data-theme="dark"] .profile-danger-zone .danger-btn.critical {
+  border-color: #fb7185;
+  background: rgba(251, 113, 133, 0.2);
+  color: #ffd8de;
+}
+
+html[data-theme="dark"] .profile-danger-zone .danger-btn:disabled {
+  opacity: 0.9;
+  filter: saturate(1.05);
+}
+
+/* Light theme contrast alignment for profile danger buttons */
+html[data-theme="light"] .profile-danger-zone .danger-btn {
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+html[data-theme="light"] .profile-danger-zone .danger-btn i {
+  color: inherit;
+}
+
+html[data-theme="light"] .profile-danger-zone .danger-btn.telegram.unregistered {
+  border-color: #1ea75a;
+  background: #eafcf2;
+  color: #0c6a33;
+}
+
+html[data-theme="light"] .profile-danger-zone .danger-btn.telegram.registered {
+  border-color: #1f9fd5;
+  background: #eaf7ff;
+  color: #0c5f88;
+}
+
+html[data-theme="light"] .profile-danger-zone .danger-btn.passkey {
+  border-color: #10998b;
+  background: #e8fffb;
+  color: #0e6158;
+}
+
+html[data-theme="light"] .profile-danger-zone .danger-btn.warning {
+  border-color: #d69a1d;
+  background: #fff7e8;
+  color: #8a5b00;
+}
+
+html[data-theme="light"] .profile-danger-zone .danger-btn.critical {
+  border-color: #e05a70;
+  background: #fff0f3;
+  color: #8f1f30;
+}
+
+.profile-nav-button {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.profile-password-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.45);
+  display: grid;
+  place-items: center;
+  z-index: 1450;
+  padding: 12px;
+}
+
+.profile-password-modal.hidden {
+  display: none !important;
+}
+
+.profile-password-modal-card {
+  width: min(460px, 100%);
+  background: var(--color-surface-strong);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  box-shadow: 0 16px 30px var(--color-shadow);
+  padding: 14px;
+}
+
+.profile-password-modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.profile-password-modal-head h3 {
+  font-size: 1.06rem;
+}
+
+.danger-btn.reset-pass {
+  border-color: color-mix(in srgb, var(--color-primary) 58%, var(--color-border));
+  background: color-mix(in srgb, var(--color-primary) 14%, var(--color-chip-bg));
+  color: color-mix(in srgb, #0f172a 70%, var(--color-primary));
+}
+
+.danger-btn.reset-pass:hover,
+.danger-btn.reset-pass:focus-visible {
+  border-color: color-mix(in srgb, var(--color-primary) 74%, var(--color-border));
+  background: color-mix(in srgb, var(--color-primary) 20%, var(--color-chip-bg));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 20%, transparent);
+  outline: none;
+}
+
+html[data-theme="dark"] .profile-danger-zone .danger-btn.reset-pass {
+  border-color: #60a5fa;
+  background: rgba(96, 165, 250, 0.2);
+  color: #e5f0ff;
+}
+
+html[data-theme="light"] .profile-danger-zone .danger-btn.reset-pass {
+  border-color: #3b82f6;
+  background: #eef4ff;
+  color: #1e40af;
+}
+
+.profile-action-modal-card {
+  max-width: 480px;
+}
+
+.account-action-confirm {
+  border: 1px solid color-mix(in srgb, var(--color-primary) 60%, var(--color-border));
+  background: color-mix(in srgb, var(--color-primary) 14%, var(--color-chip-bg));
+  color: color-mix(in srgb, var(--color-text) 90%, var(--color-primary));
+}
+
+.account-action-confirm.warning {
+  border-color: color-mix(in srgb, #f59e0b 62%, var(--color-border));
+  background: color-mix(in srgb, #f59e0b 18%, var(--color-chip-bg));
+  color: color-mix(in srgb, #0f172a 78%, #f59e0b);
+}
+
+.account-action-confirm.critical {
+  border-color: color-mix(in srgb, #ef4444 62%, var(--color-border));
+  background: color-mix(in srgb, #ef4444 16%, var(--color-chip-bg));
+  color: color-mix(in srgb, #0f172a 78%, #ef4444);
+}
+
+.account-action-confirm:hover,
+.account-action-confirm:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 18%, transparent);
+  outline: none;
+}
+
+.account-action-confirm.warning:hover,
+.account-action-confirm.warning:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, #f59e0b 22%, transparent);
+}
+
+.account-action-confirm.critical:hover,
+.account-action-confirm.critical:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, #ef4444 22%, transparent);
+}
+
+html[data-theme="dark"] .account-action-confirm.warning {
+  border-color: #f6b63f;
+  background: rgba(246, 182, 63, 0.2);
+  color: #ffe9be;
+}
+
+html[data-theme="dark"] .account-action-confirm.critical {
+  border-color: #fb7185;
+  background: rgba(251, 113, 133, 0.2);
+  color: #ffd8de;
+}
+
+html[data-theme="light"] .account-action-confirm.warning {
+  border-color: #d69a1d;
+  background: #fff7e8;
+  color: #8a5b00;
+}
+
+html[data-theme="light"] .account-action-confirm.critical {
+  border-color: #e05a70;
+  background: #fff0f3;
+  color: #8f1f30;
+}
+
+.account-action-verify.hidden {
+  display: none !important;
+}
+
+.account-action-verify {
+  margin: 8px 0 10px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--color-danger) 34%, var(--color-border));
+  background: color-mix(in srgb, var(--color-danger) 8%, var(--color-surface));
+}
+
+.account-action-verify label {
+  display: block;
+  font-size: 0.84rem;
+  color: var(--color-text);
+  margin-bottom: 6px;
+}
+
+.account-action-verify strong {
+  color: color-mix(in srgb, var(--color-danger) 82%, var(--color-text));
+  letter-spacing: 0.02em;
+}
+
+.account-action-verify input {
+  min-height: 36px;
+}
+
+.account-action-verify-hint {
+  margin-top: 6px;
+  font-size: 0.76rem;
+  color: var(--color-muted);
+}
+
+
+.biometric-controls {
+  margin-top: 10px;
+  border: 1px solid color-mix(in srgb, var(--color-border) 86%, transparent);
+  border-radius: 10px;
+  padding: 10px;
+  background: color-mix(in srgb, var(--color-surface) 72%, transparent);
+  display: grid;
+  gap: 8px;
+}
+
+.biometric-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.9rem;
+  color: var(--color-muted);
+}
+
+.biometric-status i {
+  color: color-mix(in srgb, var(--color-primary) 66%, var(--color-text));
+}
+
+.biometric-status strong {
+  color: var(--color-text);
+}
+
+.biometric-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.biometric-actions .mini-btn {
+  min-width: 110px;
+}
+
+
+.danger-btn.biometric-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-color: color-mix(in srgb, #14b8a6 55%, var(--color-border));
+  background: color-mix(in srgb, #14b8a6 10%, var(--color-chip-bg));
+}
+
+.biometric-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+
+.biometric-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.biometric-slider {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, #ef4444 52%, var(--color-border));
+  transition: all 0.2s ease;
+}
+
+.biometric-slider::before {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  left: 3px;
+  top: 3px;
+  border-radius: 50%;
+  background: #ffffff;
+  transition: transform 0.2s ease;
+}
+
+.biometric-switch input:checked + .biometric-slider {
+  background: color-mix(in srgb, #22c55e 65%, #16a34a);
+}
+
+.biometric-switch input:checked + .biometric-slider::before {
+  transform: translateX(20px);
 }
