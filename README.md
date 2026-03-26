@@ -62,144 +62,99 @@ FinTrack/
 
 ## Environment Variables
 
-`app/core/config.py` enforces required runtime variables at startup. Missing required values will fail app boot.
+Admin UI settings use environment variables as startup defaults. Values saved from the Admin UI are stored in MongoDB and override these defaults at runtime.
 
-### Core App Variables
+Only the minimum runtime fields needed for a normal production setup should be treated as mandatory. All integration and optional service fields can be omitted without blocking app startup.
 
-| Variable | Required | Default | Example | Purpose |
-|---|---|---|---|---|
-| `FT_MONGO_URI` | Yes | - | `mongodb://mongodb:27017` | MongoDB connection URI |
-| `FT_MONGO_DB_NAME` | Yes | - | `finance` | MongoDB database name |
-| `FT_ENV` | Yes | - | `production` | Runtime mode: `dev/development/prod/production` |
-| `FT_KEYCLOAK_URL` | Yes | - | `https://sso.example.com` | Keycloak base URL |
-| `FT_KEYCLOAK_REALM` | Yes | - | `fintracker` | Keycloak realm |
-| `FT_CLIENT_ID` | Yes | - | `fintracker-web` | Keycloak OIDC client ID |
-| `FT_SESSION_SECRET` | Yes | - | `replace-with-long-random-secret` | Session signing/encryption secret |
-| `FT_APP_NAME` | Yes | - | `FinTracker` | Application display name |
-| `FT_APP_VERSION` | Yes | - | `1.0.0` | Application version label |
-| `FT_BASE_URL` | Yes | - | `https://fin.example.com` | Public base URL (OAuth callback construction) |
-
-### Auth and Access Variables
-
-| Variable | Required | Default | Example | Purpose |
-|---|---|---|---|---|
-| `FT_KEYCLOAK_ADMIN_ROLES` | No | `fintracker-admin,admin` | `fintracker-admin,platform-admin` | Comma-separated admin roles treated as app admins |
-| `FT_KEYCLOAK_ADMIN_GROUPS` | No | `/fintracker-admin,fintracker-admin` | `/org/admins` | Comma-separated Keycloak groups treated as app admins |
-| `FT_EXTERNAL_PASSWORD_RESET_URL` | No | `None` | `https://myaccount.google.com/security` | Optional external password reset URL for local users |
-
-### Support and SMTP Variables
-
-| Variable | Required | Default | Example | Purpose |
-|---|---|---|---|---|
-| `FT_SUPPORT_EMAIL` | No | `support@fintracker.local` | `support@example.com` | Default support email shown in Help/Support |
-| `FT_SUPPORT_PHONE` | No | `+1-555-0100` | `+1-800-123-4567` | Default support phone shown in Help/Support |
-| `FT_SMTP_HOST` | No | `None` | `smtp.sendgrid.net` | SMTP host |
-| `FT_SMTP_PORT` | No | `None` | `587` | SMTP port |
-| `FT_SMTP_USERNAME` | No | `None` | `apikey` | SMTP username/login |
-| `FT_SMTP_FROM` | No | `None` | `no-reply@example.com` | Sender email address |
-| `FT_SMTP_TLS` | No | `true` | `true` | Enable TLS for SMTP connections |
-
-### Logging, Scheduler, Bootstrap, AI
-
-| Variable | Required | Default | Example | Purpose |
-|---|---|---|---|---|
-| `FT_LOG_LEVEL` | No | `INFO` | `DEBUG` | Base log level |
-| `FT_DEBUG_LOG` | No | `false` | `true` | Forces debug logging when enabled |
-| `FT_LOG_DIR` | No | `logs` | `/var/log/fintracker` | Log directory |
-| `FT_LOG_FILE` | No | `logs/app.log` | `/var/log/fintracker/app.log` | Log file path |
-| `SCHEDULER_RUN_TIME` | No | `5:41 AM IST` | `11:00 PM UTC` | Daily recurring-job runtime (parsed by scheduler helper) |
-| `FT_NOTIFICATION_ALERT_INTERVAL_SECONDS` | No | `300` | `120` | Interval in seconds for background alert sweep that pushes eligible bell alerts to Telegram |
-| `FT_DEFAULT_ADMIN_USERNAME` | No | `admin` | `admin` | Initial admin username on first boot |
-| `FT_DEFAULT_ADMIN_PASSWORD` | No | `admin123` | `ChangeMeNow!` | Initial admin password on first boot |
-| `FT_DEFAULT_ADMIN_EMAIL` | No | `admin@example.com` | `admin@example.com` | Initial admin email on first boot |
-| `OPENAI_API_KEY` | No | `None` | `sk-...` | Required only if `/api/aichat` endpoint is used |
+| Key | Possible value/type | Required/Optional | Description |
+|---|---|---|---|
+| `FT_MONGO_URI` | MongoDB URI string, e.g. `mongodb://mongodb:27017` | Required | MongoDB connection URI used by the app. |
+| `FT_MONGO_DB_NAME` | Database name string, e.g. `fintracker` | Required | MongoDB database name. |
+| `FT_SESSION_SECRET` | Long random secret string | Required | Session signing/encryption secret. Replace the default before production use. |
+| `FT_ENV` | `development`, `dev`, `production`, `prod` | Optional | Runtime mode. Defaults to `development`. |
+| `FT_APP_NAME` | String, e.g. `FinTracker` | Optional | Application display name. |
+| `FT_APP_VERSION` | Version string, e.g. `1.0.0` | Optional | Version label shown in the UI. |
+| `FT_BASE_URL` | URL string, e.g. `https://fin.example.com` | Optional | Public base URL used for links and webhook defaults. |
+| `FT_EXTERNAL_PASSWORD_RESET_URL` | URL string | Optional | External password reset link shown to users when configured. |
+| `FT_KEYCLOAK_URL` | URL string | Optional | Keycloak base URL. Leave blank if not using Keycloak. |
+| `FT_KEYCLOAK_REALM` | String | Optional | Keycloak realm name. |
+| `FT_CLIENT_ID` | String | Optional | Keycloak OIDC client ID. |
+| `FT_KEYCLOAK_ADMIN_ROLES` | Comma-separated roles | Optional | Roles treated as app admins. |
+| `FT_KEYCLOAK_ADMIN_GROUPS` | Comma-separated groups | Optional | Groups treated as app admins. |
+| `FT_AUTH_ENABLED` | `true` / `false` | Optional | Enables the authentication integration section defaults. |
+| `FT_AUTH_PROVIDER` | `keycloak`, `local`, or custom string | Optional | Default auth provider shown in admin settings. |
+| `FT_AUTH_ALLOW_LOCAL_LOGIN` | `true` / `false` | Optional | Controls whether local login is allowed by default. |
+| `FT_APP_LOGO_URL` | URL or static path string | Optional | Default logo URL shown in the admin application settings. |
+| `FT_SUPPORT_EMAIL` | Email string | Optional | Default support email. |
+| `FT_SUPPORT_PHONE` | Phone string | Optional | Default support phone. |
+| `FT_MAINTENANCE_MODE` | `true` / `false` | Optional | Default maintenance-mode state. |
+| `FT_MAINTENANCE_MESSAGE` | Free text string | Optional | Default maintenance message. |
+| `FT_SMTP_ENABLED` | `true` / `false` | Optional | Default SMTP enabled state. |
+| `FT_SMTP_HOST` | Hostname string | Optional | SMTP host. |
+| `FT_SMTP_PORT` | Integer, e.g. `587` | Optional | SMTP port. |
+| `FT_SMTP_USERNAME` | String | Optional | SMTP username/login. |
+| `FT_SMTP_PASSWORD` | String | Optional | SMTP password. |
+| `FT_SMTP_FROM` | Email string | Optional | Default sender email address. |
+| `FT_SMTP_TLS` | `true` / `false` | Optional | Enable TLS for SMTP connections. |
+| `FT_TELEGRAM_ENABLED` | `true` / `false` | Optional | Default Telegram integration enabled state. |
+| `FT_TELEGRAM_BOT_USERNAME` | Telegram username string | Optional | Default Telegram bot username. |
+| `FT_TELEGRAM_BOT_TOKEN` | Bot token string | Optional | Default Telegram bot token. |
+| `FT_TELEGRAM_WEBHOOK_URL` | URL string | Optional | Default Telegram webhook URL. |
+| `FT_TELEGRAM_WEBHOOK_SECRET` | Secret string | Optional | Default Telegram webhook secret. |
+| `FT_TELEGRAM_POLLING_ENABLED` | `true` / `false` | Optional | Enables polling fallback by default. |
+| `FT_PUSH_ENABLED` | `true` / `false` | Optional | Default push integration enabled state. |
+| `FT_PUSH_VAPID_PUBLIC_KEY` | Key string | Optional | Firebase Web Push certificate public key used for browser token registration. |
+| `FT_PUSH_FIREBASE_API_KEY` | String | Optional | Firebase web config API key. |
+| `FT_PUSH_FIREBASE_AUTH_DOMAIN` | Domain string | Optional | Firebase auth domain. |
+| `FT_PUSH_FIREBASE_PROJECT_ID` | String | Optional | Firebase project ID. |
+| `FT_PUSH_FIREBASE_STORAGE_BUCKET` | String | Optional | Firebase storage bucket. |
+| `FT_PUSH_FIREBASE_MESSAGING_SENDER_ID` | Numeric/string sender ID | Optional | Firebase messaging sender ID. |
+| `FT_PUSH_FIREBASE_APP_ID` | String | Optional | Firebase app ID. |
+| `FT_PUSH_FIREBASE_MEASUREMENT_ID` | String | Optional | Firebase measurement ID. |
+| `FT_PUSH_FIREBASE_SERVICE_ACCOUNT_JSON` | JSON string | Optional | Firebase service-account JSON for server-side messaging. |
+| `FT_DB_ENABLED` | `true` / `false` | Optional | Default database settings panel enabled state. |
+| `FT_BACKUP_ENABLED` | `true` / `false` | Optional | Default backup automation enabled state. |
+| `FT_BACKUP_PROVIDER` | `filesystem` | Optional | Default backup provider. |
+| `FT_BACKUP_SCHEDULE_CRON` | Cron string, e.g. `0 2 * * *` | Optional | Default backup schedule. |
+| `FT_BACKUP_RETENTION_DAYS` | Integer/string, e.g. `7` | Optional | Default backup retention days. |
+| `FT_BACKUP_DESTINATION` | Filesystem path string | Optional | Default backup destination path. |
+| `FT_LOG_LEVEL` | `DEBUG`, `INFO`, `WARNING`, `ERROR` | Optional | Base log level. |
+| `FT_DEBUG_LOG` | `true` / `false` | Optional | Enables verbose debug logging. |
+| `FT_LOG_DIR` | Path string | Optional | Base log directory (default `/fintracker/logs`). |
+| `FT_LOG_FILE` | Path string | Optional | Application/system log file path. |
+| `FT_AUDIT_LOG_FILE` | Path string | Optional | Audit log file path. |
+| `FT_TELEGRAM_LOG_FILE` | Path string | Optional | Telegram webhook/polling log file path. |
+| `FT_SCHEDULER_LOG_FILE` | Path string | Optional | Scheduler and job-run log file path. |
+| `FT_ERROR_LOG_FILE` | Path string | Optional | Error-only log file path (all components). |
+| `FT_LOG_MAX_BYTES` | Integer bytes, e.g. `10485760` | Optional | Max size per log file before rotation. |
+| `FT_LOG_BACKUP_COUNT` | Integer, e.g. `10` | Optional | Number of rotated files to retain. |
+| `SCHEDULER_RUN_TIME` | Time string like `5:41 AM IST` | Optional | Daily recurring-job runtime. |
+| `FT_NOTIFICATION_ALERT_INTERVAL_SECONDS` | Integer seconds, e.g. `300` | Optional | Alert sweep interval for background notifications. |
+| `FT_DEFAULT_ADMIN_USERNAME` | String | Optional | Initial admin username on first boot. |
+| `FT_DEFAULT_ADMIN_PASSWORD` | String | Optional | Initial admin password on first boot. |
+| `FT_DEFAULT_ADMIN_EMAIL` | Email string | Optional | Initial admin email on first boot. |
+| `OPENAI_API_KEY` | API key string | Optional | Required only if AI chat features are used. |
+| `CURRENT_VERSION` | Version string | Optional | CI/CD-managed currently deployed version. |
+| `PREVIOUS_VERSION` | Version string | Optional | CI/CD-managed rollback version. |
+| `MONGO_INITDB_DATABASE` | String | Optional | Docker helper variable for Mongo initialization. |
+| `ME_CONFIG_MONGODB_SERVER` | Host string | Optional | Docker helper variable for Mongo Express. |
+| `ME_CONFIG_MONGODB_PORT` | Port string/integer | Optional | Docker helper variable for Mongo Express. |
+| `ME_CONFIG_BASICAUTH_USERNAME` | String | Optional | Mongo Express basic-auth username. |
+| `ME_CONFIG_BASICAUTH_PASSWORD` | String | Optional | Mongo Express basic-auth password. |
+| `ME_CONFIG_OPTIONS_EDITORTHEME` | Theme string | Optional | Mongo Express UI theme. |
 
 Notes:
-- Admin UI Settings are saved in MongoDB (`app_settings` collection). Env vars above provide startup defaults/fallbacks.
-- If you disable local admin bootstrap, ensure Keycloak admin role/group mapping is configured correctly.
-- Business-day boundaries for dashboard/alerts are aligned to `Asia/Kolkata` (IST).
-
-### Docker Compose Companion Variables
-
-These are not required by FastAPI itself, but are used by services in `docker/compose.yml`.
-
-| Variable | Used By | Example | Purpose |
-|---|---|---|---|
-| `MONGO_INITDB_DATABASE` | `mongodb` | `finance` | Initial DB for Mongo container |
-| `ME_CONFIG_MONGODB_SERVER` | `mongo-express` | `mongodb` | Mongo host for Mongo Express |
-| `ME_CONFIG_MONGODB_PORT` | `mongo-express` | `27017` | Mongo port for Mongo Express |
-| `ME_CONFIG_BASICAUTH_USERNAME` | `mongo-express` | `admin` | Mongo Express UI basic-auth username |
-| `ME_CONFIG_BASICAUTH_PASSWORD` | `mongo-express` | `change-me` | Mongo Express UI basic-auth password |
-| `ME_CONFIG_OPTIONS_EDITORTHEME` | `mongo-express` | `ambiance` | UI editor theme |
+- `.env` is for local/runtime secrets and machine-specific values.
+- `.env.example` is the Git-safe template to commit to GitLab.
+- Admin UI settings are saved in MongoDB (`app_settings` collection). Environment variables only provide startup defaults/fallbacks.
+- Production should always override the default `FT_SESSION_SECRET` and use real database values.
 
 ## Production `.env` Template
 
+Use [.env.example](./.env.example) as the committed template for GitLab and environment onboarding.
+
 ```dotenv
-# -------------------------------
-# Core App (required)
-# -------------------------------
-FT_MONGO_URI=mongodb://mongodb:27017
-FT_MONGO_DB_NAME=finance
-FT_ENV=production
-
-FT_KEYCLOAK_URL=https://sso.example.com
-FT_KEYCLOAK_REALM=fintracker
-FT_CLIENT_ID=fintracker-web
-
-FT_SESSION_SECRET=replace-with-a-long-random-secret
-FT_APP_NAME=FinTracker
-FT_APP_VERSION=1.0.0
-FT_BASE_URL=https://fin.example.com
-
-# -------------------------------
-# Auth mapping (optional)
-# -------------------------------
-FT_KEYCLOAK_ADMIN_ROLES=fintracker-admin,admin
-FT_KEYCLOAK_ADMIN_GROUPS=/fintracker-admin,fintracker-admin
-FT_EXTERNAL_PASSWORD_RESET_URL=
-
-# -------------------------------
-# Support + SMTP (optional)
-# -------------------------------
-FT_SUPPORT_EMAIL=support@example.com
-FT_SUPPORT_PHONE=+1-800-123-4567
-FT_SMTP_HOST=
-FT_SMTP_PORT=
-FT_SMTP_USERNAME=
-FT_SMTP_FROM=
-FT_SMTP_TLS=true
-
-# -------------------------------
-# Logging + jobs (optional)
-# -------------------------------
-FT_LOG_LEVEL=INFO
-FT_DEBUG_LOG=false
-FT_LOG_DIR=logs
-FT_LOG_FILE=logs/app.log
-SCHEDULER_RUN_TIME=5:41 AM IST
-FT_NOTIFICATION_ALERT_INTERVAL_SECONDS=300
-
-# -------------------------------
-# Bootstrap admin (optional)
-# -------------------------------
-FT_DEFAULT_ADMIN_USERNAME=admin
-FT_DEFAULT_ADMIN_PASSWORD=admin123
-FT_DEFAULT_ADMIN_EMAIL=admin@example.com
-
-# -------------------------------
-# AI chat (optional)
-# -------------------------------
-OPENAI_API_KEY=
-
-# -------------------------------
-# Docker helper services
-# -------------------------------
-MONGO_INITDB_DATABASE=finance
-ME_CONFIG_MONGODB_SERVER=mongodb
-ME_CONFIG_MONGODB_PORT=27017
-ME_CONFIG_BASICAUTH_USERNAME=admin
-ME_CONFIG_BASICAUTH_PASSWORD=change-me
-ME_CONFIG_OPTIONS_EDITORTHEME=ambiance
+# Copy .env.example to .env and replace example values with real secrets.
 ```
 
 ## Deployment
@@ -319,64 +274,189 @@ Security and behavior notes:
 - `Add Transaction` or `/addtransaction` -> start flow
 - `Cancel` or `/cancel` -> cancel in-progress flow
 
+
 ## CI/CD Pipeline (GitHub Actions)
 
-This repository now includes: `.github/workflows/cicd.yml`
+FinTracker now includes a branch-based GitHub Actions pipeline aligned to your requested flow:
 
-Flow implemented:
+- `Enhancements`: active development branch
+- `Dev`: protected release branch that triggers production deployment after merge
 
-1. Push to `dev` or `dev/*` (or run manually via `workflow_dispatch` on a dev branch)
-2. Auto-create/reuse a Pull Request from source branch to `main`
-3. Compute next Test version using `FT_APP_VERSION` major/minor + existing `test-v*` tags
-4. Wait for manual approval on `test` environment
-5. Deploy source commit to Test over SSH and run health check (`curl` with retries)
-6. Wait for manual approval on `production` environment
-7. Merge the PR into `main`
-8. Deploy merged `main` commit to Production
+### CI workflow
 
-Behavior implemented:
+Workflow: `/.github/workflows/ci.yml`
 
-- If `requirements.txt` changed, app container is rebuilt before restart
-- If `requirements.txt` did not change, app container is only force-recreated
-- `FT_APP_VERSION` is updated on remote `.env` during deployment
-- Git tags are created automatically:
-  - `test-v<version>` after successful Test deploy
-  - `prod-v<version>` after successful Production deploy (tagged on merged `main` commit)
+Triggers:
 
-### GitHub Environment Setup (Required)
+- push to `Enhancements`
+- pull requests targeting `Dev`
 
-Create two GitHub Environments:
+Checks executed:
 
-- `test`
-- `production`
+- install Python dependencies
+- run critical lint validation with `ruff`
+- run Python compile validation
+- run `pytest`
 
-Add **required reviewers** for each environment to enforce approval gates.
-GitHub sends approval request emails to those reviewers automatically.
+### Manual approval before merge
 
-For each environment, define:
+PR approval is enforced in GitHub Branch Protection, not inside a workflow file. For the `Dev` branch, configure:
 
-Environment variables (`Variables`):
+- require pull requests before merging
+- require at least 1 approval
+- require status checks to pass (`FinTracker CI`)
+- optionally restrict direct pushes to `Dev`
 
-- `DEPLOY_HOST` (example: `test.example.com`)
-- `DEPLOY_USER` (example: `deploy`)
-- `DEPLOY_PORT` (default: `22`)
-- `DEPLOY_PATH` (example: `/home/sanjay/Application/FinTrack`)
-- `COMPOSE_FILE` (default: `docker/compose.yml`)
-- `APP_SERVICE` (default: `backend`)
-- `ENV_FILE` (default: `.env`)
-- `CONTAINER_CLI` (example: `docker` or `podman`)
-- `HEALTH_URL` (example: `http://localhost/health` or public HTTPS health endpoint)
+GitHub will handle reviewer notifications automatically once branch protection and reviewer rules are configured.
 
-Environment secrets (`Secrets`):
+### CD workflow
 
-- `DEPLOY_SSH_KEY` (private key used by GitHub Actions for SSH deploy)
+Workflow: `/.github/workflows/cd.yml`
 
-### Manual Trigger
+Trigger:
 
-Use workflow dispatch if you need:
+- push to `Dev`
+- optional manual run via `workflow_dispatch`
 
-- `deploy_ref`: deploy a specific commit/tag
-- `force_rebuild`: rebuild app image even when `requirements.txt` is unchanged
+Deployment flow implemented:
+
+1. detect release bump from merged commit messages
+2. connect to the production server via SSH
+3. fetch and checkout the latest `Dev` ref on the server
+4. update `.env` with `CURRENT_VERSION`, `PREVIOUS_VERSION`, and `FT_APP_VERSION`
+5. run `docker compose pull`
+6. run `docker compose down --remove-orphans`
+7. run `docker compose up -d --build --remove-orphans`
+8. wait for startup
+9. run `/health` retry checks
+10. rollback automatically if health checks fail
+
+### Rollback workflow
+
+Workflow: `/.github/workflows/rollback.yml`
+
+Trigger:
+
+- manual `workflow_dispatch`
+
+It uses the last saved deployment state on the server and restores the previous Git ref and version markers.
+
+### Versioning rules
+
+Version bump is computed from commit messages pushed into `Dev`:
+
+- `BREAKING:` -> major bump
+- `feat:` -> minor bump
+- `fix:` -> patch bump
+- anything else -> patch bump
+
+Examples:
+
+- `v1.2.3` + `fix: update alert formatting` -> `v1.2.4`
+- `v1.2.3` + `feat: add support request metrics` -> `v1.3.0`
+- `v1.2.3` + `BREAKING: change auth model` -> `v2.0.0`
+
+### Required GitHub configuration
+
+Repository secrets:
+
+- `SSH_HOST`
+- `SSH_USER`
+- `SSH_KEY`
+
+Optional email notification secrets:
+
+- `EMAIL_SMTP_HOST`
+- `EMAIL_SMTP_PORT` (optional, defaults to `587`)
+- `EMAIL_SMTP_USERNAME`
+- `EMAIL_SMTP_PASSWORD`
+- `EMAIL_FROM`
+- `EMAIL_TO`
+- `EMAIL_SMTP_SECURE` (optional, use `true` for SMTPS or `false` for STARTTLS)
+
+If these email secrets are configured, GitHub Actions will send notifications for:
+
+- CI failures on `Enhancements` and PR validation
+- successful production deployments to `Dev`
+- failed production deployments where rollback was attempted
+- manual rollback success or failure
+
+Repository or environment variables:
+
+- `DEPLOY_PATH`
+
+Recommended production server prerequisites:
+
+- repository already cloned at `DEPLOY_PATH`
+- Docker Engine and Docker Compose plugin installed
+- production `.env` file already present
+- deploy user permitted to run `docker compose`
+
+### Scripts used by the pipeline
+
+- [`scripts/deploy.sh`](/home/sanjay/Application/FinTrack/scripts/deploy.sh)
+- [`scripts/health_check.sh`](/home/sanjay/Application/FinTrack/scripts/health_check.sh)
+- [`scripts/rollback.sh`](/home/sanjay/Application/FinTrack/scripts/rollback.sh)
+- [`scripts/version.sh`](/home/sanjay/Application/FinTrack/scripts/version.sh)
+
+These scripts are idempotent, write deployment progress to `deployments.log`, and perform automatic rollback when health checks fail.
+
+
+### End-to-end validation checklist
+
+Use this sequence to validate the pipeline after configuring GitHub secrets and branch protection:
+
+1. Configure repository secrets:
+   - `SSH_HOST`, `SSH_USER`, `SSH_KEY`
+   - optional email secrets if you want notifications
+2. Configure repository variable:
+   - `DEPLOY_PATH`
+3. Protect the `Dev` branch in GitHub:
+   - require pull request before merge
+   - require at least one approval
+   - require status check `FinTracker CI`
+4. Verify the production server:
+   - repo exists at `DEPLOY_PATH`
+   - `.env` exists
+   - `docker compose` works for the deploy user
+   - `http://localhost/health` returns success when the app is healthy
+5. Create a small test commit on `Enhancements` using a conventional message:
+   - `fix: validate ci pipeline`
+6. Push to `Enhancements` and confirm `FinTracker CI` passes.
+7. Open a PR from `Enhancements` to `Dev` and confirm approval is required.
+8. Approve and merge the PR.
+9. Confirm `FinTracker CD` starts automatically on push to `Dev`.
+10. On the production server, verify deployment state:
+    - `.env` updated with `CURRENT_VERSION` and `PREVIOUS_VERSION`
+    - `deployments.log` contains the new deployment entry
+    - containers restarted successfully
+11. Confirm application health:
+    - `curl http://localhost/health`
+    - open the app in browser and check login/dashboard manually
+12. If email secrets were configured, confirm the success notification arrived.
+
+### Rollback validation
+
+To validate rollback without breaking the live system permanently:
+
+1. Trigger the manual workflow `FinTracker Rollback` from GitHub Actions.
+2. Confirm the workflow succeeds.
+3. Confirm the server returns to the previously deployed ref/version.
+4. Check `deployments.log` for rollback entries.
+5. If email secrets were configured, confirm rollback notification arrived.
+
+### Useful server checks
+
+Run these on the production server when troubleshooting:
+
+```bash
+cd "$DEPLOY_PATH"
+git rev-parse --short HEAD
+cat .env | grep -E '^(CURRENT_VERSION|PREVIOUS_VERSION|FT_APP_VERSION)='
+docker compose -f docker/compose.yml ps
+curl -fsS http://localhost/health
+tail -n 50 deployments.log
+```
 
 ## First Boot Behavior
 
@@ -425,16 +505,12 @@ Change these immediately in production.
 
 ## FCM Push Setup and Test
 
-Push Notifications supports two providers:
-
-- `webpush`: browser Push API with VAPID keys
-- `firebase`: Firebase Cloud Messaging (FCM)
+Push Notifications uses Firebase Cloud Messaging (FCM) only.
 
 ### Configure FCM in Admin
 
 1. Open `Admin -> Settings -> Push Notifications`.
 2. Set `Enabled = true`.
-3. Set `Provider = firebase`.
 4. Fill Firebase Web config values:
    - `Firebase API Key`
    - `Firebase Auth Domain`
@@ -458,7 +534,6 @@ Push Notifications supports two providers:
 If delivery fails, validate:
 
 - Notification permission is granted
-- Push provider is `firebase`
 - Runtime has `firebase-admin` installed
 - Service account JSON is valid and from same Firebase project
 - VAPID public key belongs to the same Firebase project

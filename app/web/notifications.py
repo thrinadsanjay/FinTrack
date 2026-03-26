@@ -7,8 +7,6 @@ from app.services.audit import audit_log
 from app.services.notifications import mark_all_read, mark_read_by_ids
 from app.services.web_push import (
     get_push_public_config,
-    save_push_subscription,
-    deactivate_push_subscription,
     save_fcm_token,
     deactivate_fcm_token,
 )
@@ -47,28 +45,7 @@ async def push_config(request: Request):
 @login_required
 async def push_subscribe(request: Request):
     verify_csrf_token(request, request.headers.get("X-CSRF-Token"))
-    user = request.session.get("user") or {}
-    payload = await request.json()
-    subscription = (payload or {}).get("subscription") or {}
-    ok = await save_push_subscription(
-        user_id=user.get("user_id"),
-        subscription=subscription,
-        user_agent=request.headers.get("user-agent", ""),
-    )
-    if not ok:
-        return JSONResponse({"detail": "Invalid push subscription payload."}, status_code=400)
-
-    await audit_log(
-        action="PUSH_SUBSCRIPTION_SAVED",
-        request=request,
-        user={
-            "user_id": str(user.get("user_id") or ""),
-            "username": user.get("username"),
-            "auth_provider": user.get("auth_provider"),
-        },
-        meta={"has_endpoint": bool((subscription or {}).get("endpoint"))},
-    )
-    return JSONResponse({"status": "ok"})
+    return JSONResponse({"detail": "WebPush subscription is disabled. Use Firebase FCM token registration."}, status_code=400)
 
 
 @router.post("/push/fcm/register")
@@ -106,24 +83,7 @@ async def push_fcm_register(request: Request):
 @login_required
 async def push_unsubscribe(request: Request):
     verify_csrf_token(request, request.headers.get("X-CSRF-Token"))
-    user = request.session.get("user") or {}
-    payload = await request.json()
-    endpoint = str((payload or {}).get("endpoint") or "").strip()
-    if not endpoint:
-        return JSONResponse({"detail": "Subscription endpoint is required."}, status_code=400)
-
-    await deactivate_push_subscription(user_id=user.get("user_id"), endpoint=endpoint)
-    await audit_log(
-        action="PUSH_SUBSCRIPTION_REMOVED",
-        request=request,
-        user={
-            "user_id": str(user.get("user_id") or ""),
-            "username": user.get("username"),
-            "auth_provider": user.get("auth_provider"),
-        },
-        meta={"endpoint": endpoint[:120]},
-    )
-    return JSONResponse({"status": "ok"})
+    return JSONResponse({"detail": "WebPush unsubscribe is disabled. Use Firebase FCM unregister."}, status_code=400)
 
 
 @router.post("/push/fcm/unregister")

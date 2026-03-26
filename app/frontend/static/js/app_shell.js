@@ -31,7 +31,7 @@
   }
 
   async function saveWebPushSubscription(subscription) {
-    await fetch('/notifications/push/subscribe', {
+    const res = await fetch('/notifications/push/subscribe', {
       method: 'POST',
       credentials: 'same-origin',
       headers: {
@@ -40,10 +40,14 @@
       },
       body: JSON.stringify({ subscription }),
     });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.detail || 'Failed to save web push subscription.');
+    }
   }
 
   async function saveFcmToken(token) {
-    await fetch('/notifications/push/fcm/register', {
+    const res = await fetch('/notifications/push/fcm/register', {
       method: 'POST',
       credentials: 'same-origin',
       headers: {
@@ -52,6 +56,10 @@
       },
       body: JSON.stringify({ token }),
     });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.detail || 'Failed to save FCM token.');
+    }
   }
 
   async function ensureWebPushSubscription(pushCfg) {
@@ -67,11 +75,9 @@
     if (sub) {
       const subJson = sub.toJSON();
       const endpoint = String((subJson || {}).endpoint || '');
-      const cacheKey = 'ft-push-endpoint-v1';
-      const savedEndpoint = localStorage.getItem(cacheKey) || '';
-      if (endpoint && endpoint !== savedEndpoint) {
+      if (endpoint) {
         await saveWebPushSubscription(subJson);
-        localStorage.setItem(cacheKey, endpoint);
+        localStorage.setItem('ft-push-endpoint-v1', endpoint);
       }
     }
   }
@@ -98,24 +104,24 @@
     });
 
     if (!token) return;
-    const cacheKey = 'ft-fcm-token-v1';
-    const savedToken = localStorage.getItem(cacheKey) || '';
-    if (token !== savedToken) {
-      await saveFcmToken(token);
-      localStorage.setItem(cacheKey, token);
-    }
+    await saveFcmToken(token);
+    localStorage.setItem('ft-fcm-token-v1', token);
   }
 
   async function ensurePushSubscription() {
     try {
       const pushCfg = await fetchPushConfig();
-      if (!pushCfg || !pushCfg.enabled) return;
+      if (!pushCfg || !pushCfg.enabled) {
+        return { ok: false, reason: 'push_disabled_or_unconfigured' };
+      }
 
       let permission = Notification.permission;
       if (permission === 'default') {
         permission = await Notification.requestPermission();
       }
-      if (permission !== 'granted') return;
+      if (permission !== 'granted') {
+        return { ok: false, reason: `notification_permission_${permission}` };
+      }
 
       const provider = String(pushCfg.provider || 'webpush').toLowerCase();
       if (provider === 'firebase') {
@@ -123,8 +129,10 @@
       } else {
         await ensureWebPushSubscription(pushCfg);
       }
+      return { ok: true, reason: 'registered' };
     } catch (err) {
       console.warn('Push bootstrap failed:', err);
+      return { ok: false, reason: 'bootstrap_error', error: String(err || '') };
     }
   }
 
@@ -134,6 +142,7 @@
     if (data.url) window.location.href = String(data.url);
   });
 
+  window.ftEnsurePushSubscription = ensurePushSubscription;
   ensurePushSubscription();
 })();
 

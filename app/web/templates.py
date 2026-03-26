@@ -3,8 +3,11 @@ from app.core.config import settings
 from app.core.csrf import get_csrf_token
 from app.core.time import get_user_timezone, utc_to_local, localtime, datetimeformat, dateformat
 from app.helpers.money import round_money
+from app.helpers.phone import PHONE_COUNTRIES, DEFAULT_PHONE_COUNTRY, timezone_from_country_iso
 
 templates = Jinja2Templates(directory="app/frontend/templates")
+templates.env.auto_reload = True
+templates.env.cache = {}
 
 
 def money(value) -> str:
@@ -25,3 +28,6 @@ templates.env.globals["FT_SMTP_FROM"] = settings.FT_SMTP_FROM
 templates.env.globals["FT_SUPPORT_EMAIL"] = settings.FT_SUPPORT_EMAIL
 templates.env.globals["FT_SUPPORT_PHONE"] = settings.FT_SUPPORT_PHONE
 templates.env.globals["csrf_token"] = get_csrf_token
+templates.env.globals["PHONE_COUNTRIES"] = PHONE_COUNTRIES
+templates.env.globals["DEFAULT_PHONE_COUNTRY"] = DEFAULT_PHONE_COUNTRY
+templates.env.globals["country_timezone_from_iso"] = timezone_from_country_iso

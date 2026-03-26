@@ -254,3 +254,4 @@ db/init
 # Log files
 logs/
 *.log
+!.env.example

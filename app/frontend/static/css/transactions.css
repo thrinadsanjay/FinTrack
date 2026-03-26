@@ -31,6 +31,7 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+  overflow: visible;
 }
 
 .form-section {
@@ -209,6 +210,12 @@
   background: linear-gradient(135deg, var(--color-primary), var(--color-primary-strong));
   color: #fff;
   font-weight: 700;
+}
+
+.modal-actions,
+.row-menu,
+.action-btns {
+  overflow: visible;
 }
 
 /* List page */

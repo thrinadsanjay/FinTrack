@@ -241,7 +241,7 @@
             CASE 1: MONTH CLOSED
             ----------------------------- #}
             {% if tx.can_retry %}
-            <form method="post" action="/transactions/retry-failed" style="display:inline"
+            <form method="post" action="/transactions/retry-failed" style="display:inline" data-inline-success-form data-inline-success-message="Transaction retried"
               onsubmit="return confirm('Retry this failed transaction now?')">
               <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
               <input type="hidden" name="transaction_id" value="{{ tx._id }}">
@@ -263,7 +263,7 @@
             ----------------------------- #}
             {% elif tx.is_deleted %}
             {% if tx.can_restore %}
-            <form method="post" action="/transactions/restore" style="display:inline"
+            <form method="post" action="/transactions/restore" style="display:inline" data-inline-success-form data-inline-success-message="Transaction restored"
               onsubmit="return confirm('Restore this transaction? This will rollback balance.')">
               <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
               <input type="hidden" name="transaction_id" value="{{ tx._id }}">
@@ -288,7 +288,7 @@
             </button>
             {% endif %}
 
-            <form method="post" action="/transactions/delete" style="display:inline"
+            <form method="post" action="/transactions/delete" style="display:inline" data-inline-success-form data-inline-success-message="Transaction deleted"
               onsubmit="return confirm('Delete this transaction? This will rollback balance.')">
               <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
               {% if tx.type == "transfer" %}
@@ -336,7 +336,7 @@
       <button type="button" class="modal-close" id="edit-cancel" aria-label="Close">✕</button>
     </div>
 
-    <form method="post" action="/transactions/edit" id="edit-transaction-form">
+    <form method="post" action="/transactions/edit" id="edit-transaction-form" data-inline-success-form data-inline-success-message="Transaction saved">
       <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
 
       <input type="hidden" name="transaction_id" id="edit-transaction-id">
@@ -369,7 +369,7 @@
       </div>
 
       <div class="modal-actions">
-        <button type="submit" class="primary-btn">Save changes</button>
+        <button type="submit" class="primary-btn" data-inline-success-message="Transaction saved">Save changes</button>
         <button type="button" class="ghost-btn" id="edit-cancel-alt">Cancel</button>
       </div>
     </form>

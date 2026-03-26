@@ -238,7 +238,9 @@
     if (telegramVerifyWrap) telegramVerifyWrap.classList.add("hidden");
     if (telegramOtpInput) telegramOtpInput.value = "";
     telegramModal.classList.remove("hidden");
-    if (telegramMobileInput) telegramMobileInput.focus();
+    window.FTPhoneInput?.syncVisibleFromHidden?.(telegramModal);
+    const telegramLocalInput = telegramModal.querySelector("[data-phone-local]");
+    if (telegramLocalInput) telegramLocalInput.focus();
   }
 
   function closeTelegramModal() {
@@ -482,10 +484,13 @@
 
   if (telegramSendBtn) {
     telegramSendBtn.addEventListener("click", async () => {
+      window.FTPhoneInput?.syncHiddenValue?.(telegramModal);
       const mobile = (telegramMobileInput?.value || "").trim();
-      if (!mobile) {
+      const countryCode = (telegramModal?.querySelector("[data-phone-code]")?.value || "").trim();
+      const mobileLocal = (telegramModal?.querySelector("[data-phone-local]")?.value || "").trim();
+      if (!mobile && !mobileLocal) {
         notify("Mobile number is required.", "error");
-        telegramMobileInput?.focus();
+        telegramModal?.querySelector("[data-phone-local]")?.focus();
         return;
       }
       if (telegramOtpInput) telegramOtpInput.value = "";
@@ -502,6 +507,8 @@
           },
           body: JSON.stringify({
             mobile,
+            country_code: countryCode,
+            mobile_local: mobileLocal,
           }),
         });
         const data = await res.json().catch(() => ({}));
@@ -544,12 +551,16 @@
 
   if (telegramVerifyBtn) {
     telegramVerifyBtn.addEventListener("click", async () => {
+      window.FTPhoneInput?.syncHiddenValue?.(telegramModal);
       const otp = (telegramOtpInput?.value || "").trim();
       if (!otp) {
         notify("OTP is required.", "error");
         telegramOtpInput?.focus();
         return;
       }
+      const countryCode = (telegramModal?.querySelector("[data-phone-code]")?.value || "").trim();
+      const mobileLocal = (telegramModal?.querySelector("[data-phone-local]")?.value || "").trim();
+      const mobile = (telegramMobileInput?.value || "").trim();
       const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") || "";
       setLoading(telegramVerifyBtn, true, "Verifying...");
       try {
@@ -559,7 +570,7 @@
             "Content-Type": "application/json",
             "X-CSRF-Token": csrf,
           },
-          body: JSON.stringify({ otp }),
+          body: JSON.stringify({ otp, mobile, country_code: countryCode, mobile_local: mobileLocal }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {

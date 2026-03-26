@@ -1,5 +1,9 @@
 import logging
+import os
 from datetime import datetime, timezone
+
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
 from app.core.logging import setup_logging
 from app.db.mongo import db
 from app.helpers.account_balances import apply_account_delta, delta_for_tx
@@ -7,8 +11,12 @@ from app.helpers.notification_payloads import recurring_failed_scheduler_payload
 from app.helpers.recurring_schedule import (
     calculate_next_run,
     calculate_next_occurrence,
+    parse_clock_time,
+    parse_scheduler_time,
+    parse_timezone_name,
     SKIP_MISSED_OCCURRENCES,
 )
+from app.services.admin_settings import get_admin_settings
 from app.services.notifications import upsert_notification
 from app.helpers.money import round_money
 
@@ -21,7 +29,36 @@ logger = logging.getLogger(__name__)
 
 TRANSACTIONS = "transactions"
 RECURRING = "recurring_deposits"
-ACCOUNTS = "accounts"
+RECURRING_JOB_ID = "recurring-transactions"
+
+
+async def configure_recurring_schedule(scheduler: AsyncIOScheduler) -> None:
+    cfg = await get_admin_settings()
+    app_cfg = (cfg.get("application") or {}).copy()
+    timezone_name = str(app_cfg.get("timezone") or os.getenv("FT_APP_TIMEZONE", "Asia/Kolkata")).strip() or "Asia/Kolkata"
+    run_time = str(app_cfg.get("scheduler_run_time") or os.getenv("SCHEDULER_RUN_TIME", "05:41")).strip() or "05:41"
+
+    existing = scheduler.get_job(RECURRING_JOB_ID)
+    if existing:
+        scheduler.remove_job(RECURRING_JOB_ID)
+
+    try:
+        hour, minute = parse_clock_time(run_time)
+        timezone_obj = parse_timezone_name(timezone_name)
+    except ValueError:
+        logger.exception("Invalid recurring scheduler configuration: %s %s", run_time, timezone_name)
+        return
+
+    scheduler.add_job(
+        run_recurring_transactions,
+        trigger="cron",
+        hour=hour,
+        minute=minute,
+        timezone=timezone_obj,
+        id=RECURRING_JOB_ID,
+        replace_existing=True,
+    )
+    logger.info("Recurring scheduler configured for %s", run_time)
 
 
 # ======================================================

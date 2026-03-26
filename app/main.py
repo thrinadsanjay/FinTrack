@@ -2,6 +2,7 @@ import logging
 import os
 import time
 import html
+from zoneinfo import ZoneInfo
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -12,7 +13,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.services.metrics import track_request
 from app.services.users import count_active_users_total
 from app.services.metrics import set_total_users
-from app.services.admin_settings import get_maintenance_state
+from app.services.admin_settings import get_maintenance_state, get_admin_settings
 
 from app.core.config import settings
 from app.core.csrf import CsrfValidationError
@@ -45,11 +46,11 @@ from app.web.admin import router as web_admin_router
 from app.web.help_support import router as web_help_support_router
 from app.web.templates import templates
 
-from app.schedulers.recurring_scheduler import run_recurring_transactions
+from app.schedulers.recurring_scheduler import configure_recurring_schedule, run_recurring_transactions
 from app.schedulers.notification_scheduler import run_notification_alert_sweep
+from app.schedulers.backup_scheduler import configure_backup_schedule
 from app.services.telegram_polling import run_telegram_poll_once
 
-from app.helpers.recurring_schedule import parse_scheduler_time
 
 
 # ======================================================
@@ -113,6 +114,27 @@ async def prometheus_middleware(request: Request, call_next):
 
     request.state.maintenance_mode = bool(maintenance.get("enabled"))
     request.state.maintenance_message = (maintenance.get("message") or "").strip()
+
+    try:
+        admin_settings = await get_admin_settings()
+        app_cfg = (admin_settings or {}).get("application") or {}
+        auth_cfg = (admin_settings or {}).get("authentication") or {}
+        request.state.telegram_default_country = str(
+            app_cfg.get("default_country")
+            or auth_cfg.get("default_telegram_country")
+            or "IN"
+        ).strip() or "IN"
+    except Exception:
+        request.state.telegram_default_country = "IN"
+
+    client_tz = str(request.cookies.get("ft_tz") or "").strip()
+    if client_tz:
+        try:
+            ZoneInfo(client_tz)
+            if request.session.get("timezone") != client_tz:
+                request.session["timezone"] = client_tz
+        except Exception:
+            pass
 
     if request.state.maintenance_mode and request.method.upper() in {"POST", "PUT", "PATCH", "DELETE"}:
         path = request.url.path
@@ -196,8 +218,7 @@ app.include_router(web_help_support_router)
 # ======================================================
 
 scheduler = AsyncIOScheduler(timezone="UTC")
-run_time = os.getenv("SCHEDULER_RUN_TIME", "5:41 AM IST")
-hour, minute, timezone = parse_scheduler_time(run_time)
+app.state.scheduler = scheduler
 notification_alert_interval_seconds = max(
     60,
     int(os.getenv("FT_NOTIFICATION_ALERT_INTERVAL_SECONDS", "300")),
@@ -219,15 +240,7 @@ async def on_startup():
     except Exception:
         logger.exception("Failed to initialize total user metric")
 
-    scheduler.add_job(
-        run_recurring_transactions,
-        trigger="cron",
-        hour=hour,
-        minute=minute,
-        timezone=timezone,
-        id="recurring-transactions",
-        replace_existing=True,
-    )
+    await configure_recurring_schedule(scheduler)
 
     scheduler.add_job(
         run_telegram_poll_once,
@@ -249,6 +262,7 @@ async def on_startup():
         coalesce=True,
     )
 
+    await configure_backup_schedule(scheduler)
     scheduler.start()
     logger.info(
         "⏱ Background schedulers started (recurring + telegram polling + notification sweep/%ss)",

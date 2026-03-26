@@ -16,6 +16,7 @@ from app.services.audit import audit_log
 from app.services.dashboard import get_user_notifications
 from app.services.users import get_user_by_id
 from app.services.admin_settings import get_admin_settings
+from app.helpers.phone import normalize_phone_number
 from app.services.passkeys import build_registration_options, verify_registration
 from app.web.templates import templates
 
@@ -315,7 +316,16 @@ async def send_telegram_otp(request: Request):
         return JSONResponse({"detail": "Invalid user session."}, status_code=401)
 
     payload = await request.json()
-    mobile = str((payload or {}).get("mobile") or "").strip()
+    admin_settings = await get_admin_settings()
+    app_cfg = (admin_settings or {}).get("application") or {}
+    auth_cfg = (admin_settings or {}).get("authentication") or {}
+    mobile = normalize_phone_number(
+        mobile=(payload or {}).get("mobile"),
+        country_iso=(payload or {}).get("country_iso"),
+        country_code=(payload or {}).get("country_code"),
+        local_number=(payload or {}).get("mobile_local"),
+        default_country_iso=app_cfg.get("default_country") or auth_cfg.get("default_telegram_country") or "IN",
+    )
     if not PHONE_REGEX.match(mobile):
         return JSONResponse({"detail": "Enter a valid mobile number."}, status_code=400)
 

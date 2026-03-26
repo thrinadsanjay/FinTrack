@@ -12,7 +12,7 @@
       </div>
     </div>
 <div class="card transaction-card form-scroll">
-  <form method="post" action="/transactions/add" id="transaction-form">
+  <form method="post" action="/transactions/add" id="transaction-form" data-inline-success-form data-inline-success-message="Transaction saved">
     <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
 
     {% set alert_error = error %}
@@ -147,7 +147,7 @@
       <input type="hidden" name="interval" value="1">
     </div>
 
-    <button type="submit" class="mt-3 add-tx-btn">Add Transaction</button>
+    <button type="submit" class="mt-3 add-tx-btn" data-inline-success-message="Transaction saved">Add Transaction</button>
   </form>
 </div>
 

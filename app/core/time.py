@@ -14,10 +14,23 @@ DEFAULT_TZ = "Asia/Kolkata"
 
 def get_user_timezone(request) -> ZoneInfo:
     """
-    Returns user's timezone from session or default.
+    Returns user's timezone from session/cookie or default.
     """
-    tz_name = request.session.get("timezone", DEFAULT_TZ)
-    return ZoneInfo(tz_name)
+    tz_name = DEFAULT_TZ
+    try:
+        session_tz = str((request.session or {}).get("timezone") or "").strip()
+        if session_tz:
+            tz_name = session_tz
+        cookie_tz = str((request.cookies or {}).get("ft_tz") or "").strip()
+        if cookie_tz:
+            tz_name = cookie_tz
+    except Exception:
+        tz_name = DEFAULT_TZ
+
+    try:
+        return ZoneInfo(tz_name)
+    except Exception:
+        return ZoneInfo(DEFAULT_TZ)
 
 
 def utc_to_local(dt, user_tz: ZoneInfo):

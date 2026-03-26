@@ -1,0 +1,3 @@
+{% for country in PHONE_COUNTRIES %}
+  <option value="{{ country.iso }}" data-country-code="{{ country.code }}" {% if selected_country_code == country.iso %}selected{% endif %}>{{ country.label }} ({{ country.code }})</option>
+{% endfor %}
