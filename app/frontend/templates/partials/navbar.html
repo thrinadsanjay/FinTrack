@@ -141,14 +141,15 @@
   </div>
 </div>
 
-<div class="telegram-modal hidden" data-telegram-modal>
+{% set telegram_default_country = request.state.telegram_default_country or DEFAULT_PHONE_COUNTRY %}
+<div class="telegram-modal hidden" data-telegram-modal data-default-country="{{ telegram_default_country }}">
   <div class="telegram-modal-card">
     <div class="telegram-modal-head">
       <h3>Register Telegram</h3>
       <button type="button" class="telegram-close" data-telegram-close aria-label="Close">×</button>
     </div>
     <p class="telegram-help">
-      1. Enter your mobile number and click <strong>Register</strong>.<br>
+      1. Select your country code and enter your mobile number, then click <strong>Register</strong>.<br>
       2. Open Telegram bot and send <strong>/register</strong>.<br>
       3. Come back and click <strong>Register</strong> again to receive OTP.<br>
       4. Enter the OTP from Telegram and click <strong>Verify OTP</strong>.<br>
@@ -163,9 +164,15 @@
       </div>
     </div>
     <div class="telegram-form">
-      <label>Mobile Number
-        <input type="text" data-telegram-mobile placeholder="+1xxxxxxxxxx">
-      </label>
+      <label>Mobile Number</label>
+      <div class="phone-input" data-phone-input data-default-country="{{ telegram_default_country }}">
+        <select class="phone-country-code" name="country_code" data-phone-code aria-label="Country code">
+          {% set selected_country_code = telegram_default_country %}
+          {% include "partials/phone_country_options.html" %}
+        </select>
+        <input type="tel" class="phone-local-input" name="mobile_local" data-phone-local placeholder="Number only" autocomplete="tel-national" inputmode="numeric" spellcheck="false">
+        <input type="hidden" data-telegram-mobile data-phone-full value="">
+      </div>
       <div class="action-row">
         <button type="button" class="btn-primary" data-telegram-send-otp>Register</button>
       </div>

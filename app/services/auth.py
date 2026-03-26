@@ -26,6 +26,8 @@ from app.services.users import (
     update_oauth_last_login,
     update_oauth_profile,
     get_user_by_id,
+    get_user_by_email_any,
+    link_oauth_identity_to_user,
 )
 from app.services.audit import audit_log
 from app.services.keycloak import keycloak_service
@@ -132,8 +134,11 @@ async def authenticate_oauth_user(
         )
         raise HTTPException(status_code=401, detail="Invalid ID token")
 
-    oauth_sub = claims["sub"]
-    email = claims.get("email")
+    oauth_sub = str(claims.get("sub") or "").strip()
+    if not oauth_sub:
+        raise HTTPException(status_code=401, detail="Invalid ID token")
+
+    email = str(claims.get("email") or "").strip() or None
     username = claims.get("preferred_username") or email
     identity_provider = claims.get("identity_provider") or claims.get("idp")
     full_name = (
@@ -144,8 +149,28 @@ async def authenticate_oauth_user(
         or username
     )
     claims_is_admin = _extract_admin_flag_from_claims(claims)
+    email_verified_raw = claims.get("email_verified")
+    email_verified = str(email_verified_raw).strip().lower() in {"true", "1", "yes"}
 
     user = await get_oauth_user_by_sub_any(oauth_sub)
+    linked_existing = False
+
+    if not user and email and email_verified:
+        canonical = await get_user_by_email_any(email)
+        if canonical:
+            user = canonical
+            linked_existing = True
+            await link_oauth_identity_to_user(
+                user_id=str(user["_id"]),
+                oauth_sub=oauth_sub,
+                identity_provider=identity_provider,
+                email=email,
+                username=username,
+                full_name=full_name,
+                is_admin=claims_is_admin,
+                sync_admin_from_oauth=(str(user.get("auth_provider") or "") == "keycloak"),
+            )
+
     if not user:
         is_admin = claims_is_admin
         user = await create_oauth_user(
@@ -164,23 +189,50 @@ async def authenticate_oauth_user(
                 user={"oauth_sub": oauth_sub, "auth_provider": "keycloak"},
             )
             raise HTTPException(status_code=403, detail="Account disabled")
-        # Keycloak roles/groups are source-of-truth at login.
-        # Any admin toggle done from app UI is temporary and is reset on next login.
-        is_admin = claims_is_admin
+
+        is_admin = bool(user.get("is_admin"))
+        if str(user.get("auth_provider") or "") == "keycloak":
+            # Keycloak roles/groups are source-of-truth only for external-provider canonical accounts.
+            is_admin = claims_is_admin
+
         await update_oauth_last_login(str(user["_id"]))
+        await link_oauth_identity_to_user(
+            user_id=str(user["_id"]),
+            oauth_sub=oauth_sub,
+            identity_provider=identity_provider,
+            email=email,
+            username=username,
+            full_name=full_name,
+            is_admin=is_admin,
+            sync_admin_from_oauth=(str(user.get("auth_provider") or "") == "keycloak"),
+        )
         await update_oauth_profile(
             user_id=str(user["_id"]),
             username=username,
             email=email,
             full_name=full_name,
             identity_provider=identity_provider,
-            is_admin=is_admin,
+            is_admin=is_admin if str(user.get("auth_provider") or "") == "keycloak" else None,
         )
-        user["username"] = username
-        user["email"] = email
-        user["full_name"] = full_name
-        user["identity_provider"] = identity_provider
-        user["is_admin"] = is_admin
+
+    user = await get_user_by_id(str(user["_id"])) or user
+
+    if linked_existing:
+        await audit_log(
+            action="OAUTH_IDENTITY_LINKED",
+            request=request,
+            user={
+                "user_id": str(user["_id"]),
+                "username": user.get("username") or user.get("full_name"),
+                "auth_provider": user.get("auth_provider") or "local",
+            },
+            meta={
+                "oauth_sub": oauth_sub,
+                "identity_provider": identity_provider,
+                "email": email,
+                "email_verified": email_verified,
+            },
+        )
 
     await audit_log(
         action="OAUTH_LOGIN_SUCCESS",
@@ -188,9 +240,14 @@ async def authenticate_oauth_user(
         user={
             "user_id": str(user["_id"]),
             "username": user.get("full_name") or user.get("username"),
-            "auth_provider": "keycloak",
+            "auth_provider": user.get("auth_provider") or "keycloak",
         },
-        meta={"email": email, "is_admin": is_admin},
+        meta={
+            "email": email,
+            "is_admin": bool(user.get("is_admin")),
+            "identity_provider": identity_provider,
+            "linked_existing": linked_existing,
+        },
     )
 
     return user

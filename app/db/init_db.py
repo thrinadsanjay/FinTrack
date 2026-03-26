@@ -68,3 +68,7 @@ async def init_indexes():
 
     
     
+
+    # Backup runs
+    await db.backup_runs.create_index([("started_at", -1)])
+    await db.backup_runs.create_index([("status", 1), ("started_at", -1)])

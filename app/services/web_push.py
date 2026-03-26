@@ -67,22 +67,17 @@ async def get_push_public_config() -> dict[str, Any]:
     cfg = await get_admin_settings()
     push_cfg = (cfg.get("push_notifications") or {}) if isinstance(cfg, dict) else {}
     enabled = bool(push_cfg.get("enabled"))
-    provider = str(push_cfg.get("provider") or "webpush").strip().lower() or "webpush"
     public_key = str(push_cfg.get("vapid_public_key") or "").strip()
     firebase_cfg = dict(push_cfg.get("firebase_config") or {})
     firebase_public = _sanitize_firebase_public(firebase_cfg)
-
-    if provider == "firebase":
-        runtime_enabled = bool(enabled and _is_firebase_public_config_valid(firebase_public) and public_key)
-    else:
-        runtime_enabled = bool(enabled and public_key)
+    runtime_enabled = bool(enabled and _is_firebase_public_config_valid(firebase_public) and public_key)
 
     return {
         "enabled": runtime_enabled,
-        "provider": provider,
+        "provider": "firebase",
         "vapid_public_key": public_key,
         "firebase_config": firebase_public,
-        "library_ready": webpush is not None,
+        "library_ready": firebase_admin is not None and messaging is not None,
     }
 
 
@@ -424,17 +419,7 @@ async def send_push_notification_alert(
             "error": "push_disabled_or_unconfigured",
         }
 
-    provider = str(config.get("provider") or "webpush").lower()
-    if provider == "firebase":
-        return await _send_via_fcm(
-            user_id=user_id,
-            key=key,
-            notif_type=notif_type,
-            title=title,
-            message=message,
-        )
-
-    return await _send_via_webpush(
+    return await _send_via_fcm(
         user_id=user_id,
         key=key,
         notif_type=notif_type,

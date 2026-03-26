@@ -14,6 +14,7 @@ Logout user based on auth provider:
 
 import urllib.parse
 import secrets
+import re
 from datetime import datetime, timedelta, timezone
 
 from bson import ObjectId
@@ -30,6 +31,7 @@ from app.services.auth import (
     reset_user_password,
 )
 from app.services.audit import audit_log
+from app.services.admin_settings import get_admin_settings
 from app.services.metrics import (
     mark_user_logged_in,
     mark_user_logged_out,
@@ -39,13 +41,18 @@ from app.services.passkeys import (
     build_authentication_options,
     verify_authentication,
 )
-from app.services.users import count_active_users_total, update_last_login
+from app.services.users import count_active_users_total, update_last_login, get_user_by_mobile_any
+from app.helpers.phone import normalize_phone_number
 from app.web.templates import templates
 
 router = APIRouter()
 PASSKEY_LOGIN_SESSION_KEY = "passkey_login_pending"
 PASSKEY_REAUTH_SESSION_KEY = "passkey_reauth_pending"
 PASSKEY_CHALLENGE_TTL_SECONDS = 5 * 60
+
+TELEGRAM_LOGIN_OTP_TTL_MINUTES = 10
+TELEGRAM_LOGIN_PHONE_REGEX = re.compile(r"^\+?[0-9]{8,15}$")
+TELEGRAM_LOGIN_OTP_REGEX = re.compile(r"^\d{6}$")
 
 
 async def _sync_user_metrics_on_login(user_id: str):
@@ -92,10 +99,116 @@ def _session_user_payload(user: dict) -> dict:
         payload["email"] = user.get("email")
     return payload
 
+async def _auth_settings_state() -> dict:
+    admin_settings = await get_admin_settings()
+    app_cfg = (admin_settings or {}).get("application") or {}
+    auth_cfg = (admin_settings or {}).get("authentication") or {}
+    telegram_cfg = (admin_settings or {}).get("telegram") or {}
+
+    auth_enabled = bool(auth_cfg.get("enabled", True))
+    local_enabled = bool(auth_cfg.get("allow_local_login", True))
+    google_enabled = bool(auth_cfg.get("allow_google_login", True))
+    telegram_login_enabled = bool(auth_cfg.get("allow_telegram_login", False))
+    telegram_enabled = bool(telegram_cfg.get("enabled", False))
+
+    return {
+        "auth_enabled": auth_enabled,
+        "local_enabled": bool(auth_enabled and local_enabled),
+        "oauth_enabled": bool(auth_enabled),
+        "google_enabled": bool(auth_enabled and google_enabled),
+        "telegram_enabled": bool(auth_enabled and telegram_login_enabled and telegram_enabled),
+        "telegram_bot_username": str(telegram_cfg.get("bot_username") or "").strip(),
+        "default_telegram_country": str(
+            app_cfg.get("default_country")
+            or auth_cfg.get("default_telegram_country")
+            or "IN"
+        ).strip() or "IN",
+    }
+
+
+def _is_register_command(text: str) -> bool:
+    value = str(text or "").strip()
+    if not value:
+        return False
+    command = value.split()[0].lower()
+    if "@" in command:
+        command = command.split("@", 1)[0]
+    return command == "/register"
+
+
+async def _send_telegram_message(bot_token: str, chat_id: str, text: str) -> None:
+    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    async with get_async_http_client() as client:
+        response = await client.post(url, json={"chat_id": chat_id, "text": text})
+        payload: dict = {}
+        try:
+            payload = response.json()
+        except Exception:
+            payload = {}
+        ok = bool(payload.get("ok"))
+        if response.status_code >= 400 or not ok:
+            description = str(payload.get("description") or "").strip() or f"HTTP {response.status_code}"
+            if "chat not found" in description.lower():
+                description = "Chat not found. Open your Telegram bot and send /register first."
+            raise RuntimeError(description)
+
+
+async def _resolve_chat_id_from_register(bot_token: str, since: datetime | None = None) -> dict | None:
+    if since:
+        intent = await db.telegram_register_intents.find_one(
+            {
+                "created_at": {"$gte": since},
+                "$or": [
+                    {"used_by_user_id": {"$exists": False}},
+                    {"used_by_user_id": ""},
+                    {"used_by_user_id": None},
+                ],
+            },
+            sort=[("created_at", -1)],
+        )
+        if intent:
+            return {
+                "chat_id": str(intent.get("chat_id") or "").strip(),
+                "telegram_username": str(intent.get("telegram_username") or "").strip(),
+            }
+
+    url = f"https://api.telegram.org/bot{bot_token}/getUpdates"
+    async with get_async_http_client() as client:
+        response = await client.get(url, params={"limit": 100, "allowed_updates": '["message"]'})
+        payload: dict = {}
+        try:
+            payload = response.json()
+        except Exception:
+            payload = {}
+        if response.status_code >= 400 or not payload.get("ok"):
+            description = str(payload.get("description") or "").strip() or f"HTTP {response.status_code}"
+            raise RuntimeError(f"Unable to read Telegram updates: {description}")
+
+    for update in payload.get("result") or []:
+        message = (update or {}).get("message") or {}
+        msg_unix = (message or {}).get("date")
+        if since and isinstance(msg_unix, int):
+            msg_time = datetime.fromtimestamp(msg_unix, tz=timezone.utc)
+            if msg_time < since:
+                continue
+        body = str(message.get("text") or "").strip()
+        if _is_register_command(body):
+            chat = message.get("chat") or {}
+            chat_id = str(chat.get("id") or "").strip()
+            if chat_id:
+                user_from = message.get("from") or {}
+                return {
+                    "chat_id": chat_id,
+                    "telegram_username": str(user_from.get("username") or "").strip(),
+                }
+    return None
+
+
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request})
+    auth_state = await _auth_settings_state()
+    return templates.TemplateResponse("login.html", {"request": request, "auth_state": auth_state})
 
 
 @router.post("/login/local")
@@ -106,6 +219,11 @@ async def local_login(
     csrf_token: str = Form(...),
 ):
     verify_csrf_token(request, csrf_token)
+    auth_state = await _auth_settings_state()
+    if not auth_state.get("local_enabled"):
+        msg = urllib.parse.quote_plus("Local login is disabled by admin.")
+        return RedirectResponse(f"/login?auth=failed&error=local_disabled&msg={msg}", status_code=303)
+
     try:
         user = await authenticate_local_user(
             username=username,
@@ -455,7 +573,17 @@ async def passkey_unlock_verify(request: Request):
 
 
 @router.get("/login/oauth")
-async def login_oauth(request: Request):
+async def login_oauth(request: Request, idp: str | None = None):
+    auth_state = await _auth_settings_state()
+    if not auth_state.get("oauth_enabled"):
+        msg = urllib.parse.quote_plus("OAuth login is disabled by admin.")
+        return RedirectResponse(f"/login?auth=failed&error=oauth_disabled&msg={msg}", status_code=303)
+
+    provider_hint = str(idp or "").strip().lower()
+    if provider_hint == "google" and not auth_state.get("google_enabled"):
+        msg = urllib.parse.quote_plus("Google login is disabled by admin.")
+        return RedirectResponse(f"/login?auth=failed&error=google_disabled&msg={msg}", status_code=303)
+
     oauth_state = secrets.token_urlsafe(32)
     request.session["oauth_state"] = oauth_state
     callback_uri = _callback_uri_from_request(request)
@@ -468,6 +596,9 @@ async def login_oauth(request: Request):
         "redirect_uri": callback_uri,
         "state": oauth_state,
     }
+    provider_hint = str(idp or "").strip().lower()
+    if provider_hint in {"google"}:
+        params["kc_idp_hint"] = provider_hint
 
     url = (
         f"{settings.FT_KEYCLOAK_URL}/realms/{settings.FT_KEYCLOAK_REALM}"
@@ -478,8 +609,186 @@ async def login_oauth(request: Request):
     return RedirectResponse(url)
 
 
+@router.post("/login/telegram/send-otp")
+async def login_telegram_send_otp(
+    request: Request,
+    mobile: str = Form(""),
+    country_code: str = Form(""),
+    mobile_local: str = Form(""),
+    csrf_token: str = Form(...),
+):
+    verify_csrf_token(request, csrf_token)
+    auth_state = await _auth_settings_state()
+    if not auth_state.get("telegram_enabled"):
+        msg = urllib.parse.quote_plus("Telegram login is disabled by admin.")
+        return RedirectResponse(f"/login?auth=failed&error=telegram_disabled&msg={msg}", status_code=303)
+
+    auth_state = await _auth_settings_state()
+    phone = normalize_phone_number(
+        mobile=mobile,
+        country_code=country_code,
+        local_number=mobile_local,
+        default_country_iso=auth_state.get("default_telegram_country") or "IN",
+    )
+    if not TELEGRAM_LOGIN_PHONE_REGEX.match(phone):
+        msg = urllib.parse.quote_plus("Enter a valid mobile number.")
+        return RedirectResponse(f"/login?auth=failed&error=telegram_mobile&mobile={urllib.parse.quote_plus(phone)}&msg={msg}", status_code=303)
+
+    admin_settings = await get_admin_settings()
+    telegram_cfg = (admin_settings or {}).get("telegram") or {}
+    if not telegram_cfg.get("enabled"):
+        msg = urllib.parse.quote_plus("Telegram login is disabled by admin.")
+        return RedirectResponse(f"/login?auth=failed&error=telegram_disabled&mobile={urllib.parse.quote_plus(phone)}&msg={msg}", status_code=303)
+
+    bot_token = str(telegram_cfg.get("bot_token") or "").strip()
+    bot_username = str(telegram_cfg.get("bot_username") or "").strip()
+    if not bot_token or not bot_username:
+        msg = urllib.parse.quote_plus("Telegram bot is not configured.")
+        return RedirectResponse(f"/login?auth=failed&error=telegram_config&mobile={urllib.parse.quote_plus(phone)}&msg={msg}", status_code=303)
+
+    now = datetime.now(timezone.utc)
+    user = await get_user_by_mobile_any(phone)
+    if not user or not str(user.get("telegram_chat_id") or "").strip():
+        msg = urllib.parse.quote_plus("Number not registered.")
+        return RedirectResponse(f"/login?auth=failed&error=telegram_no_user&mobile={urllib.parse.quote_plus(phone)}&msg={msg}", status_code=303)
+
+    chat_id = str(user.get("telegram_chat_id") or "").strip()
+    telegram_username = str(user.get("telegram_username") or "").strip()
+    otp = f"{secrets.randbelow(900000) + 100000:06d}"
+    expires_at = now + timedelta(minutes=TELEGRAM_LOGIN_OTP_TTL_MINUTES)
+
+    text_body = (
+        f"FinTracker login OTP: {otp}\n"
+        f"Mobile: {phone}\n"
+        f"This OTP expires in {TELEGRAM_LOGIN_OTP_TTL_MINUTES} minutes."
+    )
+    try:
+        await _send_telegram_message(bot_token, chat_id, text_body)
+    except Exception as exc:
+        msg = urllib.parse.quote_plus(f"Failed to send OTP to Telegram: {str(exc)}")
+        return RedirectResponse(f"/login?auth=failed&error=telegram_send&mobile={urllib.parse.quote_plus(phone)}&msg={msg}", status_code=303)
+
+    await db.telegram_login_verifications.update_one(
+        {"mobile": phone},
+        {
+            "$set": {
+                "mobile": phone,
+                "chat_id": chat_id,
+                "telegram_username": telegram_username,
+                "otp": otp,
+                "expires_at": expires_at,
+                "attempts": 0,
+                "updated_at": now,
+                "bot_username": bot_username,
+                "status": "otp_sent",
+            },
+            "$setOnInsert": {"created_at": now},
+        },
+        upsert=True,
+    )
+
+    return RedirectResponse(
+        f"/login?auth=telegram_otp_sent&mobile={urllib.parse.quote_plus(phone)}",
+        status_code=303,
+    )
+
+
+@router.post("/login/telegram/verify-otp")
+async def login_telegram_verify_otp(
+    request: Request,
+    mobile: str = Form(""),
+    country_code: str = Form(""),
+    mobile_local: str = Form(""),
+    otp: str = Form(...),
+    csrf_token: str = Form(...),
+):
+    verify_csrf_token(request, csrf_token)
+    auth_state = await _auth_settings_state()
+    if not auth_state.get("telegram_enabled"):
+        msg = urllib.parse.quote_plus("Telegram login is disabled by admin.")
+        return RedirectResponse(f"/login?auth=failed&error=telegram_disabled&msg={msg}", status_code=303)
+
+    auth_state = await _auth_settings_state()
+    phone = normalize_phone_number(
+        mobile=mobile,
+        country_code=country_code,
+        local_number=mobile_local,
+        default_country_iso=auth_state.get("default_telegram_country") or "IN",
+    )
+    code = str(otp or "").strip()
+
+    if not TELEGRAM_LOGIN_PHONE_REGEX.match(phone):
+        msg = urllib.parse.quote_plus("Enter a valid mobile number.")
+        return RedirectResponse(f"/login?auth=failed&error=telegram_mobile&mobile={urllib.parse.quote_plus(phone)}&msg={msg}", status_code=303)
+    if not TELEGRAM_LOGIN_OTP_REGEX.match(code):
+        msg = urllib.parse.quote_plus("OTP must be a 6-digit code.")
+        return RedirectResponse(f"/login?auth=failed&error=telegram_otp&mobile={urllib.parse.quote_plus(phone)}&msg={msg}", status_code=303)
+
+    pending = await db.telegram_login_verifications.find_one({"mobile": phone})
+    if not pending:
+        msg = urllib.parse.quote_plus("No OTP request found. Please send OTP first.")
+        return RedirectResponse(f"/login?auth=failed&error=telegram_otp_missing&mobile={urllib.parse.quote_plus(phone)}&msg={msg}", status_code=303)
+
+    now = datetime.now(timezone.utc)
+    expires_at = pending.get("expires_at")
+    if isinstance(expires_at, str):
+        try:
+            expires_at = datetime.fromisoformat(expires_at)
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+        except Exception:
+            expires_at = None
+    if isinstance(expires_at, datetime) and expires_at < now:
+        await db.telegram_login_verifications.delete_one({"_id": pending["_id"]})
+        msg = urllib.parse.quote_plus("OTP expired. Please request a new OTP.")
+        return RedirectResponse(f"/login?auth=failed&error=telegram_otp_expired&mobile={urllib.parse.quote_plus(phone)}&msg={msg}", status_code=303)
+
+    if str(pending.get("otp") or "") != code:
+        await db.telegram_login_verifications.update_one(
+            {"_id": pending["_id"]},
+            {"$inc": {"attempts": 1}, "$set": {"updated_at": now}},
+        )
+        msg = urllib.parse.quote_plus("Invalid OTP.")
+        return RedirectResponse(f"/login?auth=failed&error=telegram_otp_invalid&mobile={urllib.parse.quote_plus(phone)}&msg={msg}", status_code=303)
+
+    user = await get_user_by_mobile_any(phone)
+    if not user:
+        msg = urllib.parse.quote_plus("No account found for this number. Link Telegram from profile first.")
+        return RedirectResponse(f"/login?auth=failed&error=telegram_no_user&mobile={urllib.parse.quote_plus(phone)}&msg={msg}", status_code=303)
+
+    if user.get("deleted_at") is not None or not user.get("is_active", True):
+        request.session.clear()
+        return RedirectResponse("/help-support?account=disabled", status_code=303)
+
+    request.session["user"] = _session_user_payload(user)
+    await update_last_login(str(user.get("_id")))
+    await _sync_user_metrics_on_login(str(user.get("_id")))
+
+    await audit_log(
+        action="TELEGRAM_LOGIN_SUCCESS",
+        request=request,
+        user={
+            "user_id": str(user.get("_id")),
+            "username": user.get("username") or user.get("full_name"),
+            "auth_provider": user.get("auth_provider") or "local",
+        },
+        meta={
+            "mobile": phone,
+            "telegram_username": str(pending.get("telegram_username") or ""),
+        },
+    )
+
+    await db.telegram_login_verifications.delete_one({"_id": pending["_id"]})
+    return RedirectResponse("/?auth=success", status_code=303)
+
+
 @router.get("/callback")
 async def callback(request: Request, code: str, state: str | None = None):
+    auth_state = await _auth_settings_state()
+    if not auth_state.get("oauth_enabled"):
+        msg = urllib.parse.quote_plus("OAuth login is disabled by admin.")
+        return RedirectResponse(f"/login?auth=failed&error=oauth_disabled&msg={msg}", status_code=303)
+
     expected_state = request.session.get("oauth_state")
     if not expected_state or not state or state != expected_state:
         return RedirectResponse("/login?auth=failed&error=oauth_state", status_code=303)

@@ -1,112 +1,92 @@
-// Login page helpers.
-
-function togglePassword() {
-  const input = document.getElementById("password");
-  if (input == null) return;
-  input.type = input.type === "password" ? "text" : "password";
-}
-
-function getCsrfToken() {
-  const tag = document.querySelector('meta[name="csrf-token"]');
-  return tag ? tag.getAttribute("content") || "" : "";
-}
-
-function b64urlToArrayBuffer(value) {
-  const padded = value.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (value.length % 4)) % 4);
-  const binary = atob(padded);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-  return bytes.buffer;
-}
-
-function arrayBufferToB64url(buffer) {
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  for (let i = 0; i < bytes.byteLength; i += 1) binary += String.fromCharCode(bytes[i]);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
-
-function toPublicKeyRequestOptions(options) {
-  const publicKey = { ...options };
-  publicKey.challenge = b64urlToArrayBuffer(options.challenge);
-  if (Array.isArray(options.allowCredentials)) {
-    publicKey.allowCredentials = options.allowCredentials.map((cred) => ({
-      ...cred,
-      id: b64urlToArrayBuffer(cred.id),
-    }));
+function togglePassword(button) {
+  const field = button?.closest(".password-field")?.querySelector("input");
+  if (!field) return;
+  const isHidden = field.type === "password";
+  field.type = isHidden ? "text" : "password";
+  const icon = button.querySelector("i");
+  if (icon) {
+    icon.className = isHidden ? "fa-regular fa-eye-slash" : "fa-regular fa-eye";
   }
-  return publicKey;
+  button.setAttribute("aria-label", isHidden ? "Hide password" : "Show password");
 }
 
-function serializeAssertion(assertion) {
-  return {
-    id: assertion.id,
-    rawId: arrayBufferToB64url(assertion.rawId),
-    type: assertion.type,
-    response: {
-      authenticatorData: arrayBufferToB64url(assertion.response.authenticatorData),
-      clientDataJSON: arrayBufferToB64url(assertion.response.clientDataJSON),
-      signature: arrayBufferToB64url(assertion.response.signature),
-      userHandle: assertion.response.userHandle
-        ? arrayBufferToB64url(assertion.response.userHandle)
-        : null,
-    },
-    clientExtensionResults: assertion.getClientExtensionResults ? assertion.getClientExtensionResults() : {},
-  };
+function normalizeDigits(value) {
+  return (value || "").replace(/\D+/g, "").trim();
 }
 
-async function autoPasskeyLogin() {
-  if (window.PublicKeyCredential == null || navigator.credentials == null || navigator.credentials.get == null) {
-    return;
-  }
+function syncPhoneGroup(container) {
+  if (!container) return;
+  const country = container.querySelector("[data-phone-country]");
+  const local = container.querySelector("[data-phone-local]");
+  const full = container.querySelector("[data-phone-full]");
+  const hiddenCountry = container.querySelector("[data-phone-country-hidden]");
+  if (!local || !full) return;
 
-  const csrf = getCsrfToken();
-  try {
-    const optionsResp = await fetch("/login/passkey/options", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-CSRF-Token": csrf,
-      },
-      credentials: "same-origin",
-      body: JSON.stringify({}),
-    });
-    const optionsData = await optionsResp.json();
-    if (optionsResp.ok === false || (optionsData && optionsData.options) == null) {
-      return;
-    }
-
-    const assertion = await navigator.credentials.get({
-      publicKey: toPublicKeyRequestOptions(optionsData.options),
-    });
-    if (assertion == null) {
-      return;
-    }
-
-    const verifyResp = await fetch("/login/passkey/verify", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-CSRF-Token": csrf,
-      },
-      credentials: "same-origin",
-      body: JSON.stringify({ credential: serializeAssertion(assertion) }),
-    });
-    const verifyData = await verifyResp.json();
-    if (verifyResp.ok === false) {
-      return;
-    }
-
-    window.location.replace((verifyData && verifyData.redirect) || "/");
-  } catch (_error) {
-    // Silent fallback to regular username/password login form.
-  }
+  const selectedOption = country?.selectedOptions?.[0];
+  const countryValue = selectedOption?.dataset.countryCode || "";
+  const localValue = normalizeDigits(local.value);
+  local.value = localValue;
+  full.value = countryValue && localValue ? `+${countryValue}${localValue}` : localValue;
+  if (hiddenCountry && country) hiddenCountry.value = country.value;
 }
 
-(function initLoginPage() {
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", autoPasskeyLogin, { once: true });
+function setPanel(panel, open) {
+  if (!panel) return;
+  panel.hidden = !open;
+}
+
+function setSwitcherState(root, active) {
+  root.querySelectorAll(".login-switcher__button").forEach((button) => {
+    const isLocal = button.hasAttribute("data-local-toggle");
+    const shouldActivate = active === "local" ? isLocal : !isLocal;
+    button.classList.toggle("is-active", shouldActivate);
+    button.setAttribute("aria-selected", shouldActivate ? "true" : "false");
+  });
+}
+
+function openLocalPanel(root) {
+  setPanel(root.querySelector("[data-local-panel]"), true);
+  setPanel(root.querySelector("[data-telegram-panel]"), false);
+  setSwitcherState(root, "local");
+  root.querySelector("input[name='username']")?.focus();
+}
+
+function openTelegramPanel(root) {
+  setPanel(root.querySelector("[data-local-panel]"), false);
+  setPanel(root.querySelector("[data-telegram-panel]"), true);
+  setSwitcherState(root, "telegram");
+  root.querySelectorAll("[data-phone-input]").forEach(syncPhoneGroup);
+  const otp = root.querySelector("[data-telegram-otp]");
+  const phone = root.querySelector("[data-telegram-panel] [data-phone-local]");
+  (otp || phone)?.focus();
+}
+
+function initLoginPage() {
+  const root = document.querySelector("[data-login-page]");
+  if (!root) return;
+
+  root.querySelectorAll("[data-password-toggle]").forEach((button) => {
+    button.addEventListener("click", () => togglePassword(button));
+  });
+
+  root.querySelectorAll("[data-phone-input]").forEach((container) => {
+    const country = container.querySelector("[data-phone-country]");
+    const local = container.querySelector("[data-phone-local]");
+    country?.addEventListener("change", () => syncPhoneGroup(container));
+    local?.addEventListener("input", () => syncPhoneGroup(container));
+    syncPhoneGroup(container);
+  });
+
+  root.querySelector("[data-local-toggle]")?.addEventListener("click", () => openLocalPanel(root));
+  root.querySelector("[data-telegram-open]")?.addEventListener("click", () => openTelegramPanel(root));
+
+  const auth = root.dataset.loginState || "";
+  const error = root.dataset.loginError || "";
+  if (auth === "telegram_otp_sent" || error.startsWith("telegram_")) {
+    openTelegramPanel(root);
   } else {
-    autoPasskeyLogin();
+    openLocalPanel(root);
   }
-})();
+}
+
+document.addEventListener("DOMContentLoaded", initLoginPage);

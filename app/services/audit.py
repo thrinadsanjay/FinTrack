@@ -109,6 +109,7 @@ async def audit_log(
             "meta": meta or {},
             "timestamp": datetime.now(timezone.utc),
         })
+        logger.info("Audit action recorded: action=%s user_id=%s", action, (user or {}).get("user_id"))
     except Exception as exc:
         # 🚨 Absolute last line of defense
         logger.error("Audit log insert failed: %s", exc)

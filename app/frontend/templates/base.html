@@ -13,9 +13,33 @@
 
   <link rel="manifest" href="/static/site.webmanifest">
   <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="stylesheet" href="/static/css/inline_action_feedback.css">
+  <link rel="stylesheet" href="/static/css/phone_input.css">
   {% block extra_css %}{% endblock %}
   <link rel="manifest" href="/static/manifest.json">
   <meta name="theme-color" content="#0f172a">
+  <script>
+    (function () {
+      try {
+        var tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (!tz) return;
+
+        var match = document.cookie.match(/(?:^|; )ft_tz=([^;]*)/);
+        var existing = match ? decodeURIComponent(match[1]) : "";
+        if (existing === tz) return;
+
+        document.cookie = "ft_tz=" + encodeURIComponent(tz) + "; path=/; max-age=31536000; samesite=lax";
+
+        var synced = window.sessionStorage.getItem("ft_tz_synced");
+        if (synced !== tz) {
+          window.sessionStorage.setItem("ft_tz_synced", tz);
+          window.location.reload();
+        }
+      } catch (_err) {
+        // no-op: keep server default timezone fallback
+      }
+    })();
+  </script>
 </head>
 {% set session_user = (request.scope.get("session") or {}).get("user") %}
 {% set current_user = session_user or user %}
@@ -57,6 +81,8 @@
     </main>
   </div>
   {% include "partials/footer.html" %}
+  <script src="/static/js/inline_action_feedback.js?v={{ FT_APP_VERSION }}" defer></script>
+  <script src="/static/js/phone_input.js?v={{ FT_APP_VERSION }}" defer></script>
   <script src="/static/js/navbar.js?v={{ FT_APP_VERSION }}" defer></script>
   <script src="/static/js/app_shell.js?v={{ FT_APP_VERSION }}" defer></script>
   {% if current_user %}<script src="/static/js/app_biometric_lock.js?v={{ FT_APP_VERSION }}" defer></script>{% endif %}

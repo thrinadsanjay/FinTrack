@@ -18,6 +18,12 @@
   let sendingReply = false;
   let selectedSessionStatus = "none";
 
+  async function inlineNotice(btn, message, kind = "success", duration = 2200) {
+    if (window.ftInlineFeedback?.showFor && btn) {
+      await window.ftInlineFeedback.showFor(btn, message, kind, duration);
+    }
+  }
+
   function isExternalUserId(userId) {
     return String(userId || "").startsWith("guest:");
   }
@@ -170,7 +176,7 @@
   }
 
   async function sendReply(message) {
-    if (!selectedUserId || !message.trim()) return;
+    if (!selectedUserId || !message.trim()) return false;
     sendingReply = true;
     setComposerEnabled(true);
 
@@ -189,8 +195,10 @@
       }
       composeInput.value = "";
       await loadMessages(selectedUserId);
+      return true;
     } catch (_error) {
       subtitleEl.textContent = "Unable to send reply. Please try again.";
+      return false;
     } finally {
       sendingReply = false;
       setComposerEnabled(Boolean(selectedUserId));
@@ -210,12 +218,13 @@
   }
 
   if (refreshBtn) {
-    refreshBtn.addEventListener("click", () => {
+    refreshBtn.addEventListener("click", async () => {
       if (selectedUserId) {
-        loadMessages(selectedUserId);
+        await loadMessages(selectedUserId);
       } else {
-        loadThreads();
+        await loadThreads();
       }
+      await inlineNotice(refreshBtn, "Refreshed", "info", 1500);
     });
   }
 
@@ -231,6 +240,7 @@
           throw new Error("Failed to end chat");
         }
         await loadMessages(selectedUserId);
+        await inlineNotice(endBtn, "Chat ended");
       } catch (_error) {
         subtitleEl.textContent = "Unable to end chat right now.";
       }
@@ -241,7 +251,10 @@
     composeForm.addEventListener("submit", (event) => {
       event.preventDefault();
       if (!selectedUserId || sendingReply) return;
-      sendReply(composeInput.value || "");
+      sendReply(composeInput.value || "").then((sent) => {
+        if (sent) return inlineNotice(composeSendBtn, "Sent");
+        return null;
+      });
     });
   }
 

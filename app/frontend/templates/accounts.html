@@ -19,7 +19,7 @@
         Add New Account
         <span class="chev">▾</span>
       </button>
-      <form method="post" action="/accounts/add" class="account-form account-form-collapsed" id="accountForm">
+      <form method="post" action="/accounts/add" class="account-form account-form-collapsed" id="accountForm" data-inline-success-form data-inline-success-message="Account added">
         <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
         <div class="account-form-grid">
           <div class="account-field">
@@ -51,7 +51,7 @@
         {% set alert_error = error %}
         {% include "partials/form_alert.html" %}
 
-        <button type="submit" class="account-primary">Add Account</button>
+        <button type="submit" class="account-primary" data-inline-success-message="Account added">Add Account</button>
       </form>
     </div>
 
@@ -73,7 +73,7 @@
   {% for acc in accounts %}
   
   <tr class="account-row">
-    <form method="post" action="/accounts/edit">
+    <form method="post" action="/accounts/edit" data-inline-success-form>
       <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
 
       <!-- Hidden -->
@@ -141,6 +141,7 @@
         <button
           type="submit"
           class="save-btn icon-btn"
+          data-inline-success-message="Account saved"
           title="Save changes"
           style="display:none">
           <i class="fa-solid fa-check"></i>
@@ -158,6 +159,7 @@
           type="submit"
           formaction="/accounts/delete"
           class="delete-btn icon-btn"
+          data-inline-success-message="Account deleted"
           title="Delete account"
           onclick="return confirm('Delete this account?')">
           <i class="fa-solid fa-trash"></i>
