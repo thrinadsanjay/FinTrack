@@ -13,13 +13,14 @@ Must NOT:
 """
 
 from datetime import datetime, timezone
-from decimal import Decimal, ROUND_HALF_UP
 from bson import ObjectId
 from pymongo.errors import DuplicateKeyError
 from fastapi import HTTPException, Request
 
 from app.db.mongo import db
 from app.services.audit import audit_log
+from app.helpers.money import round_money
+from app.core.errors import NotFoundError, ConflictError
 
 
 # ======================================================
@@ -31,9 +32,7 @@ def _now():
 
 
 def normalize_amount(value: float) -> float:
-    return float(
-        Decimal(value).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    )
+    return round_money(value)
 
 
 # ======================================================
@@ -115,7 +114,7 @@ async def update_account_name(
         {"_id": account_oid, "user_id": user_oid, "deleted_at": None}
     )
     if not account:
-        raise Exception("Account not found or access denied")
+        raise NotFoundError("Account not found or access denied")
 
     await db.accounts.update_one(
         {"_id": account_oid},
@@ -152,7 +151,7 @@ async def update_account_balance(
         {"_id": account_oid, "user_id": user_oid, "deleted_at": None}
     )
     if not account:
-        raise Exception("Account not found or access denied")
+        raise NotFoundError("Account not found or access denied")
 
     balance = normalize_amount(balance)
 
@@ -189,13 +188,13 @@ async def delete_account(
         {"_id": account_oid, "user_id": user_oid, "deleted_at": None}
     )
     if not account:
-        raise Exception("Account not found or access denied")
+        raise NotFoundError("Account not found or access denied")
 
     tx_exists = await db.transactions.find_one(
         {"account_id": account_oid, "deleted_at": None}
     )
     if tx_exists:
-        raise Exception("Account has active transactions and cannot be deleted")
+        raise ConflictError("Account has active transactions and cannot be deleted")
 
     await db.accounts.update_one(
         {"_id": account_oid},

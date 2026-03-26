@@ -4,7 +4,7 @@
 <link rel="stylesheet" href="/static/css/help_support.css">
 {% endblock %}
 {% block content %}
-<section class="page page-help" data-help-page data-user-authenticated="{{ 'true' if user else 'false' }}">
+<section class="page page-help" data-help-page data-user-authenticated="{{ 'true' if user else 'false' }}" data-reactivation-context="{{ account_reactivation_context or '' }}">
   <div class="help-wrap">
     <header class="help-hero">
       <div>
@@ -16,6 +16,13 @@
         {% if user %}<a href="/profile" class="btn-secondary">Profile</a>{% endif %}
       </div>
     </header>
+
+    {% if account_notice %}
+    <div class="help-account-notice">{{ account_notice }}</div>
+    <div class="help-actions" style="margin-bottom: 12px;">
+      <button type="button" class="btn-primary" data-reactivation-request>Request Reactivation</button>
+    </div>
+    {% endif %}
 
     <section class="help-tiles" aria-label="Help Sections">
       <button type="button" class="help-tile active" data-help-target="contact">

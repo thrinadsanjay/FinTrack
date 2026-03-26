@@ -79,16 +79,27 @@
         <h1>Settings</h1>
         <p>Configure platform integrations, communication, auth, and operations.</p>
       </header>
+      {% set alert_success = admin_alert_success %}
+      {% set alert_error = admin_alert_error %}
+      {% include "partials/form_alert.html" %}
       <form class="admin-panel settings-form" method="post" action="/admin/settings" enctype="multipart/form-data">
         <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
         <div class="panel-head">
           <h2>Platform Settings</h2>
-          <button type="submit" class="btn-action ok" data-maintenance-allowed>Save Settings</button>
+          <span>Use Edit on each panel to update and save section-wise.</span>
+        </div>
+        <div class="settings-editing-banner" data-settings-editing-banner hidden>
+          Currently editing: <strong data-settings-editing-label>-</strong>
         </div>
         <div class="settings-scroll">
-          <section class="settings-group">
+          <section class="settings-group" data-settings-panel="application">
             <div class="settings-group-head">
               <h3>Application</h3>
+              <div class="action-row settings-actions">
+                <button type="button" class="btn-action btn-icon" data-panel-edit title="Edit panel" aria-label="Edit panel"><i class="fa-solid fa-pen"></i></button>
+                <button type="submit" class="btn-action ok btn-icon" data-panel-save name="settings_section" value="application" hidden title="Save panel" aria-label="Save panel"><i class="fa-solid fa-check"></i></button>
+                <button type="button" class="btn-action btn-icon" data-panel-cancel hidden title="Cancel changes" aria-label="Cancel changes"><i class="fa-solid fa-xmark"></i></button>
+              </div>
             </div>
             <div class="settings-grid two">
               <label>Application Name
@@ -120,14 +131,17 @@
             </div>
           </section>
 
-          <section class="settings-group">
+          <section class="settings-group" data-settings-panel="smtp">
             <div class="settings-group-head">
               <h3>SMTP Settings</h3>
-              <div class="action-row">
-                <button type="button" class="btn-action" data-smtp-test>Test SMTP</button>
+              <div class="action-row settings-actions">
+                <button type="button" class="btn-action btn-icon" data-smtp-test data-default-html="<i class='fa-solid fa-vial'></i>" title="Test SMTP" aria-label="Test SMTP"><i class="fa-solid fa-vial"></i></button>
+                <button type="button" class="btn-action btn-icon" data-panel-edit title="Edit panel" aria-label="Edit panel"><i class="fa-solid fa-pen"></i></button>
+                <button type="submit" class="btn-action ok btn-icon" data-panel-save name="settings_section" value="smtp" hidden title="Save panel" aria-label="Save panel"><i class="fa-solid fa-check"></i></button>
+                <button type="button" class="btn-action btn-icon" data-panel-cancel hidden title="Cancel changes" aria-label="Cancel changes"><i class="fa-solid fa-xmark"></i></button>
                 <label class="toggle">
                   <input type="checkbox" name="smtp_enabled" {% if admin_settings.smtp.enabled %}checked{% endif %}>
-                  <span>Enabled</span>
+                  <span aria-label="Enabled toggle"></span>
                 </label>
               </div>
             </div>
@@ -160,13 +174,18 @@
             </div>
           </section>
 
-          <section class="settings-group">
+          <section class="settings-group" data-settings-panel="telegram">
             <div class="settings-group-head">
               <h3>Telegram Integration</h3>
-              <label class="toggle">
-                <input type="checkbox" name="telegram_enabled" {% if admin_settings.telegram.enabled %}checked{% endif %}>
-                <span>Enabled</span>
-              </label>
+              <div class="action-row settings-actions">
+                <button type="button" class="btn-action btn-icon" data-panel-edit title="Edit panel" aria-label="Edit panel"><i class="fa-solid fa-pen"></i></button>
+                <button type="submit" class="btn-action ok btn-icon" data-panel-save name="settings_section" value="telegram" hidden title="Save panel" aria-label="Save panel"><i class="fa-solid fa-check"></i></button>
+                <button type="button" class="btn-action btn-icon" data-panel-cancel hidden title="Cancel changes" aria-label="Cancel changes"><i class="fa-solid fa-xmark"></i></button>
+                <label class="toggle">
+                  <input type="checkbox" name="telegram_enabled" {% if admin_settings.telegram.enabled %}checked{% endif %}>
+                  <span aria-label="Enabled toggle"></span>
+                </label>
+              </div>
             </div>
             <div class="settings-grid two">
               <label>Bot Username
@@ -196,15 +215,15 @@
               </label>
               <label class="full">Webhook Controls
                 <div class="action-row">
-                  <button type="button" class="btn-action" data-telegram-webhook-set>Set Webhook</button>
-                  <button type="button" class="btn-action" data-telegram-webhook-info>Check Webhook</button>
-                  <button type="button" class="btn-action warn" data-telegram-webhook-delete>Delete Webhook</button>
+                  <button type="button" class="btn-action btn-icon" data-telegram-webhook-set data-default-html="<i class='fa-solid fa-plug-circle-check'></i>" title="Set Webhook" aria-label="Set Webhook"><i class="fa-solid fa-plug-circle-check"></i></button>
+                  <button type="button" class="btn-action btn-icon" data-telegram-webhook-info data-default-html="<i class='fa-solid fa-circle-info'></i>" title="Check Webhook" aria-label="Check Webhook"><i class="fa-solid fa-circle-info"></i></button>
+                  <button type="button" class="btn-action warn btn-icon" data-telegram-webhook-delete data-default-html="<i class='fa-solid fa-link-slash'></i>" title="Delete Webhook" aria-label="Delete Webhook"><i class="fa-solid fa-link-slash"></i></button>
                 </div>
               </label>
               <label class="full">Polling Controls
                 <div class="action-row">
-                  <button type="button" class="btn-action" data-telegram-poll-run-once>Run Poll Now</button>
-                  <button type="button" class="btn-action" data-telegram-poll-status>Check Poll Status</button>
+                  <button type="button" class="btn-action btn-icon" data-telegram-poll-run-once data-default-html="<i class='fa-solid fa-play'></i>" title="Run Poll Now" aria-label="Run Poll Now"><i class="fa-solid fa-play"></i></button>
+                  <button type="button" class="btn-action btn-icon" data-telegram-poll-status data-default-html="<i class='fa-solid fa-heart-pulse'></i>" title="Check Poll Status" aria-label="Check Poll Status"><i class="fa-solid fa-heart-pulse"></i></button>
                 </div>
               </label>
               <div class="telegram-poll-widget full" data-telegram-poll-widget>
@@ -219,47 +238,122 @@
                 </div>
                 <div class="telegram-poll-error" data-telegram-poll-health-error hidden></div>
               </div>
+              <div class="telegram-delivery-widget full" data-telegram-delivery-widget>
+                <div class="telegram-poll-title">Delivery Health</div>
+                <div class="telegram-poll-grid">
+                  <div><span>Total Mirrored</span><strong data-telegram-delivery-total>0</strong></div>
+                  <div><span>Sent</span><strong data-telegram-delivery-sent>0</strong></div>
+                  <div><span>Failed</span><strong data-telegram-delivery-failed>0</strong></div>
+                  <div><span>Cooldown Skips</span><strong data-telegram-delivery-cooldown>0</strong></div>
+                  <div><span>Last Check</span><strong data-telegram-delivery-checked>-</strong></div>
+                </div>
+                <div class="telegram-delivery-failures">
+                  <div class="telegram-delivery-subhead">Recent Failures</div>
+                  <ul data-telegram-delivery-failures>
+                    <li class="muted">No recent failures.</li>
+                  </ul>
+                </div>
+              </div>
               <label class="full">Broadcast Message
                 <div class="action-row">
                   <input
                     type="text"
-                    data-telegram-broadcast-message
+                    data-telegram-broadcast-message data-panel-action-control="true"
                     placeholder="Enter your message"
                   >
-                  <button type="button" class="btn-action" data-telegram-broadcast>Send</button>
+                  <button type="button" class="btn-action btn-icon" data-telegram-broadcast data-default-html="<i class='fa-solid fa-paper-plane'></i>" title="Send broadcast" aria-label="Send broadcast"><i class="fa-solid fa-paper-plane"></i></button>
                 </div>
               </label>
             </div>
           </section>
 
-          <section class="settings-group">
+          <section class="settings-group" data-settings-panel="push_notifications">
             <div class="settings-group-head">
               <h3>Push Notification Settings</h3>
-              <label class="toggle">
-                <input type="checkbox" name="push_enabled" {% if admin_settings.push_notifications.enabled %}checked{% endif %}>
-                <span>Enabled</span>
-              </label>
+              <div class="action-row settings-actions">
+                <button type="button" class="btn-action btn-icon" data-push-test data-default-html="<i class='fa-solid fa-bell'></i>" title="Test Push" aria-label="Test Push"><i class="fa-solid fa-bell"></i></button>
+                <button type="button" class="btn-action btn-icon" data-panel-edit title="Edit panel" aria-label="Edit panel"><i class="fa-solid fa-pen"></i></button>
+                <button type="submit" class="btn-action ok btn-icon" data-panel-save name="settings_section" value="push_notifications" hidden title="Save panel" aria-label="Save panel"><i class="fa-solid fa-check"></i></button>
+                <button type="button" class="btn-action btn-icon" data-panel-cancel hidden title="Cancel changes" aria-label="Cancel changes"><i class="fa-solid fa-xmark"></i></button>
+                <label class="toggle">
+                  <input type="checkbox" name="push_enabled" {% if admin_settings.push_notifications.enabled %}checked{% endif %}>
+                  <span aria-label="Enabled toggle"></span>
+                </label>
+              </div>
             </div>
+            {% set push_provider_value = (admin_settings.push_notifications.provider or 'webpush')|lower %}
             <div class="settings-grid two">
-              <label>Provider
-                <input type="text" name="push_provider" value="{{ admin_settings.push_notifications.provider }}">
+              <label>Delivery Method
+                <select name="push_provider" data-push-provider>
+                  <option value="firebase" {% if push_provider_value == 'firebase' %}selected{% endif %}>Firebase (FCM)</option>
+                  <option value="webpush" {% if push_provider_value != 'firebase' %}selected{% endif %}>WebPush (VAPID)</option>
+                </select>
               </label>
-              <label>VAPID Public Key
-                <input type="text" name="push_vapid_public_key" value="{{ admin_settings.push_notifications.vapid_public_key }}">
+              <label>VAPID Public Key (used by browser registration)
+                <input type="text" name="push_vapid_public_key" value="{{ admin_settings.push_notifications.vapid_public_key }}" placeholder="Public key from Firebase/WebPush settings">
               </label>
-              <label class="full">VAPID Private Key
-                <input type="text" name="push_vapid_private_key" value="{{ admin_settings.push_notifications.vapid_private_key }}">
-              </label>
+
+              <div class="full push-method-panel" data-push-method="firebase">
+                <h4>Firebase (FCM) Configuration</h4>
+                <p class="muted">Use this when Delivery Method is Firebase. Required fields are shown first.</p>
+                <div class="settings-grid two push-method-grid">
+                  <label>Firebase API Key
+                    <input type="text" name="push_firebase_api_key" value="{{ admin_settings.push_notifications.firebase_config.apiKey }}">
+                  </label>
+                  <label>Firebase Project ID
+                    <input type="text" name="push_firebase_project_id" value="{{ admin_settings.push_notifications.firebase_config.projectId }}">
+                  </label>
+                  <label>Firebase Messaging Sender ID
+                    <input type="text" name="push_firebase_messaging_sender_id" value="{{ admin_settings.push_notifications.firebase_config.messagingSenderId }}">
+                  </label>
+                  <label>Firebase App ID
+                    <input type="text" name="push_firebase_app_id" value="{{ admin_settings.push_notifications.firebase_config.appId }}">
+                  </label>
+                  <label class="full">Firebase Service Account JSON (Server-side)
+                    <textarea name="push_firebase_service_account_json" rows="5" placeholder='{"type":"service_account",...}'>{{ admin_settings.push_notifications.firebase_service_account_json }}</textarea>
+                  </label>
+                </div>
+
+                <details class="push-advanced">
+                  <summary>Advanced Firebase Fields (Optional)</summary>
+                  <div class="settings-grid two push-advanced-grid">
+                    <label>Firebase Auth Domain
+                      <input type="text" name="push_firebase_auth_domain" value="{{ admin_settings.push_notifications.firebase_config.authDomain }}">
+                    </label>
+                    <label>Firebase Storage Bucket
+                      <input type="text" name="push_firebase_storage_bucket" value="{{ admin_settings.push_notifications.firebase_config.storageBucket }}">
+                    </label>
+                    <label class="full">Firebase Measurement ID
+                      <input type="text" name="push_firebase_measurement_id" value="{{ admin_settings.push_notifications.firebase_config.measurementId }}">
+                    </label>
+                  </div>
+                </details>
+              </div>
+
+              <div class="full push-method-panel" data-push-method="webpush">
+                <h4>WebPush (VAPID) Configuration</h4>
+                <p class="muted">Use this when Delivery Method is WebPush.</p>
+                <div class="settings-grid two push-method-grid">
+                  <label class="full">VAPID Private Key
+                    <input type="text" name="push_vapid_private_key" value="{{ admin_settings.push_notifications.vapid_private_key }}">
+                  </label>
+                </div>
+              </div>
             </div>
           </section>
 
-          <section class="settings-group">
+          <section class="settings-group" data-settings-panel="authentication">
             <div class="settings-group-head">
               <h3>Authentication Integration</h3>
-              <label class="toggle">
-                <input type="checkbox" name="auth_enabled" {% if admin_settings.authentication.enabled %}checked{% endif %}>
-                <span>Enabled</span>
-              </label>
+              <div class="action-row settings-actions">
+                <button type="button" class="btn-action btn-icon" data-panel-edit title="Edit panel" aria-label="Edit panel"><i class="fa-solid fa-pen"></i></button>
+                <button type="submit" class="btn-action ok btn-icon" data-panel-save name="settings_section" value="authentication" hidden title="Save panel" aria-label="Save panel"><i class="fa-solid fa-check"></i></button>
+                <button type="button" class="btn-action btn-icon" data-panel-cancel hidden title="Cancel changes" aria-label="Cancel changes"><i class="fa-solid fa-xmark"></i></button>
+                <label class="toggle">
+                  <input type="checkbox" name="auth_enabled" {% if admin_settings.authentication.enabled %}checked{% endif %}>
+                  <span aria-label="Enabled toggle"></span>
+                </label>
+              </div>
             </div>
             <div class="settings-grid three">
               <label>Provider
@@ -281,13 +375,18 @@
             </div>
           </section>
 
-          <section class="settings-group">
+          <section class="settings-group" data-settings-panel="database">
             <div class="settings-group-head">
               <h3>Database Settings</h3>
-              <label class="toggle">
-                <input type="checkbox" name="db_enabled" {% if admin_settings.database.enabled %}checked{% endif %}>
-                <span>Enabled</span>
-              </label>
+              <div class="action-row settings-actions">
+                <button type="button" class="btn-action btn-icon" data-panel-edit title="Edit panel" aria-label="Edit panel"><i class="fa-solid fa-pen"></i></button>
+                <button type="submit" class="btn-action ok btn-icon" data-panel-save name="settings_section" value="database" hidden title="Save panel" aria-label="Save panel"><i class="fa-solid fa-check"></i></button>
+                <button type="button" class="btn-action btn-icon" data-panel-cancel hidden title="Cancel changes" aria-label="Cancel changes"><i class="fa-solid fa-xmark"></i></button>
+                <label class="toggle">
+                  <input type="checkbox" name="db_enabled" {% if admin_settings.database.enabled %}checked{% endif %}>
+                  <span aria-label="Enabled toggle"></span>
+                </label>
+              </div>
             </div>
             <div class="settings-grid two">
               <label>Mongo URI
@@ -299,13 +398,18 @@
             </div>
           </section>
 
-          <section class="settings-group">
+          <section class="settings-group" data-settings-panel="backup">
             <div class="settings-group-head">
               <h3>Backup Settings</h3>
-              <label class="toggle">
-                <input type="checkbox" name="backup_enabled" {% if admin_settings.backup.enabled %}checked{% endif %}>
-                <span>Enabled</span>
-              </label>
+              <div class="action-row settings-actions">
+                <button type="button" class="btn-action btn-icon" data-panel-edit title="Edit panel" aria-label="Edit panel"><i class="fa-solid fa-pen"></i></button>
+                <button type="submit" class="btn-action ok btn-icon" data-panel-save name="settings_section" value="backup" hidden title="Save panel" aria-label="Save panel"><i class="fa-solid fa-check"></i></button>
+                <button type="button" class="btn-action btn-icon" data-panel-cancel hidden title="Cancel changes" aria-label="Cancel changes"><i class="fa-solid fa-xmark"></i></button>
+                <label class="toggle">
+                  <input type="checkbox" name="backup_enabled" {% if admin_settings.backup.enabled %}checked{% endif %}>
+                  <span aria-label="Enabled toggle"></span>
+                </label>
+              </div>
             </div>
             <div class="settings-grid three">
               <label>Provider
@@ -374,20 +478,26 @@
                       <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
                       <button
                         type="submit"
-                        class="btn-action {{ 'warn' if u.is_active else 'ok' }}"
-                        {% if is_protected_local_admin %}disabled title="Local admin account cannot be managed"{% elif is_self %}disabled title="You cannot disable your own account"{% endif %}
+                        class="btn-action btn-icon {{ 'warn' if u.is_active else 'ok' }}"
+                        data-admin-action="{{ 'user-disable' if u.is_active else 'user-enable' }}"
+                        aria-label="{{ 'Disable user' if u.is_active else 'Enable user' }}"
+                        title="{{ 'Local admin account cannot be managed' if is_protected_local_admin else 'You cannot disable your own account' if is_self else ('Disable user ' ~ (u.username or u.email or 'this user')) if u.is_active else ('Enable user ' ~ (u.username or u.email or 'this user')) }}"
+                        {% if is_protected_local_admin or is_self %}disabled{% endif %}
                       >
-                        {{ 'Disable' if u.is_active else 'Enable' }}
+                        <i class="fa-solid {{ 'fa-user-slash' if u.is_active else 'fa-user-check' }}"></i>
                       </button>
                     </form>
                     <form method="post" action="/admin/users/{{ u._id }}/toggle-admin">
                       <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
                       <button
                         type="submit"
-                        class="btn-action {{ 'warn' if u.is_admin else 'ok' }}"
-                        {% if is_protected_local_admin %}disabled title="Local admin account cannot be managed"{% elif is_self %}disabled title="You cannot remove your own admin access"{% endif %}
+                        class="btn-action btn-icon {{ 'warn' if u.is_admin else 'ok' }}"
+                        data-admin-action="{{ 'admin-remove' if u.is_admin else 'admin-grant' }}"
+                        aria-label="{{ 'Remove admin access' if u.is_admin else 'Grant admin access' }}"
+                        title="{{ 'Local admin account cannot be managed' if is_protected_local_admin else 'You cannot remove your own admin access' if is_self else ('Remove admin access for ' ~ (u.username or u.email or 'this user')) if u.is_admin else ('Grant admin access to ' ~ (u.username or u.email or 'this user')) }}"
+                        {% if is_protected_local_admin or is_self %}disabled{% endif %}
                       >
-                        {{ 'Remove Admin' if u.is_admin else 'Grant Admin' }}
+                        <i class="fa-solid {{ 'fa-user-shield' if u.is_admin else 'fa-user-plus' }}"></i>
                       </button>
                     </form>
                   </div>
@@ -409,8 +519,8 @@
         <div class="panel-head">
           <h2>Support Requests</h2>
           <div class="action-row">
-            <button type="button" class="btn-action warn" data-support-end disabled>End Chat</button>
-            <button type="button" class="btn-action" data-support-refresh>Refresh</button>
+            <button type="button" class="btn-action warn btn-icon" data-support-end data-admin-action="support-end" aria-label="End chat" title="End chat" disabled><i class="fa-solid fa-phone-slash"></i></button>
+            <button type="button" class="btn-action btn-icon" data-support-refresh data-admin-action="support-refresh" aria-label="Refresh" title="Refresh"><i class="fa-solid fa-rotate"></i></button>
           </div>
         </div>
         <div class="support-layout" data-support-root>
@@ -436,7 +546,7 @@
                 autocomplete="off"
                 disabled
               />
-              <button type="submit" class="btn-action ok" data-support-compose-send disabled>Send</button>
+              <button type="submit" class="btn-action ok btn-icon" data-support-compose-send data-admin-action="support-send" aria-label="Send" title="Send" disabled><i class="fa-solid fa-paper-plane"></i></button>
             </form>
           </article>
         </div>

@@ -14,7 +14,7 @@ router = APIRouter()
 async def add_transaction(
     request: Request,
     account_id: str,
-    amount: int,
+    amount: float,
     tx_type: str,
     mode: str,
     category_code: str,

@@ -1,5 +1,6 @@
 (() => {
   const testBtn = document.querySelector("[data-smtp-test]");
+  const pushTestBtn = document.querySelector("[data-push-test]");
   const telegramBroadcastBtn = document.querySelector("[data-telegram-broadcast]");
   const telegramBroadcastInput = document.querySelector("[data-telegram-broadcast-message]");
   const telegramWebhookSetBtn = document.querySelector("[data-telegram-webhook-set]");
@@ -15,6 +16,16 @@
   const telegramPollHealthConfig = document.querySelector("[data-telegram-poll-health-config]");
   const telegramPollHealthWebhook = document.querySelector("[data-telegram-poll-health-webhook]");
   const telegramPollHealthError = document.querySelector("[data-telegram-poll-health-error]");
+  const telegramDeliveryWidget = document.querySelector("[data-telegram-delivery-widget]");
+  const telegramDeliveryTotal = document.querySelector("[data-telegram-delivery-total]");
+  const telegramDeliverySent = document.querySelector("[data-telegram-delivery-sent]");
+  const telegramDeliveryFailed = document.querySelector("[data-telegram-delivery-failed]");
+  const telegramDeliveryCooldown = document.querySelector("[data-telegram-delivery-cooldown]");
+  const telegramDeliveryChecked = document.querySelector("[data-telegram-delivery-checked]");
+  const telegramDeliveryFailures = document.querySelector("[data-telegram-delivery-failures]");
+  const pushProviderInput = document.querySelector("[data-push-provider]");
+  const pushFirebasePanel = document.querySelector('[data-push-method="firebase"]');
+  const pushWebpushPanel = document.querySelector('[data-push-method="webpush"]');
   if (
     !testBtn &&
     !telegramBroadcastBtn &&
@@ -22,10 +33,18 @@
     !telegramWebhookInfoBtn &&
     !telegramWebhookDeleteBtn &&
     !telegramPollRunOnceBtn &&
-    !telegramPollStatusBtn
+    !telegramPollStatusBtn &&
+    !telegramDeliveryWidget &&
+    !pushTestBtn
   ) return;
 
   const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") || "";
+  const settingsForm = document.querySelector(".settings-form");
+  const settingsPanels = Array.from(document.querySelectorAll("[data-settings-panel]"));
+  const settingsEditingBanner = document.querySelector("[data-settings-editing-banner]");
+  const settingsEditingLabel = document.querySelector("[data-settings-editing-label]");
+  let activePanelKey = null;
+  const panelSnapshot = new Map();
 
   function val(name) {
     const el = document.querySelector(`[name="${name}"]`);
@@ -49,6 +68,188 @@
     window.alert(message);
   }
 
+  function startLoading(btn, loadingLabel = "Loading") {
+    if (!btn) return;
+    const defaultHtml = btn.dataset.defaultHtml || btn.innerHTML;
+    btn.dataset.defaultHtml = defaultHtml;
+    btn.disabled = true;
+    btn.classList.add("is-loading");
+    btn.dataset.loadingLabel = loadingLabel;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+  }
+
+  function stopLoading(btn, fallbackHtml = "") {
+    if (!btn) return;
+    btn.classList.remove("is-loading");
+    btn.disabled = false;
+    btn.innerHTML = btn.dataset.defaultHtml || fallbackHtml;
+  }
+
+
+  function applyPushProviderVisibility() {
+    if (!pushProviderInput) return;
+    const raw = String(pushProviderInput.value || "").trim().toLowerCase();
+    const provider = raw === "firebase" ? "firebase" : "webpush";
+    if (pushProviderInput.value !== provider) {
+      pushProviderInput.value = provider;
+    }
+
+    const isFirebase = provider === "firebase";
+    if (pushFirebasePanel) {
+      pushFirebasePanel.hidden = !isFirebase;
+      if (!isFirebase) {
+        pushFirebasePanel.querySelectorAll("details").forEach((d) => {
+          if (d instanceof HTMLDetailsElement) d.open = false;
+        });
+      }
+    }
+    if (pushWebpushPanel) {
+      pushWebpushPanel.hidden = isFirebase;
+    }
+  }
+
+  function getPanelKey(panel) {
+    return String(panel?.getAttribute("data-settings-panel") || "").trim();
+  }
+  function getPanelTitle(panel) {
+    const heading = panel?.querySelector(".settings-group-head h3");
+    return String(heading?.textContent || getPanelKey(panel) || "Settings").trim();
+  }
+
+  function getPanelBannerKind(key) {
+    if (key === "application") return "app";
+    if (["smtp", "telegram", "push_notifications"].includes(key)) return "communication";
+    if (key === "authentication") return "security";
+    if (["database", "backup"].includes(key)) return "infrastructure";
+    return "default";
+  }
+
+  function updateEditingBanner() {
+    if (!settingsEditingBanner || !settingsEditingLabel) return;
+    settingsEditingBanner.classList.remove(
+      "is-app",
+      "is-communication",
+      "is-security",
+      "is-infrastructure",
+      "is-default"
+    );
+    if (!activePanelKey) {
+      settingsEditingBanner.hidden = true;
+      settingsEditingLabel.textContent = "-";
+      return;
+    }
+    const activePanel = settingsPanels.find((p) => getPanelKey(p) === activePanelKey);
+    settingsEditingLabel.textContent = getPanelTitle(activePanel);
+    settingsEditingBanner.classList.add(`is-${getPanelBannerKind(activePanelKey)}`);
+    settingsEditingBanner.hidden = false;
+  }
+
+
+  function getPanelControls(panel) {
+    return Array.from(panel.querySelectorAll("input, select, textarea")).filter((el) => {
+      if (!(el instanceof HTMLElement)) return false;
+      if (el.closest(".settings-actions")) return false;
+      if (el.getAttribute("name") === "csrf_token") return false;
+      if (el.getAttribute("type") === "hidden") return false;
+      if (el.getAttribute("data-panel-action-control") === "true") return false;
+      return true;
+    });
+  }
+
+  function setPanelControlsEditable(panel, editable) {
+    getPanelControls(panel).forEach((el) => {
+      if (el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement) {
+        el.disabled = !editable;
+      }
+    });
+  }
+
+  function snapshotPanel(panel) {
+    const state = getPanelControls(panel).map((el) => {
+      const isCheck = el instanceof HTMLInputElement && ["checkbox", "radio"].includes((el.type || "").toLowerCase());
+      return {
+        name: el.getAttribute("name") || "",
+        type: (el instanceof HTMLInputElement) ? el.type : (el instanceof HTMLSelectElement ? "select" : "textarea"),
+        value: isCheck ? String(el.checked) : String(el.value ?? ""),
+      };
+    });
+    panelSnapshot.set(getPanelKey(panel), state);
+  }
+
+  function restorePanel(panel) {
+    const key = getPanelKey(panel);
+    const state = panelSnapshot.get(key) || [];
+    state.forEach((item) => {
+      const el = panel.querySelector(`[name="${item.name}"]`);
+      if (!(el instanceof HTMLElement)) return;
+      if (el instanceof HTMLInputElement && ["checkbox", "radio"].includes((el.type || "").toLowerCase())) {
+        el.checked = item.value === "true";
+      } else if (el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement) {
+        el.value = item.value;
+      }
+    });
+  }
+
+  function setPanelButtons(panel, editing) {
+    const editBtn = panel.querySelector("[data-panel-edit]");
+    const saveBtn = panel.querySelector("[data-panel-save]");
+    const cancelBtn = panel.querySelector("[data-panel-cancel]");
+    if (editBtn instanceof HTMLElement) editBtn.hidden = editing;
+    if (saveBtn instanceof HTMLElement) saveBtn.hidden = !editing;
+    if (cancelBtn instanceof HTMLElement) cancelBtn.hidden = !editing;
+  }
+
+  function setPanelMode(panel, editing) {
+    setPanelControlsEditable(panel, editing);
+    setPanelButtons(panel, editing);
+    panel.classList.toggle("is-editing", editing);
+    if (editing) {
+      activePanelKey = getPanelKey(panel);
+    } else if (activePanelKey === getPanelKey(panel)) {
+      activePanelKey = null;
+    }
+    updateEditingBanner();
+  }
+
+  function initPanelEditing() {
+    if (!settingsForm || !settingsPanels.length) return;
+
+    settingsPanels.forEach((panel) => {
+      setPanelMode(panel, false);
+
+      const editBtn = panel.querySelector("[data-panel-edit]");
+      const cancelBtn = panel.querySelector("[data-panel-cancel]");
+      const saveBtn = panel.querySelector("[data-panel-save]");
+
+      editBtn?.addEventListener("click", () => {
+        settingsPanels.forEach((other) => {
+          if (other === panel) return;
+          if (other.classList.contains("is-editing")) {
+            restorePanel(other);
+          }
+          setPanelMode(other, false);
+        });
+        snapshotPanel(panel);
+        setPanelMode(panel, true);
+      });
+
+      cancelBtn?.addEventListener("click", () => {
+        restorePanel(panel);
+        setPanelMode(panel, false);
+        applyPushProviderVisibility();
+      });
+
+      saveBtn?.addEventListener("click", () => {
+        settingsPanels.forEach((other) => {
+          if (other !== panel) {
+            setPanelMode(other, false);
+          }
+        });
+        setPanelMode(panel, true);
+      });
+    });
+  }
+
   function fmtDate(value) {
     if (!value) return "-";
     const d = new Date(value);
@@ -56,6 +257,32 @@
     return d.toLocaleString();
   }
 
+
+  function renderDeliveryHealth(delivery) {
+    if (!telegramDeliveryWidget) return;
+    if (telegramDeliveryTotal) telegramDeliveryTotal.textContent = String(delivery?.total ?? 0);
+    if (telegramDeliverySent) telegramDeliverySent.textContent = String(delivery?.sent ?? 0);
+    if (telegramDeliveryFailed) telegramDeliveryFailed.textContent = String(delivery?.failed ?? 0);
+    if (telegramDeliveryCooldown) telegramDeliveryCooldown.textContent = String(delivery?.cooldown ?? 0);
+    if (telegramDeliveryChecked) telegramDeliveryChecked.textContent = fmtDate(delivery?.checked_at);
+
+    if (!telegramDeliveryFailures) return;
+    const failures = Array.isArray(delivery?.recent_failures) ? delivery.recent_failures : [];
+    if (!failures.length) {
+      telegramDeliveryFailures.innerHTML = '<li class="muted">No recent failures.</li>';
+      return;
+    }
+
+    telegramDeliveryFailures.innerHTML = failures
+      .map((item) => {
+        const title = String(item?.title || "Notification");
+        const key = String(item?.key || "-");
+        const when = fmtDate(item?.updated_at || item?.last_attempt_at);
+        const error = String(item?.telegram_error || "delivery_failed");
+        return `<li><strong>${title}</strong><span class="muted">${key} • ${when} • ${error}</span></li>`;
+      })
+      .join("");
+  }
   function renderPollHealth(poll, requestError = "") {
     if (!telegramPollWidget) return;
     const lastError = requestError || poll?.last_error || "";
@@ -139,10 +366,7 @@
       },
     };
 
-    testBtn.disabled = true;
-    testBtn.classList.add("is-loading");
-    const label = testBtn.textContent;
-    testBtn.textContent = "Sending...";
+    startLoading(testBtn, "Sending SMTP test");
     try {
       const res = await fetch("/admin/settings/smtp/test", {
         method: "POST",
@@ -160,15 +384,49 @@
     } catch (err) {
       notify(err?.message || "SMTP test failed.", "error");
     } finally {
-      testBtn.classList.remove("is-loading");
-      testBtn.disabled = false;
-      testBtn.textContent = label || "Test SMTP";
+      stopLoading(testBtn, '<i class="fa-solid fa-vial"></i>');
     }
   }
 
   if (testBtn) {
     testBtn.addEventListener("click", runTest);
   }
+
+  async function runPushTest() {
+    const custom = window.prompt("Optional message for push test:", "This is a test push from FinTracker Admin.");
+    if (custom == null) return;
+    const message = custom.trim() || "This is a test push from FinTracker Admin.";
+
+    startLoading(pushTestBtn, "Sending push test");
+    try {
+      const res = await fetch("/admin/settings/push/test", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrfToken,
+        },
+        body: JSON.stringify({
+          title: "FinTracker Test Notification",
+          message,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.detail || "Push test failed.");
+      }
+      const result = data.result || {};
+      notify(`Push test sent: ${result.sent || 0} delivered${result.failed ? `, ${result.failed} failed` : ""}.`, "success");
+    } catch (err) {
+      notify(err?.message || "Push test failed.", "error");
+    } finally {
+      stopLoading(pushTestBtn, '<i class="fa-solid fa-bell"></i>');
+    }
+  }
+
+  if (pushTestBtn) {
+    pushTestBtn.addEventListener("click", runPushTest);
+  }
+
 
   async function runTelegramBroadcast() {
     const text = (telegramBroadcastInput?.value || "").trim();
@@ -186,10 +444,7 @@
       },
     };
 
-    telegramBroadcastBtn.disabled = true;
-    telegramBroadcastBtn.classList.add("is-loading");
-    const label = telegramBroadcastBtn.textContent;
-    telegramBroadcastBtn.textContent = "Sending...";
+    startLoading(telegramBroadcastBtn, "Sending broadcast");
     try {
       const res = await fetch("/admin/settings/telegram/broadcast", {
         method: "POST",
@@ -213,9 +468,7 @@
     } catch (err) {
       notify(err?.message || "Telegram broadcast failed.", "error");
     } finally {
-      telegramBroadcastBtn.classList.remove("is-loading");
-      telegramBroadcastBtn.disabled = false;
-      telegramBroadcastBtn.textContent = label || "Broadcast Message";
+      stopLoading(telegramBroadcastBtn, '<i class="fa-solid fa-paper-plane"></i>');
     }
   }
 
@@ -225,28 +478,20 @@
 
   async function runSetWebhook() {
     if (!telegramWebhookSetBtn) return;
-    telegramWebhookSetBtn.disabled = true;
-    telegramWebhookSetBtn.classList.add("is-loading");
-    const label = telegramWebhookSetBtn.textContent;
-    telegramWebhookSetBtn.textContent = "Setting...";
+    startLoading(telegramWebhookSetBtn, "Setting webhook");
     try {
       await callTelegramAdmin("/admin/settings/telegram/webhook/set");
       notify("Webhook configured successfully.", "success");
     } catch (err) {
       notify(err?.message || "Failed to set webhook.", "error");
     } finally {
-      telegramWebhookSetBtn.classList.remove("is-loading");
-      telegramWebhookSetBtn.disabled = false;
-      telegramWebhookSetBtn.textContent = label || "Set Webhook";
+      stopLoading(telegramWebhookSetBtn, '<i class="fa-solid fa-plug-circle-check"></i>');
     }
   }
 
   async function runWebhookInfo() {
     if (!telegramWebhookInfoBtn) return;
-    telegramWebhookInfoBtn.disabled = true;
-    telegramWebhookInfoBtn.classList.add("is-loading");
-    const label = telegramWebhookInfoBtn.textContent;
-    telegramWebhookInfoBtn.textContent = "Checking...";
+    startLoading(telegramWebhookInfoBtn, "Checking webhook");
     try {
       const data = await callTelegramAdmin("/admin/settings/telegram/webhook/info");
       const info = data.webhook || {};
@@ -257,9 +502,7 @@
     } catch (err) {
       notify(err?.message || "Failed to check webhook.", "error");
     } finally {
-      telegramWebhookInfoBtn.classList.remove("is-loading");
-      telegramWebhookInfoBtn.disabled = false;
-      telegramWebhookInfoBtn.textContent = label || "Check Webhook";
+      stopLoading(telegramWebhookInfoBtn, '<i class="fa-solid fa-circle-info"></i>');
     }
   }
 
@@ -267,19 +510,14 @@
     if (!telegramWebhookDeleteBtn) return;
     const confirmed = window.confirm("Delete Telegram webhook now?");
     if (!confirmed) return;
-    telegramWebhookDeleteBtn.disabled = true;
-    telegramWebhookDeleteBtn.classList.add("is-loading");
-    const label = telegramWebhookDeleteBtn.textContent;
-    telegramWebhookDeleteBtn.textContent = "Deleting...";
+    startLoading(telegramWebhookDeleteBtn, "Deleting webhook");
     try {
       await callTelegramAdmin("/admin/settings/telegram/webhook/delete", { drop_pending_updates: false });
       notify("Webhook deleted successfully.", "success");
     } catch (err) {
       notify(err?.message || "Failed to delete webhook.", "error");
     } finally {
-      telegramWebhookDeleteBtn.classList.remove("is-loading");
-      telegramWebhookDeleteBtn.disabled = false;
-      telegramWebhookDeleteBtn.textContent = label || "Delete Webhook";
+      stopLoading(telegramWebhookDeleteBtn, '<i class="fa-solid fa-link-slash"></i>');
     }
   }
 
@@ -289,10 +527,7 @@
 
   async function runPollStatus() {
     if (!telegramPollStatusBtn) return;
-    telegramPollStatusBtn.disabled = true;
-    telegramPollStatusBtn.classList.add("is-loading");
-    const label = telegramPollStatusBtn.textContent;
-    telegramPollStatusBtn.textContent = "Checking...";
+    startLoading(telegramPollStatusBtn, "Checking poll status");
     try {
       const data = await callTelegramAdmin("/admin/settings/telegram/poll/status");
       const poll = data.poll || {};
@@ -302,18 +537,13 @@
     } catch (err) {
       notify(err?.message || "Failed to fetch poll status.", "error");
     } finally {
-      telegramPollStatusBtn.classList.remove("is-loading");
-      telegramPollStatusBtn.disabled = false;
-      telegramPollStatusBtn.textContent = label || "Check Poll Status";
+      stopLoading(telegramPollStatusBtn, '<i class="fa-solid fa-heart-pulse"></i>');
     }
   }
 
   async function runPollOnce() {
     if (!telegramPollRunOnceBtn) return;
-    telegramPollRunOnceBtn.disabled = true;
-    telegramPollRunOnceBtn.classList.add("is-loading");
-    const label = telegramPollRunOnceBtn.textContent;
-    telegramPollRunOnceBtn.textContent = "Running...";
+    startLoading(telegramPollRunOnceBtn, "Running poll");
     try {
       const data = await callTelegramAdmin("/admin/settings/telegram/poll/run-once");
       const poll = data.poll || {};
@@ -323,9 +553,7 @@
     } catch (err) {
       notify(err?.message || "Failed to run poll once.", "error");
     } finally {
-      telegramPollRunOnceBtn.classList.remove("is-loading");
-      telegramPollRunOnceBtn.disabled = false;
-      telegramPollRunOnceBtn.textContent = label || "Run Poll Now";
+      stopLoading(telegramPollRunOnceBtn, '<i class="fa-solid fa-play"></i>');
     }
   }
 
@@ -343,9 +571,33 @@
     }
   }
 
-  if (telegramPollWidget) {
-    refreshPollHealthSilently();
-    livePollTimer = window.setInterval(refreshPollHealthSilently, 10000);
+
+  async function refreshDeliveryHealthSilently() {
+    if (!telegramDeliveryWidget) return;
+    try {
+      const data = await callTelegramAdmin("/admin/settings/telegram/delivery/status");
+      renderDeliveryHealth(data.delivery || {});
+    } catch (_err) {
+      renderDeliveryHealth({});
+    }
+  }
+  initPanelEditing();
+  pushProviderInput?.addEventListener("change", applyPushProviderVisibility);
+  applyPushProviderVisibility();
+
+  if (telegramPollWidget || telegramDeliveryWidget) {
+    if (telegramPollWidget) {
+      refreshPollHealthSilently();
+    }
+    if (telegramDeliveryWidget) {
+      refreshDeliveryHealthSilently();
+    }
+
+    livePollTimer = window.setInterval(() => {
+      if (telegramPollWidget) refreshPollHealthSilently();
+      if (telegramDeliveryWidget) refreshDeliveryHealthSilently();
+    }, 10000);
+
     window.addEventListener("beforeunload", () => {
       if (livePollTimer) {
         window.clearInterval(livePollTimer);

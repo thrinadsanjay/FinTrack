@@ -11,13 +11,16 @@
     <h2 class="login-title">Welcome Back 👋</h2>
     <p class="login-subtitle">Sign in to continue tracking your finances</p>
 
-    {% if request.query_params.get('error') == 'invalid' %}
-      <p class="login-error">Invalid credentials</p>
-    {% elif request.query_params.get('error') == 'oauth_state' %}
-      <p class="login-error">Invalid OAuth state. Please retry login.</p>
-    {% elif request.query_params.get('error') == 'oauth_token' %}
-      <p class="login-error">OAuth token exchange failed. Please retry.</p>
+    {% set login_error_code = request.query_params.get('error') %}
+    {% set alert_error = None %}
+    {% if login_error_code == 'invalid' %}
+      {% set alert_error = 'Invalid credentials' %}
+    {% elif login_error_code == 'oauth_state' %}
+      {% set alert_error = 'Invalid OAuth state. Please retry login.' %}
+    {% elif login_error_code == 'oauth_token' %}
+      {% set alert_error = 'OAuth token exchange failed. Please retry.' %}
     {% endif %}
+    {% include "partials/form_alert.html" %}
 
     <form method="post" action="/login/local" class="login-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">

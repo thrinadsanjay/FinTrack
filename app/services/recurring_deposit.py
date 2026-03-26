@@ -22,6 +22,8 @@ from app.helpers.notification_payloads import (
 )
 from app.services.audit import audit_log
 from app.services.notifications import upsert_notification
+from app.helpers.money import round_money
+from app.core.errors import ValidationError, NotFoundError, ConflictError
 
 
 class RecurringDepositService:
@@ -43,11 +45,13 @@ class RecurringDepositService:
         source_transaction_id: Optional[ObjectId] = None,
     ):
         if not start_date:
-            raise Exception("Start date is required")
+            raise ValidationError("Start date is required")
         if frequency not in VALID_FREQUENCIES:
-            raise Exception("Invalid frequency")
+            raise ValidationError("Invalid frequency")
         if end_date and end_date < start_date:
-            raise Exception("End date cannot be before start date")
+            raise ValidationError("End date cannot be before start date")
+
+        amount = round_money(amount)
 
         start_dt = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
 
@@ -64,7 +68,7 @@ class RecurringDepositService:
         if end_dt:
             end_dt = to_utc(end_dt)
             if next_run > end_dt:
-                raise Exception("No future run available within end date")
+                raise ValidationError("No future run available within end date")
 
         doc = {
             # -----------------------------
@@ -190,10 +194,11 @@ class RecurringDepositService:
         end_date: date | None,
         request=None,
     ):
+        amount = round_money(amount)
         if amount <= 0:
-            raise Exception("Amount must be positive")
+            raise ValidationError("Amount must be positive")
         if frequency not in VALID_FREQUENCIES:
-            raise Exception("Invalid frequency")
+            raise ValidationError("Invalid frequency")
 
         uid = ObjectId(user_id)
         rid = ObjectId(recurring_id)
@@ -201,15 +206,15 @@ class RecurringDepositService:
 
         rule = await db.recurring_deposits.find_one({"_id": rid, "user_id": uid})
         if not rule:
-            raise Exception("Recurring rule not found")
+            raise NotFoundError("Recurring rule not found")
 
         if recurring_status_of(rule, now) == "ended":
-            raise Exception("Ended recurring rules cannot be edited")
+            raise ConflictError("Ended recurring rules cannot be edited")
 
         start_date = to_utc(rule.get("start_date"))
         end_dt = datetime.combine(end_date, time.min, tzinfo=timezone.utc) if end_date else None
         if end_dt and start_date and end_dt < start_date:
-            raise Exception("End date cannot be before start date")
+            raise ValidationError("End date cannot be before start date")
 
         next_run = to_utc(rule.get("next_run"))
         if rule.get("is_active", True):
@@ -272,9 +277,9 @@ class RecurringDepositService:
 
         rule = await db.recurring_deposits.find_one({"_id": rid, "user_id": uid})
         if not rule:
-            raise Exception("Recurring rule not found")
+            raise NotFoundError("Recurring rule not found")
         if recurring_status_of(rule, now) == "ended":
-            raise Exception("Ended recurring rules cannot be paused")
+            raise ConflictError("Ended recurring rules cannot be paused")
 
         await db.recurring_deposits.update_one(
             {"_id": rid, "user_id": uid},
@@ -317,9 +322,9 @@ class RecurringDepositService:
 
         rule = await db.recurring_deposits.find_one({"_id": rid, "user_id": uid})
         if not rule:
-            raise Exception("Recurring rule not found")
+            raise NotFoundError("Recurring rule not found")
         if recurring_status_of(rule, now) == "ended":
-            raise Exception("Ended recurring rules cannot be resumed")
+            raise ConflictError("Ended recurring rules cannot be resumed")
 
         next_run = compute_next_run_from_now(
             rule=rule,
@@ -371,7 +376,7 @@ class RecurringDepositService:
 
         rule = await db.recurring_deposits.find_one({"_id": rid, "user_id": uid})
         if not rule:
-            raise Exception("Recurring rule not found")
+            raise NotFoundError("Recurring rule not found")
 
         await db.recurring_deposits.update_one(
             {"_id": rid, "user_id": uid},

@@ -10,6 +10,7 @@ from app.helpers.recurring_schedule import (
     SKIP_MISSED_OCCURRENCES,
 )
 from app.services.notifications import upsert_notification
+from app.helpers.money import round_money
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -98,14 +99,15 @@ async def run_recurring_transactions():
             {"balance": 1, "name": 1},
         )
         account_balance = account.get("balance", 0) if account else 0
+        amount = round_money(r.get("amount", 0))
 
-        if r["type"] == "debit" and account_balance < r["amount"]:
+        if r["type"] == "debit" and account_balance < amount:
             failed_tx_doc = {
                 "user_id": r["user_id"],
                 "account_id": r["account_id"],
                 "type": r["type"],
                 "mode": r["mode"],
-                "amount": r["amount"],
+                "amount": amount,
                 "description": r.get("description", ""),
                 "category": r["category"],
                 "subcategory": r["subcategory"],
@@ -129,7 +131,7 @@ async def run_recurring_transactions():
                     schedule_key=schedule_key,
                     account_name=account.get("name", "Account") if account else "Account",
                     balance=account_balance,
-                    amount=r["amount"],
+                    amount=amount,
                     description=r.get("description", "a recurring transaction"),
                 ),
             )
@@ -143,7 +145,7 @@ async def run_recurring_transactions():
             "account_id": r["account_id"],
             "type": r["type"],
             "mode": r["mode"],
-            "amount": r["amount"],
+            "amount": amount,
             "description": r.get("description", ""),
             "category": r["category"],
             "subcategory": r["subcategory"],
@@ -160,7 +162,7 @@ async def run_recurring_transactions():
         # -----------------------------
         # Update account balance
         # -----------------------------
-        delta = delta_for_tx(r["type"], r["amount"])
+        delta = delta_for_tx(r["type"], amount)
         await apply_account_delta(
             db=db,
             account_id=r["account_id"],

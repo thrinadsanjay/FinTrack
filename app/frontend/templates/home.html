@@ -16,15 +16,15 @@
           <h3>Total Balance</h3>
           <span class="pill">Consolidated</span>
         </div>
-        <div class="balance-amount">₹ {{ summary.balance }}</div>
+        <div class="balance-amount">₹ {{ summary.balance | money }}</div>
         {% set today_net = (summary.today_income | default(0)) - (summary.today_expense | default(0)) %}
         <div class="balance-sub">
-          <span class="metric green">Income (D): ₹ {{ summary.today_income }}</span>
-          <span class="metric red">Expense (D): ₹ {{ summary.today_expense }}</span>
+          <span class="metric green">Income (D): ₹ {{ summary.today_income | money }}</span>
+          <span class="metric red">Expense (D): ₹ {{ summary.today_expense | money }}</span>
           <span class="metric {% if today_net < 0 %}red{% else %}green{% endif %}">
-            Net (D): ₹ {{ today_net }}
+            Net (D): ₹ {{ today_net | money }}
           </span>
-          <span class="metric">Net (MTD): ₹ {{ summary.month_net }}</span>
+          <span class="metric">Net (MTD): ₹ {{ summary.month_net | money }}</span>
         </div>
       </div>
       <div class="panel panel-compact panel-mini panel-savings">
@@ -49,9 +49,9 @@
           {% endif %}
           <div class="savings-net {% if summary.month_net < 0 %}red{% else %}green{% endif %}">
             {% if summary.month_net < 0 %}
-              MTD Deficit: ₹ {{ summary.month_net | abs }}
+              MTD Deficit: ₹ {{ summary.month_net | abs | money }}
             {% else %}
-              MTD Savings: ₹ {{ summary.month_net }}
+              MTD Savings: ₹ {{ summary.month_net | money }}
             {% endif %}
           </div>
           <div class="savings-bar" aria-hidden="true">
@@ -60,11 +60,11 @@
           <div class="savings-breakdown">
             <div class="savings-item income">
               <span>Income</span>
-              <strong>₹ {{ summary.month_income }}</strong>
+              <strong>₹ {{ summary.month_income | money }}</strong>
             </div>
             <div class="savings-item expense">
               <span>Expense</span>
-              <strong>₹ {{ summary.month_expense }}</strong>
+              <strong>₹ {{ summary.month_expense | money }}</strong>
             </div>
           </div>
         {% else %}
@@ -86,7 +86,7 @@
                     <span class="muted">({{ account.bank_name }})</span>
                   {% endif %}
                 </div>
-                <span class="account-balance">₹ {{ account.balance }}</span>
+                <span class="account-balance">₹ {{ account.balance | money }}</span>
               </li>
             {% endfor %}
           </ul>
@@ -310,7 +310,7 @@
                 <span class="insight-title">{{ tx.description }}</span>
                 <span class="muted">{{ tx.account_name }} - {{ tx.created_at | localtime(request) | dateformat }}</span>
               </div>
-              <span class="insight-amount red">₹ {{ tx.amount }}</span>
+              <span class="insight-amount red">₹ {{ tx.amount | money }}</span>
             </li>
           {% endfor %}
         </ul>
@@ -353,11 +353,11 @@
               </td>
               <td>
                 {% if tx.type == "debit" %}
-                  <span class="amount red">- ₹{{ tx.amount }}</span>
+                  <span class="amount red">- ₹{{ tx.amount | money }}</span>
                 {% elif tx.type == "credit" %}
-                  <span class="amount green">+ ₹{{ tx.amount }}</span>
+                  <span class="amount green">+ ₹{{ tx.amount | money }}</span>
                 {% elif tx.type == "transfer" %}
-                  <span class="amount">₹{{ tx.amount }}</span>
+                  <span class="amount">₹{{ tx.amount | money }}</span>
                 {% endif %}
               </td>
             </tr>

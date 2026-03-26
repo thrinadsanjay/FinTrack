@@ -2,6 +2,8 @@ from datetime import datetime
 
 from bson import ObjectId
 
+from app.helpers.money import round_money
+
 
 def build_single_transaction_doc(
     *,
@@ -19,6 +21,7 @@ def build_single_transaction_doc(
     recurring_id: ObjectId | None = None,
     scheduled_for: datetime | None = None,
 ) -> dict:
+    amount = round_money(amount)
     doc = {
         "user_id": user_id,
         "account_id": account_id,
@@ -57,6 +60,7 @@ def build_failed_transaction_doc(
     created_at: datetime,
     target_account_id: ObjectId | None = None,
 ) -> dict:
+    amount = round_money(amount)
     doc = {
         "user_id": user_id,
         "account_id": account_id,
@@ -94,6 +98,7 @@ def build_transfer_transaction_docs(
     source: str | None = None,
     retry_of: ObjectId | None = None,
 ) -> list[dict]:
+    amount = round_money(amount)
     out_doc = {
         "transfer_id": transfer_id,
         "user_id": user_id,

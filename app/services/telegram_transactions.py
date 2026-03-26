@@ -31,6 +31,16 @@ def _normalize(value: str) -> str:
     return str(value or "").strip().lower()
 
 
+def _is_register_command(text: str) -> bool:
+    value = str(text or "").strip()
+    if not value:
+        return False
+    command = value.split()[0].lower()
+    if "@" in command:
+        command = command.split("@", 1)[0]
+    return command == "/register"
+
+
 def _to_float(raw: str) -> float | None:
     try:
         value = float(str(raw).replace(",", "").strip())
@@ -712,12 +722,35 @@ async def _finalize_transaction(*, bot_token: str, chat_id: str, user_id: Object
 async def process_telegram_text(*, bot_token: str, chat_id: str, text: str) -> None:
     raw = str(text or "").strip()
     normalized = _normalize(raw)
+    is_register_command = _is_register_command(raw)
 
     user = await db.users.find_one(
         {"telegram_chat_id": chat_id, "deleted_at": None},
         {"_id": 1, "is_active": 1},
     )
     if not user:
+        if is_register_command:
+            now = _now()
+            await db.telegram_register_intents.update_one(
+                {"chat_id": chat_id},
+                {
+                    "$set": {
+                        "chat_id": chat_id,
+                        "created_at": now,
+                        "updated_at": now,
+                        "used_by_user_id": None,
+                        "used_at": None,
+                    }
+                },
+                upsert=True,
+            )
+            await send_message(
+                bot_token=bot_token,
+                chat_id=chat_id,
+                text="Registration request captured. Return to FinTracker and click Register again to receive OTP.",
+                reply_markup=_quick_keyboard(),
+            )
+            return
         await send_message(
             bot_token=bot_token,
             chat_id=chat_id,

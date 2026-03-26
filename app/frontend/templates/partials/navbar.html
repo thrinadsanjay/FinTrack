@@ -148,15 +148,15 @@
       <button type="button" class="telegram-close" data-telegram-close aria-label="Close">×</button>
     </div>
     <p class="telegram-help">
-      1. Enter your mobile number and click <strong>Send OTP</strong>.<br>
-      2. Click <strong>Open Telegram Bot</strong> below and tap <strong>Start</strong> in Telegram.<br>
-      3. Come back and click <strong>Send OTP</strong> again.<br>
+      1. Enter your mobile number and click <strong>Register</strong>.<br>
+      2. Open Telegram bot and send <strong>/register</strong>.<br>
+      3. Come back and click <strong>Register</strong> again to receive OTP.<br>
       4. Enter the OTP from Telegram and click <strong>Verify OTP</strong>.<br>
       Bot: <strong data-telegram-bot-name>@your_bot_name</strong>
     </p>
     <div class="telegram-start-help hidden" data-telegram-start-help>
       <p class="telegram-start-text">
-        One-time setup required. Open the bot using this secure link so we can verify your account.
+        One-time setup required. Open the bot and send <strong>/register</strong>, then click Send OTP.
       </p>
       <div class="action-row">
         <a href="#" target="_blank" rel="noopener noreferrer" class="btn-secondary" data-telegram-open-bot>Open Telegram Bot</a>
@@ -167,12 +167,12 @@
         <input type="text" data-telegram-mobile placeholder="+1xxxxxxxxxx">
       </label>
       <div class="action-row">
-        <button type="button" class="btn-primary" data-telegram-send-otp>Send OTP</button>
+        <button type="button" class="btn-primary" data-telegram-send-otp>Register</button>
       </div>
-      <label>Enter OTP
-        <input type="text" data-telegram-otp placeholder="6-digit OTP" maxlength="6">
+      <label class="hidden" data-telegram-otp-wrap>Enter OTP
+        <input type="text" data-telegram-otp placeholder="6-digit OTP" maxlength="6" autocomplete="off" inputmode="numeric" spellcheck="false">
       </label>
-      <div class="action-row">
+      <div class="action-row hidden" data-telegram-verify-wrap>
         <button type="button" class="btn-primary" data-telegram-verify-otp>Verify OTP</button>
       </div>
     </div>

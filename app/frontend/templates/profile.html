@@ -18,19 +18,20 @@
 
       <nav class="profile-nav">
         <a class="profile-nav-item active" href="/profile"><i class="fa-solid fa-user"></i> Profile Overview</a>
-        <a
-          class="profile-nav-item"
-          href="{{ profile.password_reset_url }}"
-          {% if profile.is_external %}target="_blank" rel="noopener noreferrer"{% endif %}
-        >
-          <i class="fa-solid fa-lock"></i>
-          {{ "Manage Password" if profile.is_external else "Reset Password" }}
-        </a>
         <span class="profile-nav-item disabled"><i class="fa-solid fa-bell"></i> Notification Settings</span>
         <span class="profile-nav-item disabled"><i class="fa-solid fa-shield-halved"></i> Account Security</span>
       </nav>
 
       <div class="profile-danger-zone">
+        {% if profile.is_external %}
+        <a href="{{ profile.password_reset_url }}" target="_blank" rel="noopener noreferrer" class="danger-btn reset-pass">
+          <i class="fa-solid fa-lock"></i> Manage Password
+        </a>
+        {% else %}
+        <button type="button" class="danger-btn reset-pass" data-reset-password-open>
+          <i class="fa-solid fa-lock"></i> Reset Password
+        </button>
+        {% endif %}
         <button
           type="button"
           class="danger-btn telegram {% if profile.telegram_chat_id %}registered{% else %}unregistered{% endif %}"
@@ -44,12 +45,45 @@
         >
           <i class="fa-brands fa-telegram"></i> Register Telegram
         </button>
-        <button type="button" class="danger-btn warning" disabled>
-          <i class="fa-solid fa-user-slash"></i> Disable Account
-        </button>
-        <button type="button" class="danger-btn critical" disabled>
-          <i class="fa-solid fa-trash"></i> Delete Account
-        </button>
+        <div class="danger-btn biometric-toggle" data-biometric-toggle-wrap>
+          <span><i class="fa-solid fa-fingerprint"></i> Biometric Login</span>
+          <label class="biometric-switch">
+            <input
+              type="checkbox"
+              data-biometric-toggle
+              {% if profile.biometric_enabled %}checked{% endif %}
+            >
+            <span class="biometric-slider" aria-hidden="true"></span>
+          </label>
+        </div>
+        <form
+          method="post"
+          action="/profile/account/disable"
+          data-account-action-form
+          data-account-action-type="disable"
+          data-account-action-title="Disable Account"
+          data-account-action-message="Your account will be disabled immediately and you will be logged out. Are you sure you want to proceed?"
+          data-account-action-confirm="Yes, Disable"
+        >
+          <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+          <button type="submit" class="danger-btn warning">
+            <i class="fa-solid fa-user-slash"></i> Disable Account
+          </button>
+        </form>
+        <form
+          method="post"
+          action="/profile/account/delete"
+          data-account-action-form
+          data-account-action-type="delete"
+          data-account-action-title="Delete Account"
+          data-account-action-message="Your account no longer be accessible. Are you sure you want to proceed?"
+          data-account-action-confirm="Yes, Delete"
+        >
+          <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+          <button type="submit" class="danger-btn critical">
+            <i class="fa-solid fa-trash"></i> Delete Account
+          </button>
+        </form>
       </div>
     </aside>
 
@@ -157,6 +191,30 @@
           </div>
           {% endif %}
         </div>
+
+        <div class="biometric-controls"
+             data-biometric-controls
+             data-biometric-enabled="{{ 'true' if profile.biometric_enabled else 'false' }}"
+             data-passkey-count="{{ profile.passkey_count or 0 }}">
+          <div class="biometric-status">
+            <i class="fa-solid fa-fingerprint"></i>
+            <span>Biometric Login: <strong data-biometric-status-text>{{ 'Enabled' if profile.biometric_enabled else 'Disabled' }}</strong></span>
+            <span class="biometric-count">Passkeys: <strong data-biometric-count>{{ profile.passkey_count or 0 }}</strong></span>
+          </div>
+          <div class="biometric-actions">
+            <button
+              type="button"
+              class="mini-btn"
+              data-passkey-register
+              data-passkey-count="{{ profile.passkey_count or 0 }}"
+              data-biometric-enabled="{{ "true" if profile.biometric_enabled else "false" }}"
+              {% if not profile.biometric_enabled %}disabled{% endif %}
+            >
+              {{ "Register Fingerprint" if (profile.passkey_count or 0) == 0 else "Add Another Fingerprint" }}
+            </button>
+            <button type="button" class="mini-btn profile-link-btn" data-biometric-delete-all {% if (profile.passkey_count or 0) == 0 %}disabled{% endif %}>Delete Biometrics</button>
+          </div>
+        </div>
       </div>
 
       <div class="card overview-card">
@@ -200,4 +258,84 @@
     </main>
   </div>
 </section>
+
+<div class="profile-password-modal{% if not reset_password_modal_open %} hidden{% endif %}" data-reset-password-modal data-reset-password-open-state="{{ "true" if reset_password_modal_open else "false" }}">
+  <div class="profile-password-modal-card">
+    <div class="profile-password-modal-head">
+      <h3>Reset Password</h3>
+      <button type="button" class="telegram-close" data-reset-password-close aria-label="Close">&times;</button>
+    </div>
+    <p class="telegram-help">Update your account password. Minimum 8 characters.</p>
+
+    {% set alert_success = "Password updated successfully." if reset_password_updated else None %}
+    {% set alert_error = reset_password_error %}
+    {% include "partials/form_alert.html" %}
+
+    <form method="post" action="/profile/reset-password" class="profile-form" data-reset-password-form>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+
+      <div class="form-group">
+        <label>Current Password</label>
+        <input type="password" name="current_password" autocomplete="current-password" required>
+      </div>
+      <div class="form-group">
+        <label>New Password</label>
+        <input type="password" name="new_password" minlength="8" autocomplete="new-password" required>
+      </div>
+      <div class="form-group">
+        <label>Confirm New Password</label>
+        <input type="password" name="confirm_password" minlength="8" autocomplete="new-password" required>
+      </div>
+
+      <div class="profile-form-actions">
+        <button type="submit" class="mini-btn">Update Password</button>
+        <button type="button" class="mini-btn profile-link-btn" data-reset-password-close>Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="profile-password-modal hidden" data-account-action-modal>
+  <div class="profile-password-modal-card profile-action-modal-card">
+    <div class="profile-password-modal-head">
+      <h3 data-account-action-title>Confirm Action</h3>
+      <button type="button" class="telegram-close" data-account-action-close aria-label="Close">&times;</button>
+    </div>
+    <p class="telegram-help" data-account-action-message>
+      Please confirm this account action.
+    </p>
+    <div class="account-action-verify hidden" data-account-action-verify-wrap>
+      <label for="account-action-verify-input">Type <strong>DELETE</strong> to confirm:</label>
+      <input
+        id="account-action-verify-input"
+        type="text"
+        autocomplete="off"
+        data-account-action-verify-input
+        placeholder="Type DELETE"
+      >
+      <!-- <p class="account-action-verify-hint" data-account-action-verify-hint>Delete confirmation is case-insensitive.</p> -->
+    </div>
+    <div class="profile-form-actions">
+      <button type="button" class="mini-btn profile-link-btn" data-account-action-close>Cancel</button>
+      <button type="button" class="mini-btn account-action-confirm" data-account-action-confirm>Confirm</button>
+    </div>
+  </div>
+</div>
+
+<div class="profile-password-modal hidden" data-biometric-modal>
+  <div class="profile-password-modal-card profile-action-modal-card">
+    <div class="profile-password-modal-head">
+      <h3 data-biometric-modal-title>Biometric Login</h3>
+      <button type="button" class="telegram-close" data-biometric-modal-close aria-label="Close">&times;</button>
+    </div>
+    <p class="telegram-help" data-biometric-modal-message></p>
+    <div class="profile-form-actions">
+      <button type="button" class="mini-btn profile-link-btn hidden" data-biometric-modal-cancel>Cancel</button>
+      <button type="button" class="mini-btn" data-biometric-modal-confirm>OK</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/js/profile_modal.js?v={{ FT_APP_VERSION }}" defer></script>
+<script src="/static/js/profile_passkey.js?v={{ FT_APP_VERSION }}" defer></script>
 {% endblock %}

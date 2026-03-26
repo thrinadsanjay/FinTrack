@@ -231,19 +231,28 @@
 .savings-item {
   border: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
   border-radius: 9px;
-  padding: 6px 7px;
+  padding: 6px 8px;
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
 }
 
 .savings-item span {
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   color: var(--color-muted);
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .savings-item strong {
   font-size: 0.82rem;
+  font-weight: 800;
+  white-space: nowrap;
+  margin-left: auto;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .savings-item.income {

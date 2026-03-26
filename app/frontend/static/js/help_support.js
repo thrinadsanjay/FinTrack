@@ -19,6 +19,7 @@
   const chatToggle = page.querySelector('[data-chat-toggle]');
   const chatClose = page.querySelector('[data-chat-close]');
   const openChatBtn = page.querySelector('[data-open-chat]');
+  const reactivationBtn = page.querySelector('[data-reactivation-request]');
 
   function showChat(show) {
     if (!chatBox) return;
@@ -37,6 +38,19 @@
     openChatBtn.addEventListener('click', () => {
       activatePanel('chat');
       showChat(true);
+    });
+  }
+
+  if (reactivationBtn) {
+    reactivationBtn.addEventListener('click', () => {
+      activatePanel('chat');
+      showChat(true);
+      const context = String(page.dataset.reactivationContext || '').trim();
+      window.dispatchEvent(
+        new CustomEvent('ft:chat-prefill', {
+          detail: { text: context },
+        })
+      );
     });
   }
 

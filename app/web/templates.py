@@ -2,12 +2,19 @@ from fastapi.templating import Jinja2Templates
 from app.core.config import settings
 from app.core.csrf import get_csrf_token
 from app.core.time import get_user_timezone, utc_to_local, localtime, datetimeformat, dateformat
+from app.helpers.money import round_money
 
 templates = Jinja2Templates(directory="app/frontend/templates")
+
+
+def money(value) -> str:
+    return f"{round_money(value):.2f}"
+
 
 templates.env.filters["datetimeformat"] = datetimeformat
 templates.env.filters["dateformat"] = dateformat
 templates.env.filters["localtime"] = localtime
+templates.env.filters["money"] = money
 templates.env.globals["FT_ENV"] = settings.FT_ENV
 templates.env.globals["FT_APP_NAME"] = settings.FT_APP_NAME
 templates.env.globals["FT_APP_VERSION"] = settings.FT_APP_VERSION

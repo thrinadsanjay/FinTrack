@@ -14,6 +14,8 @@
   const telegramOtpInput = document.querySelector("[data-telegram-otp]");
   const telegramSendBtn = document.querySelector("[data-telegram-send-otp]");
   const telegramVerifyBtn = document.querySelector("[data-telegram-verify-otp]");
+  const telegramOtpWrap = document.querySelector("[data-telegram-otp-wrap]");
+  const telegramVerifyWrap = document.querySelector("[data-telegram-verify-wrap]");
   const telegramBotName = document.querySelector("[data-telegram-bot-name]");
   const telegramStartHelp = document.querySelector("[data-telegram-start-help]");
   const telegramOpenBotLink = document.querySelector("[data-telegram-open-bot]");
@@ -30,6 +32,11 @@
   const flyoutDurationMs = 7000;
   const flyoutFadeMs = 520;
   if (!panel || toggles.length === 0) return;
+
+  if (telegramOtpWrap) telegramOtpWrap.classList.add("hidden");
+  if (telegramVerifyWrap) telegramVerifyWrap.classList.add("hidden");
+  if (telegramOtpInput) telegramOtpInput.value = "";
+  if (telegramSendBtn) telegramSendBtn.textContent = "Register";
 
   const flyoutHost = document.createElement("div");
   flyoutHost.className = "notif-flyout-host";
@@ -224,6 +231,12 @@
     if (telegramOpenBotLink) {
       telegramOpenBotLink.setAttribute("href", "#");
     }
+    if (telegramSendBtn) {
+      telegramSendBtn.textContent = "Register";
+    }
+    if (telegramOtpWrap) telegramOtpWrap.classList.add("hidden");
+    if (telegramVerifyWrap) telegramVerifyWrap.classList.add("hidden");
+    if (telegramOtpInput) telegramOtpInput.value = "";
     telegramModal.classList.remove("hidden");
     if (telegramMobileInput) telegramMobileInput.focus();
   }
@@ -231,6 +244,10 @@
   function closeTelegramModal() {
     if (!telegramModal) return;
     telegramModal.classList.add("hidden");
+    if (telegramOtpInput) telegramOtpInput.value = "";
+    if (telegramOtpWrap) telegramOtpWrap.classList.add("hidden");
+    if (telegramVerifyWrap) telegramVerifyWrap.classList.add("hidden");
+    if (telegramSendBtn) telegramSendBtn.textContent = "Register";
   }
 
   function openTelegramChangeModal({ username, mobile }) {
@@ -413,6 +430,9 @@
 
   if (telegramChangeDeregister) {
     telegramChangeDeregister.addEventListener("click", async () => {
+      if (telegramOtpInput) telegramOtpInput.value = "";
+      if (telegramOtpWrap) telegramOtpWrap.classList.add("hidden");
+      if (telegramVerifyWrap) telegramVerifyWrap.classList.add("hidden");
       const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") || "";
       setLoading(telegramChangeDeregister, true, "Removing...");
       try {
@@ -468,8 +488,11 @@
         telegramMobileInput?.focus();
         return;
       }
+      if (telegramOtpInput) telegramOtpInput.value = "";
+      if (telegramOtpWrap) telegramOtpWrap.classList.add("hidden");
+      if (telegramVerifyWrap) telegramVerifyWrap.classList.add("hidden");
       const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") || "";
-      setLoading(telegramSendBtn, true, "Sending...");
+      setLoading(telegramSendBtn, true, "Processing...");
       try {
         const res = await fetch("/profile/telegram/send-otp", {
           method: "POST",
@@ -485,25 +508,32 @@
         if (!(res.ok || res.status === 202)) {
           throw new Error(data.detail || "Failed to send OTP.");
         }
-        if (data.status === "awaiting_start") {
+        if (data.status === "awaiting_register") {
           if (telegramStartHelp) {
             telegramStartHelp.classList.remove("hidden");
           }
-          if (telegramOpenBotLink && data.start_url) {
-            telegramOpenBotLink.setAttribute("href", String(data.start_url));
+          if (telegramOpenBotLink && data.bot_url) {
+            telegramOpenBotLink.setAttribute("href", String(data.bot_url));
           }
+          if (telegramOtpWrap) telegramOtpWrap.classList.add("hidden");
+          if (telegramVerifyWrap) telegramVerifyWrap.classList.add("hidden");
+          if (telegramOtpInput) telegramOtpInput.value = "";
+          if (telegramSendBtn) telegramSendBtn.textContent = "Send OTP";
           notify(
             data.detail ||
-              "Open Telegram bot from the button, press Start, then click Send OTP again.",
+              "Send /register in Telegram bot, then click Send OTP.",
             "info"
           );
         } else {
           if (telegramStartHelp) {
             telegramStartHelp.classList.add("hidden");
           }
+          if (telegramOtpWrap) telegramOtpWrap.classList.remove("hidden");
+          if (telegramVerifyWrap) telegramVerifyWrap.classList.remove("hidden");
+          if (telegramOtpInput) telegramOtpInput.value = "";
           notify("OTP sent to your Telegram successfully.", "success");
+          telegramOtpInput?.focus();
         }
-        telegramOtpInput?.focus();
       } catch (error) {
         notify(error?.message || "Failed to send OTP.", "error");
       } finally {

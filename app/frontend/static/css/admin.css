@@ -204,6 +204,47 @@
   font-size: 0.82rem;
 }
 
+
+.settings-editing-banner {
+  margin: -2px 0 8px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 38%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-text);
+  font-size: 0.84rem;
+}
+
+.settings-editing-banner strong {
+  font-weight: 800;
+}
+
+
+.settings-editing-banner.is-app {
+  border-color: #60a5fa;
+  background: #dbeafe;
+}
+
+.settings-editing-banner.is-communication {
+  border-color: #34d399;
+  background: #d1fae5;
+}
+
+.settings-editing-banner.is-security {
+  border-color: #f59e0b;
+  background: #fef3c7;
+}
+
+.settings-editing-banner.is-infrastructure {
+  border-color: #a78bfa;
+  background: #ede9fe;
+}
+
+.settings-editing-banner.is-default {
+  border-color: color-mix(in srgb, var(--color-primary) 38%, transparent);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+}
+
 .settings-form {
   min-height: 0;
 }
@@ -236,6 +277,137 @@
   font-size: 0.96rem;
 }
 
+
+.settings-actions {
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+
+
+.btn-action.btn-icon {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  line-height: 1;
+}
+
+.btn-action.btn-icon i {
+  font-size: 0.9rem;
+}
+
+/* Semantic icon colors for clear visibility in dark/light themes */
+.btn-action.btn-icon[data-panel-edit] {
+  color: #1d4ed8;
+  border-color: #93c5fd;
+  background: #dbeafe;
+}
+
+.btn-action.btn-icon[data-panel-save] {
+  color: #166534;
+  border-color: #86efac;
+  background: #dcfce7;
+}
+
+.btn-action.btn-icon[data-panel-cancel] {
+  color: #9f1239;
+  border-color: #f9a8d4;
+  background: #fce7f3;
+}
+
+.btn-action.btn-icon[data-smtp-test],
+.btn-action.btn-icon[data-push-test] {
+  color: #92400e;
+  border-color: #fcd34d;
+  background: #fef3c7;
+}
+
+.btn-action.btn-icon[data-telegram-webhook-set],
+.btn-action.btn-icon[data-telegram-poll-run-once] {
+  color: #065f46;
+  border-color: #6ee7b7;
+  background: #d1fae5;
+}
+
+.btn-action.btn-icon[data-telegram-webhook-info],
+.btn-action.btn-icon[data-telegram-poll-status] {
+  color: #1d4ed8;
+  border-color: #93c5fd;
+  background: #dbeafe;
+}
+
+.btn-action.btn-icon[data-telegram-webhook-delete] {
+  color: #9f1239;
+  border-color: #f9a8d4;
+  background: #fce7f3;
+}
+
+.btn-action.btn-icon[data-telegram-broadcast] {
+  color: #5b21b6;
+  border-color: #c4b5fd;
+  background: #ede9fe;
+}
+
+.btn-action.btn-icon:is(:hover, :focus-visible) {
+  filter: brightness(0.98);
+}
+
+/* Users + Support icon actions */
+.btn-action.btn-icon[data-admin-action="user-enable"] {
+  color: #166534;
+  border-color: #86efac;
+  background: #dcfce7;
+}
+
+.btn-action.btn-icon[data-admin-action="user-disable"] {
+  color: #9a3412;
+  border-color: #fdba74;
+  background: #ffedd5;
+}
+
+.btn-action.btn-icon[data-admin-action="admin-grant"] {
+  color: #1d4ed8;
+  border-color: #93c5fd;
+  background: #dbeafe;
+}
+
+.btn-action.btn-icon[data-admin-action="admin-remove"] {
+  color: #9f1239;
+  border-color: #f9a8d4;
+  background: #fce7f3;
+}
+
+.btn-action.btn-icon[data-admin-action="support-refresh"] {
+  color: #1d4ed8;
+  border-color: #93c5fd;
+  background: #dbeafe;
+}
+
+.btn-action.btn-icon[data-admin-action="support-end"] {
+  color: #9f1239;
+  border-color: #f9a8d4;
+  background: #fce7f3;
+}
+
+.btn-action.btn-icon[data-admin-action="support-send"] {
+  color: #166534;
+  border-color: #86efac;
+  background: #dcfce7;
+}
+
+.settings-actions [hidden] {
+  display: none !important;
+}
+
+.settings-group:not(.is-editing) input:disabled,
+.settings-group:not(.is-editing) select:disabled,
+.settings-group:not(.is-editing) textarea:disabled {
+  opacity: 0.78;
+  cursor: not-allowed;
+}
+
 .settings-grid {
   display: grid;
   gap: 10px;
@@ -263,7 +435,8 @@
 }
 
 .settings-grid input,
-.settings-grid textarea {
+.settings-grid textarea,
+.settings-grid select {
   width: 100%;
   border: 1px solid color-mix(in srgb, var(--color-border) 82%, transparent);
   border-radius: 8px;
@@ -285,6 +458,48 @@
 .settings-grid p {
   font-size: 0.92rem;
   overflow-wrap: anywhere;
+}
+
+
+.push-advanced {
+  border: 1px solid color-mix(in srgb, var(--color-border) 76%, transparent);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: color-mix(in srgb, var(--color-surface-strong) 80%, transparent);
+}
+
+.push-advanced > summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.84rem;
+  color: var(--color-muted);
+}
+
+.push-advanced-grid {
+  margin-top: 10px;
+}
+
+
+.push-method-panel {
+  border: 1px solid color-mix(in srgb, var(--color-border) 76%, transparent);
+  border-radius: 10px;
+  padding: 10px;
+  background: color-mix(in srgb, var(--color-surface-strong) 82%, transparent);
+}
+
+.push-method-panel h4 {
+  margin: 0 0 4px;
+  font-size: 0.9rem;
+}
+
+.push-method-panel p {
+  margin: 0 0 8px;
+  font-size: 0.8rem;
+  color: var(--color-muted);
+}
+
+.push-method-grid {
+  margin-top: 4px;
 }
 
 .telegram-poll-widget {
@@ -332,6 +547,50 @@
 
 .telegram-poll-error[hidden] {
   display: none !important;
+}
+
+.telegram-delivery-widget {
+  border: 1px solid color-mix(in srgb, var(--color-border) 78%, transparent);
+  border-radius: 10px;
+  padding: 10px;
+  background: color-mix(in srgb, var(--color-surface-strong) 85%, transparent);
+}
+
+.telegram-delivery-failures {
+  margin-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
+  padding-top: 8px;
+}
+
+.telegram-delivery-subhead {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--color-muted);
+  margin-bottom: 6px;
+}
+
+.telegram-delivery-failures ul {
+  margin: 0;
+  padding-left: 16px;
+  max-height: 150px;
+  overflow: auto;
+}
+
+.telegram-delivery-failures li {
+  margin-bottom: 6px;
+  font-size: 0.82rem;
+}
+
+.telegram-delivery-failures li strong {
+  display: block;
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.telegram-delivery-failures li .muted {
+  display: block;
+  font-size: 0.76rem;
+  color: var(--color-muted);
 }
 
 .toggle {
@@ -482,8 +741,11 @@ th {
 
 .btn-action.is-loading {
   position: relative;
-  padding-right: 34px;
   cursor: wait;
+}
+
+.btn-action:not(.btn-icon).is-loading {
+  padding-right: 34px;
 }
 
 .btn-action.is-loading::after {
@@ -498,6 +760,14 @@ th {
   border-radius: 50%;
   transform: translateY(-50%);
   animation: btn-spin 0.8s linear infinite;
+}
+
+.btn-action.btn-icon.is-loading {
+  padding-right: 0;
+}
+
+.btn-action.btn-icon.is-loading::after {
+  display: none;
 }
 
 @keyframes btn-spin {
@@ -716,4 +986,32 @@ th {
   .support-message {
     max-width: 100%;
   }
+}
+
+/* Persistent admin content box height without hardcoded viewport math */
+.page-admin {
+  min-height: 100%;
+  align-content: start;
+}
+
+.admin-main {
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.admin-view {
+  min-height: 0;
+}
+
+.admin-view[data-admin-view="settings"],
+.admin-view[data-admin-view="support"] {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.admin-view[data-admin-view="settings"] > .admin-panel,
+.admin-view[data-admin-view="support"] > .admin-panel {
+  height: 100%;
 }

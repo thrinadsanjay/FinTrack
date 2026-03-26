@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     FT_KEYCLOAK_ADMIN_ROLES: str = "fintracker-admin,admin"
     FT_KEYCLOAK_ADMIN_GROUPS: str = "/fintracker-admin,fintracker-admin"
     FT_SESSION_SECRET: str
+    FT_SESSION_MAX_AGE_SECONDS: int = 60 * 60 * 24 * 30
     FT_APP_NAME: str
     FT_APP_VERSION: str
     FT_BASE_URL: str

@@ -15,6 +15,9 @@
   <form method="post" action="/transactions/add" id="transaction-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
 
+    {% set alert_error = error %}
+    {% include "partials/form_alert.html" %}
+
     <!-- ================= TRANSACTION DETAILS ================= -->
     <div class="form-section">
 
@@ -30,7 +33,7 @@
           <select name="account_id" id="account" required>
             <option value="" hidden></option>
             {% for acc in accounts %}
-            <option value="{{ acc._id }}">{{ acc.name }} (₹{{ acc.balance }})</option>
+            <option value="{{ acc._id }}">{{ acc.name }} (₹{{ acc.balance | money }})</option>
             {% endfor %}
           </select>
         </div>
