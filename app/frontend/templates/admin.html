@@ -1,0 +1,862 @@
+{% extends "base.html" %}
+{% block title %}{{ FT_APP_NAME }} ¦ Admin{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/admin.css">
+{% endblock %}
+{% block content %}
+<section class="page page-admin">
+  <aside class="admin-sidebar">
+    <div class="admin-brand">
+      <div class="admin-badge">A</div>
+      <div>
+        <h2>Admin Center</h2>
+        <p>Operational overview</p>
+      </div>
+    </div>
+    <nav class="admin-nav">
+      <a href="#overview" class="active" data-admin-nav="overview" data-admin-nav-primary="true">Overview</a>
+      <div class="admin-nav-settings-group">
+        <a href="#settings" data-admin-nav="settings" data-admin-nav-primary="true">Settings</a>
+        <div class="admin-settings-subnav" aria-label="Settings sections">
+          <a href="#settings" data-admin-nav="settings" data-settings-target="application" data-admin-settings-link="application">Application</a>
+          <a href="#settings" data-admin-nav="settings" data-settings-target="authentication" data-admin-settings-link="authentication">Authentication</a>
+          <a href="#settings" data-admin-nav="settings" data-settings-target="smtp" data-admin-settings-link="smtp">Messaging Channels</a>
+          <a href="#settings" data-admin-nav="settings" data-settings-target="push_notifications" data-admin-settings-link="push_notifications">Notifications</a>
+          <a href="#settings" data-admin-nav="settings" data-settings-target="backup" data-admin-settings-link="backup">Backup</a>
+          <a href="#settings" data-admin-nav="settings" data-settings-target="runtime" data-admin-settings-link="runtime">Runtime</a>
+        </div>
+      </div>
+      <a href="#users" data-admin-nav="users" data-admin-nav-primary="true">Users</a>
+      <a href="#support" data-admin-nav="support" data-admin-nav-primary="true">Support Requests</a>
+    </nav>
+  </aside>
+
+  <div class="admin-main" data-admin-main>
+    <section class="admin-view active" data-admin-view="overview" id="overview">
+      <header class="admin-header">
+        <h1>FinTracker Administration</h1>
+        <p>Monitor platform health, services, backup posture, and operational throughput.</p>
+      </header>
+
+      <section class="admin-grid overview-hero-grid">
+        <article class="admin-panel overview-hero-card">
+          <div class="overview-hero-copy">
+            <span class="overview-kicker">Operations</span>
+            <h2>{{ overview.configuration.app_name }}</h2>
+            <p>Overview of runtime health, backup posture, service toggles, and high-value admin controls.</p>
+          </div>
+          <div class="overview-hero-statuses">
+            <span class="status-pill {{ 'up' if stats.server_status == 'UP' else 'down' }}">Server {{ stats.server_status }}</span>
+            <span class="status-pill {{ 'up' if stats.db_status == 'UP' else 'down' }}">DB {{ stats.db_status }}</span>
+            <span class="status-pill {{ 'down' if admin_settings.application.maintenance_mode else 'up' }}">{{ 'Maintenance On' if admin_settings.application.maintenance_mode else 'Maintenance Off' }}</span>
+          </div>
+        </article>
+        <article class="admin-panel overview-backup-highlight">
+          <div class="panel-head">
+            <h2>Last Backup</h2>
+            <span>{{ overview.backup.last_run.provider or 'filesystem' }}</span>
+          </div>
+          <div class="overview-highlight-value">{{ overview.backup.last_run.status or 'Never run' }}</div>
+          <div class="overview-highlight-meta">
+            <span>{{ overview.backup.last_run.completed_at | localtime(request) | datetimeformat if overview.backup.last_run.completed_at else 'No completed backup yet' }}</span>
+            <span>{{ ((overview.backup.last_run.archive_size_bytes or 0) / (1024 * 1024)) | round(2) }} MB{% if not overview.backup.last_run.archive_size_bytes %}-{% endif %}</span>
+          </div>
+          <div class="overview-highlight-pills">
+            <span class="status-pill {{ 'up' if overview.backup.config.enabled else 'down' }}">{{ 'Backup Enabled' if overview.backup.config.enabled else 'Backup Disabled' }}</span>
+            <span class="status-pill {{ 'up' if overview.backup.verified_local_count else 'down' }}">{{ overview.backup.verified_local_count }} verified</span>
+          </div>
+          <div class="overview-action-row">
+            <a class="btn-action" href="#settings" data-admin-nav="settings" data-settings-target="backup">Open backup settings</a>
+          </div>
+        </article>
+      </section>
+
+      <section class="admin-grid overview-insight-grid">
+        <article class="metric-card overview-metric-card">
+          <h3>Total Users</h3>
+          <p>{{ stats.total_users }}</p>
+          <span>User records in the system</span>
+          <a class="overview-card-link" href="#users" data-admin-nav="users">Open users</a>
+        </article>
+        <article class="metric-card overview-metric-card">
+          <h3>Active Users (24h)</h3>
+          <p>{{ stats.active_users_24h }}</p>
+          <span>Signed in during the last day</span>
+        </article>
+        <article class="metric-card overview-metric-card">
+          <h3>Active Users (7d)</h3>
+          <p>{{ stats.active_users_7d }}</p>
+          <span>Signed in during the last week</span>
+        </article>
+        <article class="metric-card overview-metric-card">
+          <h3>Total Accounts</h3>
+          <p>{{ stats.total_accounts }}</p>
+          <span>Non-deleted financial accounts</span>
+        </article>
+        <article class="metric-card overview-metric-card">
+          <h3>Total Transactions</h3>
+          <p>{{ stats.total_transactions }}</p>
+          <span>Successful transaction rows</span>
+        </article>
+        <article class="metric-card overview-metric-card">
+          <h3>Total Volume Processed</h3>
+          <p>₹ {{ "{:,.2f}".format(stats.total_volume_processed) }}</p>
+          <span>Across all non-failed transactions</span>
+        </article>
+        <article class="metric-card overview-metric-card danger">
+          <h3>Failed Transactions</h3>
+          <p>{{ stats.failed_transactions }}</p>
+          <span>Needs review if this trends upward</span>
+        </article>
+        <article class="metric-card overview-metric-card">
+          <h3>Auth Mix</h3>
+          <p>Local {{ stats.total_local }} / Keycloak {{ stats.total_keycloak }}</p>
+          <span>Current identity provider split</span>
+        </article>
+        <article class="metric-card overview-metric-card">
+          <h3>Services Enabled</h3>
+          <p>{{ overview.service_counts.enabled }}</p>
+          <span>{{ overview.service_counts.disabled }} disabled services</span>
+          <a class="overview-card-link" href="#settings" data-admin-nav="settings" data-settings-target="application">Open settings</a>
+        </article>
+        <article class="metric-card overview-metric-card">
+          <h3>Local Backups</h3>
+          <p>{{ overview.backup.local_count }}</p>
+          <span>{{ overview.backup.verified_local_count }} verified archives</span>
+          <a class="overview-card-link" href="#settings" data-admin-nav="settings" data-settings-target="backup">Manage backups</a>
+        </article>
+      </section>
+
+      <section class="admin-grid overview-detail-grid overview-primary-grid">
+        <article class="admin-panel overview-panel overview-backup-panel">
+          <div class="panel-head">
+            <h2>Backup Snapshot</h2>
+            <span>{{ overview.backup.local_count }} local files</span>
+          </div>
+          <div class="overview-detail-list">
+            <div><span>Last Backup Status</span><strong>{{ overview.backup.last_run.status or 'Never run' }}</strong></div>
+            <div><span>Last Backup Time</span><strong>{{ overview.backup.last_run.completed_at | localtime(request) | datetimeformat if overview.backup.last_run.completed_at else '-' }}</strong></div>
+            <div><span>Archive Size</span><strong>{{ ((overview.backup.last_run.archive_size_bytes or 0) / (1024 * 1024)) | round(2) }} MB{% if not overview.backup.last_run.archive_size_bytes %}-{% endif %}</strong></div>
+            <div><span>Next Scheduled Run</span><strong>{{ overview.backup.config.next_run | localtime(request) | datetimeformat if overview.backup.config.next_run else 'Not scheduled' }}</strong></div>
+            <div><span>Destination</span><strong>{{ overview.configuration.backup_destination }}</strong></div>
+            <div><span>Verified Local Backups</span><strong>{{ overview.backup.verified_local_count }}</strong></div>
+          </div>
+          {% if overview.backup.local_error %}
+            <div class="overview-inline-error">{{ overview.backup.local_error }}</div>
+          {% endif %}
+        </article>
+
+        <article class="admin-panel overview-panel">
+          <div class="panel-head">
+            <h2>Services</h2>
+            <span>{{ overview.service_counts.enabled }} enabled • {{ overview.service_counts.disabled }} disabled</span>
+          </div>
+          <div class="overview-service-grid">
+            {% for item in overview.services %}
+              {% set service_target = 'application' %}
+              {% if item.label == 'SMTP' %}
+                {% set service_target = 'smtp' %}
+              {% elif item.label in ['Telegram Bot', 'Telegram Polling'] %}
+                {% set service_target = 'telegram' %}
+              {% elif item.label == 'Push Notifications' %}
+                {% set service_target = 'push_notifications' %}
+              {% elif item.label in ['Authentication', 'Local Login'] %}
+                {% set service_target = 'authentication' %}
+              {% elif item.label == 'Database' %}
+                {% set service_target = 'database' %}
+              {% elif item.label == 'Backups' %}
+                {% set service_target = 'backup' %}
+              {% endif %}
+              <a class="overview-service-tile {{ 'is-enabled' if item.enabled else 'is-disabled' }}" href="#settings" data-admin-nav="settings" data-settings-target="{{ service_target }}" title="{{ item.detail }}">
+                {{ item.label }}
+              </a>
+            {% endfor %}
+          </div>
+        </article>
+      </section>
+
+      <section class="admin-grid overview-detail-grid overview-secondary-grid">
+        <article class="admin-panel overview-panel">
+          <div class="panel-head">
+            <h2>Configuration</h2>
+            <span>Current defaults</span>
+          </div>
+          <div class="overview-detail-list compact">
+            <div><span>Support Email</span><strong>{{ overview.configuration.support_email }}</strong></div>
+            <div><span>Support Phone</span><strong>{{ overview.configuration.support_phone }}</strong></div>
+            <div><span>Auth Provider</span><strong>{{ overview.configuration.auth_provider }}</strong></div>
+            <div><span>Push Provider</span><strong>{{ overview.configuration.push_provider }}</strong></div>
+            <div><span>Local Login</span><strong>{{ 'Allowed' if admin_settings.authentication.allow_local_login else 'Blocked' }}</strong></div>
+            <div><span>Maintenance</span><strong>{{ 'Enabled' if admin_settings.application.maintenance_mode else 'Disabled' }}</strong></div>
+          </div>
+        </article>
+
+        <article class="admin-panel overview-panel">
+          <div class="panel-head">
+            <h2>Last Backup Details</h2>
+            <span>{{ overview.backup.last_run.provider or 'filesystem' }}</span>
+          </div>
+          <div class="overview-detail-list compact">
+            <div><span>Collections</span><strong>{{ overview.backup.last_run.collections or 0 }}</strong></div>
+            <div><span>Documents</span><strong>{{ overview.backup.last_run.documents or 0 }}</strong></div>
+            <div><span>Uploads Included</span><strong>{{ 'Yes' if overview.backup.last_run.includes_uploads else 'No' }}</strong></div>
+            <div><span>Retention</span><strong>{{ overview.backup.config.retention_days or '-' }} days</strong></div>
+            <div><span>Schedule</span><strong>{{ overview.backup.config.schedule_display or 'Manual only' }}</strong></div>
+            <div><span>Checksum Stored</span><strong>{{ 'Yes' if overview.backup.last_run.archive_sha256 else 'No' }}</strong></div>
+          </div>
+        </article>
+
+        <article class="admin-panel overview-panel">
+          <div class="panel-head">
+            <h2>Action Required</h2>
+            <span>{{ overview.alerts | length }} items</span>
+          </div>
+          <div class="overview-alert-list">
+            {% for item in overview.alerts %}
+              <div class="overview-alert overview-alert-{{ item.level }}">
+                <strong>{{ item.title }}</strong>
+                <span>{{ item.detail }}</span>
+              </div>
+            {% endfor %}
+          </div>
+        </article>
+
+        <article class="admin-panel overview-panel overview-trend-panel">
+          <div class="panel-head">
+            <h2>7-Day Trends</h2>
+            <span>Recent activity</span>
+          </div>
+          <div class="overview-trend-grid">
+            <div class="overview-trend-card">
+              <strong>Logins</strong>
+              <div class="overview-sparkline" aria-hidden="true">
+                {% set login_peak = (overview.trends.login_series | max) if overview.trends.login_series else 0 %}
+                {% for value in overview.trends.login_series %}
+                  <span class="overview-spark-bar" style="height: {{ [((value / (login_peak or 1)) * 100) | round(0), 10] | max }}%" title="{{ overview.trends.labels[loop.index0] }}: {{ value }}"></span>
+                {% endfor %}
+              </div>
+              <span>{{ overview.activity.recent_signins_7d }} users seen in 7 days</span>
+            </div>
+            <div class="overview-trend-card">
+              <strong>Failed Transactions</strong>
+              <div class="overview-sparkline" aria-hidden="true">
+                {% set fail_peak = (overview.trends.failed_transaction_series | max) if overview.trends.failed_transaction_series else 0 %}
+                {% for value in overview.trends.failed_transaction_series %}
+                  <span class="overview-spark-bar is-danger" style="height: {{ [((value / (fail_peak or 1)) * 100) | round(0), 10] | max }}%" title="{{ overview.trends.labels[loop.index0] }}: {{ value }}"></span>
+                {% endfor %}
+              </div>
+              <span>{{ overview.activity.failed_transaction_rate }}% failed rate overall</span>
+            </div>
+            <div class="overview-trend-card">
+              <strong>Completed Backups</strong>
+              <div class="overview-sparkline" aria-hidden="true">
+                {% set backup_peak = (overview.trends.backup_series | max) if overview.trends.backup_series else 0 %}
+                {% for value in overview.trends.backup_series %}
+                  <span class="overview-spark-bar is-ok" style="height: {{ [((value / (backup_peak or 1)) * 100) | round(0), 10] | max }}%" title="{{ overview.trends.labels[loop.index0] }}: {{ value }}"></span>
+                {% endfor %}
+              </div>
+              <span>{{ overview.backup.verified_local_count }} verified local archives</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="admin-panel overview-panel">
+          <div class="panel-head">
+            <h2>Recent Access</h2>
+            <span>{{ overview.activity.recent_signins_24h }} in 24h</span>
+          </div>
+          <div class="overview-user-list">
+            {% for item in overview.recent_users %}
+              <div class="overview-user-row">
+                <div>
+                  <strong>{{ item.label }}</strong>
+                  <span>{{ item.email }}</span>
+                </div>
+                <div class="overview-user-meta">
+                  <span>{{ item.last_login_at | localtime(request) | datetimeformat if item.last_login_at else 'Never logged in' }}</span>
+                  <div class="overview-inline-pills">
+                    <span class="status-pill {{ 'up' if item.enabled else 'down' }}">{{ 'Enabled' if item.enabled else 'Disabled' }}</span>
+                    <span class="status-pill {{ 'up' if item.is_admin else 'down' }}">{{ 'Admin' if item.is_admin else item.auth_provider | title }}</span>
+                  </div>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </article>
+
+        <article class="admin-panel overview-panel">
+          <div class="panel-head">
+            <h2>Recent Audit Activity</h2>
+            <span>{{ overview.recent_audit | length }} entries</span>
+          </div>
+          <div class="overview-audit-list">
+            {% for item in overview.recent_audit %}
+              <div class="overview-audit-row">
+                <div>
+                  <strong>{{ item.action }}</strong>
+                  <span>{{ item.username }} • {{ item.auth_provider | title }}</span>
+                </div>
+                <div class="overview-audit-meta">
+                  <span>{{ item.timestamp | localtime(request) | datetimeformat if item.timestamp else '-' }}</span>
+                  {% if item.meta_summary %}
+                    <span>{{ item.meta_summary }}</span>
+                  {% endif %}
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </article>
+
+
+        <article class="admin-panel overview-panel">
+          <div class="panel-head">
+            <h2>Recent Local Backups</h2>
+            <span>{{ overview.backup.local_count }} found</span>
+          </div>
+          <div class="overview-backup-list">
+            {% if overview.backup.recent_local_backups %}
+              {% for item in overview.backup.recent_local_backups %}
+                <div class="overview-backup-row">
+                  <div>
+                    <strong>{{ item.archive_name }}</strong>
+                    <span>{{ item.created_at | localtime(request) | datetimeformat if item.created_at else '-' }}</span>
+                  </div>
+                  <div class="overview-backup-meta">
+                    <span>{{ ((item.archive_size_bytes or 0) / 1024) | round(1) }} KB</span>
+                    <span class="status-pill {{ 'up' if item.verified else 'down' }}">{{ 'Verified' if item.verified else 'Needs Verify' }}</span>
+                  </div>
+                </div>
+              {% endfor %}
+            {% else %}
+              <p class="overview-empty-state">No local backup files found in the configured destination.</p>
+            {% endif %}
+          </div>
+        </article>
+      </section>
+    </section>
+
+    <section class="admin-view" data-admin-view="settings" id="settings" hidden>
+      <header class="admin-header">
+        <h1>Settings</h1>
+        <p>Configure platform settings by domain: application, authentication, messaging, notifications, and backups.</p>
+      </header>
+      {% set alert_error = admin_alert_error %}
+      {% include "partials/form_alert.html" %}
+      <form class="admin-panel settings-form" method="post" action="/admin/settings" enctype="multipart/form-data" data-inline-success-form data-inline-success-message="Settings saved" data-inline-redirect-hash="#settings" data-settings-error-section="{{ settings_error_section or "" }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+        <div class="settings-scroll">
+          <section class="settings-group" data-settings-panel="application">
+            <div class="settings-group-head">
+              <h3>Application</h3>
+              <div class="action-row settings-actions"><span class="settings-editing-chip" data-panel-editing-label hidden>Editing</span>
+                <button type="button" class="btn-action btn-icon" data-panel-edit title="Edit panel" aria-label="Edit panel"><i class="fa-solid fa-pen"></i></button>
+                <button type="submit" class="btn-action ok btn-icon" data-panel-save data-inline-success-message="Settings saved" name="settings_section" value="application" hidden title="Save panel" aria-label="Save panel"><i class="fa-solid fa-check"></i></button>
+                <button type="button" class="btn-action btn-icon" data-panel-cancel hidden title="Cancel changes" aria-label="Cancel changes"><i class="fa-solid fa-xmark"></i></button>
+              </div>
+            </div>
+            <div class="settings-grid two">
+              <label>Application Name
+                <input type="text" name="app_name" value="{{ admin_settings.application.app_name }}">
+              </label>
+              <label>Logo URL
+                <input type="text" name="logo_url" value="{{ admin_settings.application.logo_url }}">
+              </label>
+              <label>Logo Upload
+                <input type="file" name="logo_file" accept=".png,.jpg,.jpeg,.svg,.webp">
+              </label>
+              <label>Support Email
+                <input type="email" name="support_email" value="{{ admin_settings.application.support_email }}">
+              </label>
+              <label>Support Phone
+                <input type="text" name="support_phone" value="{{ admin_settings.application.support_phone }}">
+              </label>
+              <label>Default Country
+                <select name="application_default_country">
+                  {% set selected_country_code = admin_settings.application.default_country or DEFAULT_PHONE_COUNTRY %}
+                  {% include "partials/phone_country_options.html" %}
+                </select>
+                <span class="field-hint">Timezone: {{ admin_settings.application.timezone }}</span>
+              </label>
+              <label>Scheduler Run Time
+                <input type="time" name="scheduler_run_time" value="{{ admin_settings.application.scheduler_run_time }}" step="60">
+              </label>
+            </div>
+          </section>
+
+          <section class="settings-group" data-settings-panel="smtp">
+            <div class="settings-group-head">
+              <h3>SMTP Settings</h3>
+              <div class="action-row settings-actions"><span class="settings-editing-chip" data-panel-editing-label hidden>Editing</span>
+                <button type="button" class="btn-action btn-icon" data-smtp-test data-default-html="<i class='fa-solid fa-vial'></i>" title="Test SMTP" aria-label="Test SMTP"><i class="fa-solid fa-vial"></i></button>
+                <button type="button" class="btn-action btn-icon" data-panel-edit title="Edit panel" aria-label="Edit panel"><i class="fa-solid fa-pen"></i></button>
+                <button type="submit" class="btn-action ok btn-icon" data-panel-save data-inline-success-message="Settings saved" name="settings_section" value="smtp" hidden title="Save panel" aria-label="Save panel"><i class="fa-solid fa-check"></i></button>
+                <button type="button" class="btn-action btn-icon" data-panel-cancel hidden title="Cancel changes" aria-label="Cancel changes"><i class="fa-solid fa-xmark"></i></button>
+                <label class="toggle">
+                  <input type="checkbox" name="smtp_enabled" data-autosave-toggle="true" data-autosave-label="SMTP" {% if admin_settings.smtp.enabled %}checked{% endif %}>
+                  <span aria-label="Enabled toggle"></span>
+                </label>
+              </div>
+            </div>
+            <div class="settings-grid three">
+              <label>Host
+                <input type="text" name="smtp_host" value="{{ admin_settings.smtp.host }}">
+              </label>
+              <label>Port
+                <input type="text" name="smtp_port" value="{{ admin_settings.smtp.port }}">
+              </label>
+              <label>Username
+                <input type="text" name="smtp_username" value="{{ admin_settings.smtp.username }}">
+              </label>
+              <label>Password
+                <input
+                  type="password"
+                  name="smtp_password"
+                  value=""
+                  placeholder="{% if admin_settings.smtp.password %}Configured (hidden). Enter only to change.{% else %}Enter SMTP password{% endif %}"
+                  autocomplete="new-password"
+                >
+              </label>
+              <label>From Email
+                <input type="email" name="smtp_from_email" value="{{ admin_settings.smtp.from_email }}">
+              </label>
+              <label class="toggle inline">
+                <input type="checkbox" name="smtp_tls" {% if admin_settings.smtp.tls %}checked{% endif %}>
+                <span>TLS</span>
+              </label>
+            </div>
+          </section>
+
+          <section class="settings-group" data-settings-panel="telegram">
+            <div class="settings-group-head">
+              <h3>Telegram Integration</h3>
+              <div class="action-row settings-actions"><span class="settings-editing-chip" data-panel-editing-label hidden>Editing</span>
+                <button type="button" class="btn-action btn-icon" data-panel-edit title="Edit panel" aria-label="Edit panel"><i class="fa-solid fa-pen"></i></button>
+                <button type="submit" class="btn-action ok btn-icon" data-panel-save data-inline-success-message="Settings saved" name="settings_section" value="telegram" hidden title="Save panel" aria-label="Save panel"><i class="fa-solid fa-check"></i></button>
+                <button type="button" class="btn-action btn-icon" data-panel-cancel hidden title="Cancel changes" aria-label="Cancel changes"><i class="fa-solid fa-xmark"></i></button>
+                <label class="toggle">
+                  <input type="checkbox" name="telegram_enabled" data-autosave-toggle="true" data-autosave-label="Telegram" {% if admin_settings.telegram.enabled %}checked{% endif %}>
+                  <span aria-label="Enabled toggle"></span>
+                </label>
+              </div>
+            </div>
+            <div class="settings-grid two">
+              <label>Bot Username
+                <input type="text" name="telegram_bot_username" value="{{ admin_settings.telegram.bot_username }}">
+              </label>
+              <label>Bot Token
+                <input
+                  type="password"
+                  name="telegram_bot_token"
+                  value=""
+                  placeholder="{% if admin_settings.telegram.bot_token %}Configured (hidden). Enter only to change.{% else %}Enter Telegram bot token{% endif %}"
+                  autocomplete="new-password"
+                >
+              </label>
+              <label class="full">Webhook URL
+                <input
+                  type="text"
+                  name="telegram_webhook_url"
+                  data-telegram-webhook-url
+                  value="{{ admin_settings.telegram.webhook_url or '' }}"
+                  placeholder="https://your-public-domain/api/telegram/webhook"
+                >
+              </label>
+              <label class="toggle inline">
+                <input type="checkbox" name="telegram_polling_enabled" {% if admin_settings.telegram.polling_enabled %}checked{% endif %}>
+                <span>Polling Fallback (LAN Dev)</span>
+              </label>
+              <label class="full">Webhook Controls
+                <div class="action-row">
+                  <button type="button" class="btn-action btn-icon" data-telegram-webhook-set data-default-html="<i class='fa-solid fa-plug-circle-check'></i>" title="Set Webhook" aria-label="Set Webhook"><i class="fa-solid fa-plug-circle-check"></i></button>
+                  <button type="button" class="btn-action btn-icon" data-telegram-webhook-info data-default-html="<i class='fa-solid fa-circle-info'></i>" title="Check Webhook" aria-label="Check Webhook"><i class="fa-solid fa-circle-info"></i></button>
+                  <button type="button" class="btn-action warn btn-icon" data-telegram-webhook-delete data-default-html="<i class='fa-solid fa-link-slash'></i>" title="Delete Webhook" aria-label="Delete Webhook"><i class="fa-solid fa-link-slash"></i></button>
+                </div>
+              </label>
+              <label class="full">Polling Controls
+                <div class="action-row">
+                  <button type="button" class="btn-action btn-icon" data-telegram-poll-run-once data-default-html="<i class='fa-solid fa-play'></i>" title="Run Poll Now" aria-label="Run Poll Now"><i class="fa-solid fa-play"></i></button>
+                  <button type="button" class="btn-action btn-icon" data-telegram-poll-status data-default-html="<i class='fa-solid fa-heart-pulse'></i>" title="Check Poll Status" aria-label="Check Poll Status"><i class="fa-solid fa-heart-pulse"></i></button>
+                </div>
+              </label>
+              <div class="telegram-poll-widget full" data-telegram-poll-widget>
+                <div class="telegram-poll-title">Polling Health</div>
+                <div class="telegram-poll-grid">
+                  <div><span>Status</span><strong data-telegram-poll-health-status>Unknown</strong></div>
+                  <div><span>Last Poll</span><strong data-telegram-poll-health-time>-</strong></div>
+                  <div><span>Last Update ID</span><strong data-telegram-poll-health-update>-</strong></div>
+                  <div><span>Processed</span><strong data-telegram-poll-health-processed>0 updates / 0 messages</strong></div>
+                  <div><span>Config</span><strong data-telegram-poll-health-config>-</strong></div>
+                  <div><span>Webhook</span><strong data-telegram-poll-health-webhook>-</strong></div>
+                </div>
+                <div class="telegram-poll-error" data-telegram-poll-health-error hidden></div>
+              </div>
+              <div class="telegram-delivery-widget full" data-telegram-delivery-widget>
+                <div class="telegram-poll-title">Delivery Health</div>
+                <div class="telegram-poll-grid">
+                  <div><span>Total Mirrored</span><strong data-telegram-delivery-total>0</strong></div>
+                  <div><span>Sent</span><strong data-telegram-delivery-sent>0</strong></div>
+                  <div><span>Failed</span><strong data-telegram-delivery-failed>0</strong></div>
+                  <div><span>Cooldown Skips</span><strong data-telegram-delivery-cooldown>0</strong></div>
+                  <div><span>Last Check</span><strong data-telegram-delivery-checked>-</strong></div>
+                </div>
+                <div class="telegram-delivery-failures">
+                  <div class="telegram-delivery-subhead">Recent Failures</div>
+                  <ul data-telegram-delivery-failures>
+                    <li class="muted">No recent failures.</li>
+                  </ul>
+                </div>
+              </div>
+              <label class="full">Broadcast Message
+                <div class="action-row">
+                  <input
+                    type="text"
+                    data-telegram-broadcast-message data-panel-action-control="true"
+                    placeholder="Enter your message"
+                  >
+                  <button type="button" class="btn-action btn-icon" data-telegram-broadcast data-default-html="<i class='fa-solid fa-paper-plane'></i>" title="Send broadcast" aria-label="Send broadcast"><i class="fa-solid fa-paper-plane"></i></button>
+                </div>
+              </label>
+            </div>
+          </section>
+
+          <section class="settings-group" data-settings-panel="push_notifications">
+            <div class="settings-group-head">
+              <h3>Push Notification Settings</h3>
+              <div class="action-row settings-actions"><span class="settings-editing-chip" data-panel-editing-label hidden>Editing</span>
+                <button type="button" class="btn-action btn-icon" data-push-test data-default-html="<i class='fa-solid fa-bell'></i>" title="Test Push" aria-label="Test Push"><i class="fa-solid fa-bell"></i></button>
+                <button type="button" class="btn-action btn-icon" data-panel-edit title="Edit panel" aria-label="Edit panel"><i class="fa-solid fa-pen"></i></button>
+                <button type="submit" class="btn-action ok btn-icon" data-panel-save data-inline-success-message="Settings saved" name="settings_section" value="push_notifications" hidden title="Save panel" aria-label="Save panel"><i class="fa-solid fa-check"></i></button>
+                <button type="button" class="btn-action btn-icon" data-panel-cancel hidden title="Cancel changes" aria-label="Cancel changes"><i class="fa-solid fa-xmark"></i></button>
+                <label class="toggle">
+                  <input type="checkbox" name="push_enabled" data-autosave-toggle="true" data-autosave-label="Notifications" {% if admin_settings.push_notifications.enabled %}checked{% endif %}>
+                  <span aria-label="Enabled toggle"></span>
+                </label>
+              </div>
+            </div>
+            <div class="settings-grid two">
+              <label>Delivery Method
+                <input type="text" value="Firebase (FCM)" disabled>
+              </label>
+              <label>VAPID Public Key (required by FCM Web registration)
+                <input type="text" name="push_vapid_public_key" value="{{ admin_settings.push_notifications.vapid_public_key }}" placeholder="Public key from Firebase Cloud Messaging settings">
+              </label>
+
+              <div class="full push-method-panel">
+                <h4>Firebase (FCM) Configuration</h4>
+                <p class="muted">Only Firebase delivery is supported.</p>
+                <div class="settings-grid two push-method-grid">
+                  <label>Firebase API Key
+                    <input type="text" name="push_firebase_api_key" value="{{ admin_settings.push_notifications.firebase_config.apiKey }}">
+                  </label>
+                  <label>Firebase Project ID
+                    <input type="text" name="push_firebase_project_id" value="{{ admin_settings.push_notifications.firebase_config.projectId }}">
+                  </label>
+                  <label>Firebase Messaging Sender ID
+                    <input type="text" name="push_firebase_messaging_sender_id" value="{{ admin_settings.push_notifications.firebase_config.messagingSenderId }}">
+                  </label>
+                  <label>Firebase App ID
+                    <input type="text" name="push_firebase_app_id" value="{{ admin_settings.push_notifications.firebase_config.appId }}">
+                  </label>
+                  <label class="full">Firebase Service Account JSON (server)
+                    <textarea name="push_firebase_service_account_json" rows="5" placeholder='{"type":"service_account",...}'>{{ admin_settings.push_notifications.firebase_service_account_json }}</textarea>
+                  </label>
+                </div>
+
+                <details class="push-advanced">
+                  <summary>Advanced Firebase Fields (optional)</summary>
+                  <div class="settings-grid two push-advanced-grid">
+                    <label>Firebase Auth Domain
+                      <input type="text" name="push_firebase_auth_domain" value="{{ admin_settings.push_notifications.firebase_config.authDomain }}">
+                    </label>
+                    <label>Firebase Storage Bucket
+                      <input type="text" name="push_firebase_storage_bucket" value="{{ admin_settings.push_notifications.firebase_config.storageBucket }}">
+                    </label>
+                    <label class="full">Firebase Measurement ID
+                      <input type="text" name="push_firebase_measurement_id" value="{{ admin_settings.push_notifications.firebase_config.measurementId }}">
+                    </label>
+                  </div>
+                </details>
+              </div>
+            </div>
+          </section>
+
+          <section class="settings-group" data-settings-panel="authentication">
+            <div class="settings-group-head">
+              <h3>Authentication Integration</h3>
+              <div class="action-row settings-actions"><span class="settings-editing-chip" data-panel-editing-label hidden>Editing</span>
+                <button type="button" class="btn-action btn-icon" data-panel-edit title="Edit panel" aria-label="Edit panel"><i class="fa-solid fa-pen"></i></button>
+                <button type="submit" class="btn-action ok btn-icon" data-panel-save data-inline-success-message="Settings saved" name="settings_section" value="authentication" hidden title="Save panel" aria-label="Save panel"><i class="fa-solid fa-check"></i></button>
+                <button type="button" class="btn-action btn-icon" data-panel-cancel hidden title="Cancel changes" aria-label="Cancel changes"><i class="fa-solid fa-xmark"></i></button>
+                <label class="toggle">
+                  <input type="checkbox" name="auth_enabled" data-autosave-toggle="true" data-autosave-label="Authentication" {% if admin_settings.authentication.enabled %}checked{% endif %}>
+                  <span aria-label="Enabled toggle"></span>
+                </label>
+              </div>
+            </div>
+            <div class="settings-grid three">
+              <label>Provider
+                <input type="text" name="auth_provider" value="{{ admin_settings.authentication.provider }}">
+              </label>
+              <label>Keycloak URL
+                <input type="text" name="auth_keycloak_url" value="{{ admin_settings.authentication.keycloak_url }}">
+              </label>
+              <label>Realm
+                <input type="text" name="auth_realm" value="{{ admin_settings.authentication.realm }}">
+              </label>
+              <label>Client ID
+                <input type="text" name="auth_client_id" value="{{ admin_settings.authentication.client_id }}">
+              </label>
+              <label class="toggle inline">
+                <input type="checkbox" name="auth_allow_local_login" {% if admin_settings.authentication.allow_local_login %}checked{% endif %}>
+                <span>Allow Local Login</span>
+              </label>
+              <label class="toggle inline">
+                <input type="checkbox" name="auth_allow_google_login" {% if admin_settings.authentication.allow_google_login %}checked{% endif %}>
+                <span>Allow Google Login</span>
+              </label>
+              <label class="toggle inline">
+                <input type="checkbox" name="auth_allow_telegram_login" {% if admin_settings.authentication.allow_telegram_login %}checked{% endif %}>
+                <span>Allow Telegram Login</span>
+              </label>
+            </div>
+          </section>
+
+          <section class="settings-group" data-settings-panel="database">
+            <div class="settings-group-head">
+              <h3>Database Settings</h3>
+              <div class="action-row settings-actions"><span class="settings-editing-chip" data-panel-editing-label hidden>Editing</span>
+                <button type="button" class="btn-action btn-icon" data-panel-edit title="Edit panel" aria-label="Edit panel"><i class="fa-solid fa-pen"></i></button>
+                <button type="submit" class="btn-action ok btn-icon" data-panel-save data-inline-success-message="Settings saved" name="settings_section" value="database" hidden title="Save panel" aria-label="Save panel"><i class="fa-solid fa-check"></i></button>
+                <button type="button" class="btn-action btn-icon" data-panel-cancel hidden title="Cancel changes" aria-label="Cancel changes"><i class="fa-solid fa-xmark"></i></button>
+                <label class="toggle">
+                  <input type="checkbox" name="db_enabled" data-autosave-toggle="true" data-autosave-label="Database" {% if admin_settings.database.enabled %}checked{% endif %}>
+                  <span aria-label="Enabled toggle"></span>
+                </label>
+              </div>
+            </div>
+            <div class="settings-grid two">
+              <label>Mongo URI
+                <input type="text" name="db_mongo_uri" value="{{ admin_settings.database.mongo_uri }}">
+              </label>
+              <label>Database Name
+                <input type="text" name="db_mongo_db_name" value="{{ admin_settings.database.mongo_db_name }}">
+              </label>
+            </div>
+          </section>
+
+          <section class="settings-group" data-settings-panel="backup">
+            <div class="settings-group-head">
+              <h3>Backup Settings</h3>
+              <div class="action-row settings-actions"><span class="settings-editing-chip" data-panel-editing-label hidden>Editing</span>
+                <button type="button" class="btn-action btn-icon" data-backup-run data-default-html="<i class='fa-solid fa-box-archive'></i>" title="Run Backup Now" aria-label="Run Backup Now"><i class="fa-solid fa-box-archive"></i></button>
+                <button type="button" class="btn-action btn-icon" data-backup-status data-default-html="<i class='fa-solid fa-rotate'></i>" title="Refresh Backup Status" aria-label="Refresh Backup Status"><i class="fa-solid fa-rotate"></i></button>
+                <button type="button" class="btn-action btn-icon" data-backup-local-refresh data-default-html="<i class='fa-solid fa-folder-tree'></i>" title="Refresh Local Backups" aria-label="Refresh Local Backups"><i class="fa-solid fa-folder-tree"></i></button>
+                <button type="button" class="btn-action btn-icon" data-panel-edit title="Edit panel" aria-label="Edit panel"><i class="fa-solid fa-pen"></i></button>
+                <button type="submit" class="btn-action ok btn-icon" data-panel-save data-inline-success-message="Settings saved" name="settings_section" value="backup" hidden title="Save panel" aria-label="Save panel"><i class="fa-solid fa-check"></i></button>
+                <button type="button" class="btn-action btn-icon" data-panel-cancel hidden title="Cancel changes" aria-label="Cancel changes"><i class="fa-solid fa-xmark"></i></button>
+                <label class="toggle">
+                  <input type="checkbox" name="backup_enabled" data-autosave-toggle="true" data-autosave-label="Backup" {% if admin_settings.backup.enabled %}checked{% endif %}>
+                  <span aria-label="Enabled toggle"></span>
+                </label>
+              </div>
+            </div>
+            <div class="settings-grid three">
+              <label>Provider
+                <input type="text" name="backup_provider" value="{{ admin_settings.backup.provider }}">
+              </label>
+              <label>Backup Time
+                <input type="time" name="backup_schedule_time" value="{{ admin_settings.backup.schedule_time }}" step="60">
+              </label>
+              <label>Retention (days)
+                <input type="text" name="backup_retention_days" value="{{ admin_settings.backup.retention_days }}">
+              </label>
+              <label class="full">Destination
+                <input type="text" name="backup_destination" value="{{ admin_settings.backup.destination }}">
+              </label>
+              <div class="backup-status-widget full" data-backup-status-widget>
+                <div class="telegram-poll-title">Backup Status</div>
+                <div class="telegram-poll-grid">
+                  <div><span>Last Status</span><strong data-backup-last-status>Unknown</strong></div>
+                  <div><span>Last Run</span><strong data-backup-last-time>-</strong></div>
+                  <div><span>Archive Size</span><strong data-backup-last-size>-</strong></div>
+                  <div><span>Collections</span><strong data-backup-last-collections>-</strong></div>
+                  <div><span>Documents</span><strong data-backup-last-documents>-</strong></div>
+                  <div><span>Includes Uploads</span><strong data-backup-last-uploads>-</strong></div>
+                </div>
+                <div class="backup-status-meta">
+                  <div><span>Destination</span><strong data-backup-config-destination>-</strong></div>
+                  <div><span>Schedule</span><strong data-backup-config-schedule>-</strong></div>
+                  <div><span>Next Run</span><strong data-backup-next-run>-</strong></div>
+                  <div><span>Retention</span><strong data-backup-config-retention>-</strong></div>
+                </div>
+                <div class="telegram-poll-error" data-backup-last-error hidden></div>
+              </div>
+              <div class="backup-history-widget full">
+                <div class="telegram-poll-title">Recent Backups</div>
+                <ul class="backup-history-list" data-backup-history-list>
+                  <li class="muted">No backups yet.</li>
+                </ul>
+              </div>
+              <div class="backup-history-widget full">
+                <div class="telegram-poll-title">Available Local Backups</div>
+                <ul class="backup-history-list" data-backup-local-list>
+                  <li class="muted">No local backups found.</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          <section class="settings-group" data-settings-panel="runtime">
+            <div class="settings-group-head">
+              <h3>Runtime</h3>
+              <div class="action-row settings-actions">
+                <button type="submit" class="btn-action ok" name="settings_section" value="runtime" data-maintenance-allowed data-inline-success-message="Runtime settings saved" title="Save runtime settings" aria-label="Save runtime settings">Save Runtime</button>
+              </div>
+            </div>
+            <div class="settings-grid two">
+              <label class="toggle inline">
+                <input type="checkbox" name="debug_mode" data-runtime-control="true" data-maintenance-allowed data-autosave-toggle="true" data-autosave-label="Debug Mode" {% if admin_settings.application.debug_mode %}checked{% endif %}>
+                <span>Debug Mode</span>
+              </label>
+              <label class="toggle inline">
+                <input type="checkbox" name="maintenance_mode" data-runtime-control="true" data-maintenance-allowed data-autosave-toggle="true" data-autosave-label="Maintenance Mode" {% if admin_settings.application.maintenance_mode %}checked{% endif %}>
+                <span>Maintenance Mode</span>
+              </label>
+              <label class="full">Maintenance Message
+                <textarea name="maintenance_message" rows="2" data-runtime-control="true" data-maintenance-allowed>{{ admin_settings.application.maintenance_message }}</textarea>
+              </label>
+            </div>
+          </section>
+
+        </div>
+      </form>
+    </section>
+
+    <section class="admin-view" data-admin-view="users" id="users" hidden>
+      <header class="admin-header">
+        <h1>Users</h1>
+        <p>Manage status and admin access for platform users.</p>
+      </header>
+      <section class="admin-panel">
+        <div class="panel-head">
+          <h2>Users</h2>
+          <span>Latest 100</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+          <thead>
+            <tr>
+              <th>Username</th>
+              <th>Email</th>
+              <th>Provider</th>
+              <th>Active</th>
+              <th>Admin</th>
+              <th>Last Login</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for u in users %}
+              {% set is_self = (u._id == current_admin_user_id) %}
+              {% set is_protected_local_admin = (u.auth_provider == 'local' and u.is_admin) %}
+              <tr>
+                <td>{{ u.username or '-' }}</td>
+                <td>{{ u.email or '-' }}</td>
+                <td>{{ u.auth_provider or '-' }}</td>
+                <td>
+                  <span class="status-pill {{ 'up' if u.is_active else 'down' }}">
+                    {{ 'Enabled' if u.is_active else 'Disabled' }}
+                  </span>
+                </td>
+                <td>
+                  <span class="status-pill {{ 'up' if u.is_admin else 'down' }}">
+                    {{ 'Admin' if u.is_admin else 'Standard' }}
+                  </span>
+                </td>
+                <td>{{ u.last_login_at | localtime(request) | datetimeformat if u.last_login_at else '-' }}</td>
+                <td>
+                  <div class="action-row">
+                    <form method="post" action="/admin/users/{{ u._id }}/toggle-active" data-inline-success-form data-inline-success-message="{{ 'User disabled' if u.is_active else 'User enabled' }}">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                      <button
+                        type="submit"
+                        class="btn-action btn-icon {{ 'warn' if u.is_active else 'ok' }}"
+                        data-admin-action="{{ 'user-disable' if u.is_active else 'user-enable' }}"
+                        aria-label="{{ 'Disable user' if u.is_active else 'Enable user' }}"
+                        title="{{ 'Local admin account cannot be managed' if is_protected_local_admin else 'You cannot disable your own account' if is_self else ('Disable user ' ~ (u.username or u.email or 'this user')) if u.is_active else ('Enable user ' ~ (u.username or u.email or 'this user')) }}"
+                        {% if is_protected_local_admin or is_self %}disabled{% endif %}
+                      >
+                        <i class="fa-solid {{ 'fa-user-slash' if u.is_active else 'fa-user-check' }}"></i>
+                      </button>
+                    </form>
+                    <form method="post" action="/admin/users/{{ u._id }}/toggle-admin" data-inline-success-form data-inline-success-message="{{ 'Admin removed' if u.is_admin else 'Admin granted' }}">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                      <button
+                        type="submit"
+                        class="btn-action btn-icon {{ 'warn' if u.is_admin else 'ok' }}"
+                        data-admin-action="{{ 'admin-remove' if u.is_admin else 'admin-grant' }}"
+                        aria-label="{{ 'Remove admin access' if u.is_admin else 'Grant admin access' }}"
+                        title="{{ 'Local admin account cannot be managed' if is_protected_local_admin else 'You cannot remove your own admin access' if is_self else ('Remove admin access for ' ~ (u.username or u.email or 'this user')) if u.is_admin else ('Grant admin access to ' ~ (u.username or u.email or 'this user')) }}"
+                        {% if is_protected_local_admin or is_self %}disabled{% endif %}
+                      >
+                        <i class="fa-solid {{ 'fa-user-shield' if u.is_admin else 'fa-user-plus' }}"></i>
+                      </button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      </section>
+    </section>
+
+    <section class="admin-view" data-admin-view="support" id="support" hidden>
+      <header class="admin-header">
+        <h1>Support Requests</h1>
+        <p>View user requests and support chat history.</p>
+      </header>
+      <section class="admin-panel">
+        <div class="panel-head">
+          <h2>Support Requests</h2>
+          <div class="action-row">
+            <button type="button" class="btn-action warn btn-icon" data-support-end data-admin-action="support-end" aria-label="End chat" title="End chat" disabled><i class="fa-solid fa-phone-slash"></i></button>
+            <button type="button" class="btn-action btn-icon" data-support-refresh data-admin-action="support-refresh" aria-label="Refresh" title="Refresh"><i class="fa-solid fa-rotate"></i></button>
+          </div>
+        </div>
+        <div class="support-layout" data-support-root>
+          <aside class="support-users">
+            <div class="support-users-head">Users</div>
+            <div class="support-user-list" data-support-user-list>
+              <p class="support-empty">No support requests yet.</p>
+            </div>
+          </aside>
+          <article class="support-thread">
+            <header class="support-thread-head">
+              <h3 data-support-user-title>Select a user</h3>
+              <p data-support-user-subtitle>Choose a support conversation from the list.</p>
+            </header>
+            <div class="support-messages" data-support-messages>
+              <p class="support-empty">Messages will appear here.</p>
+            </div>
+            <form class="support-composer" data-support-compose-form>
+              <input
+                type="text"
+                data-support-compose-input
+                placeholder="Select a user to reply..."
+                autocomplete="off"
+                disabled
+              />
+              <button type="submit" class="btn-action ok btn-icon" data-support-compose-send data-admin-action="support-send" aria-label="Send" title="Send" disabled><i class="fa-solid fa-paper-plane"></i></button>
+            </form>
+          </article>
+        </div>
+      </section>
+    </section>
+  </div>
+</section>
+<script src="/static/js/admin_nav.js?v={{ FT_APP_VERSION }}" defer></script>
+<script src="/static/js/admin_support.js?v={{ FT_APP_VERSION }}" defer></script>
+<script src="/static/js/admin_settings.js?v={{ FT_APP_VERSION }}" defer></script>
+{% endblock %}

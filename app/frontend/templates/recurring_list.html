@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block title %}{{ FT_APP_NAME }} ¦ Recurring Transactions{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/transactions.css">
+{% endblock %}
+{% block content %}
+<section class="page page-recurring">
+<div class="recurring-page">
+  <div class="list-header recurring-header">
+    <div class="title-row">
+      <div>
+        <h1>Recurring Transactions</h1>
+      </div>
+    </div>
+  </div>
+
+  <div class="recurring-stats">
+    <div class="recurring-stat-card">
+      <span class="label">Active</span>
+      <strong>{{ stats.active }}</strong>
+    </div>
+    <div class="recurring-stat-card">
+      <span class="label">Paused</span>
+      <strong>{{ stats.paused }}</strong>
+    </div>
+    <div class="recurring-stat-card">
+      <span class="label">Ended</span>
+      <strong>{{ stats.ended }}</strong>
+    </div>
+    <div class="recurring-stat-card">
+      <span class="label">Pending this month</span>
+      <strong>₹ {{ stats.month_pending | money }}</strong>
+    </div>
+  </div>
+
+  <div class="filter-bar recurring-filter-bar">
+    <div class="filter-left">
+      <a href="/recurring?status=all" class="chip {% if status == 'all' %}active-chip{% endif %}">All</a>
+      <a href="/recurring?status=active" class="chip {% if status == 'active' %}active-chip{% endif %}">Active</a>
+      <a href="/recurring?status=paused" class="chip {% if status == 'paused' %}active-chip{% endif %}">Paused</a>
+      <a href="/recurring?status=ended" class="chip {% if status == 'ended' %}active-chip{% endif %}">Ended</a>
+    </div>
+  </div>
+
+  {% set alert_error = error %}
+  {% include "partials/form_alert.html" %}
+
+  {% if edit_rule and edit_rule.status != "ended" %}
+  <div class="card recurring-edit-card">
+    <h3 class="card-title">Edit recurring rule</h3>
+    <form method="post" action="/recurring/edit" class="recurring-edit-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+      <input type="hidden" name="recurring_id" value="{{ edit_rule.id }}">
+      <input type="hidden" name="status" value="{{ status }}">
+
+      <div class="filter-grid recurring-edit-grid">
+        <div class="form-field field--idle">
+          <label>Amount</label>
+          <input type="number" step="0.01" name="amount" value="{{ edit_rule.amount | money }}" required>
+        </div>
+
+        <div class="form-field field--idle">
+          <label>Frequency</label>
+          <select name="frequency" required>
+            {% for value, label in frequency_options %}
+              <option value="{{ value }}" {% if edit_rule.frequency == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-field field--idle">
+          <label>End date</label>
+          <input type="date" name="end_date" value="{{ edit_rule.end_date | localtime(request) | dateformat('%Y-%m-%d') if edit_rule.end_date else '' }}">
+        </div>
+
+        <div class="form-field field--idle recurring-edit-desc">
+          <label>Description</label>
+          <input type="text" name="description" value="{{ edit_rule.description }}" maxlength="120">
+        </div>
+      </div>
+
+      <div class="filter-actions recurring-edit-actions">
+        <button type="submit">Save</button>
+        <a href="/recurring?status={{ status }}" class="filter-reset">Cancel</a>
+      </div>
+    </form>
+  </div>
+  {% endif %}
+
+  <div class="card table-card recurring-table-card">
+    <div class="table-scroll recurring-table-scroll">
+      <table class="recurring-table">
+        <thead>
+          <tr>
+            <th>Rule</th>
+            <th>Account</th>
+            <th>Type</th>
+            <th>Amount</th>
+            <th>Frequency</th>
+            <th>Next run</th>
+            <th>End date</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for rule in rules %}
+          <tr class="recurring-row recurring-status-{{ rule.status }}">
+            <td class="recurring-col-title" data-label="Rule">
+              <div class="rule-main">{{ rule.description or "Recurring transaction" }}</div>
+              <div class="rule-sub muted">
+                {{ rule.category.name if rule.category else "Uncategorized" }}
+                {% if rule.subcategory and rule.subcategory.name %}
+                ({{ rule.subcategory.name }})
+                {% endif %}
+              </div>
+            </td>
+            <td class="recurring-col-account" data-label="Account">
+              {{ rule.account_name }}
+              {% if rule.bank_name %}
+              <span class="muted">({{ rule.bank_name }})</span>
+              {% endif %}
+            </td>
+            <td class="recurring-col-type" data-label="Type">
+              <span class="recurring-type recurring-type-{{ rule.type }}">{{ rule.type | upper }}</span>
+            </td>
+            <td class="recurring-col-amount" data-label="Amount">₹ {{ rule.amount | money }}</td>
+            <td class="recurring-col-frequency" data-label="Frequency">{{ rule.frequency }}</td>
+            <td class="recurring-col-next" data-label="Next run">
+              {% if rule.next_run %}
+              {{ rule.next_run | localtime(request) | dateformat }}
+              {% else %}
+              —
+              {% endif %}
+            </td>
+            <td class="recurring-col-end" data-label="End date">
+              {% if rule.end_date %}
+              {{ rule.end_date | localtime(request) | dateformat }}
+              {% else %}
+              —
+              {% endif %}
+            </td>
+            <td class="recurring-col-status" data-label="Status">
+              <span class="recurring-badge recurring-badge-{{ rule.status }}">{{ rule.status }}</span>
+            </td>
+            <td class="action-btns recurring-col-actions" data-label="Actions">
+              <div class="row-menu open">
+                {% if rule.status != "ended" %}
+                <a href="/recurring?status={{ status }}&edit_id={{ rule.id }}" class="icon-btn edit-transaction-btn" title="Edit">
+                  <i class="fa-solid fa-pen"></i>
+                </a>
+                {% endif %}
+
+                {% if rule.status == "active" %}
+                <form method="post" action="/recurring/pause" onsubmit="return confirm('Pause this recurring rule?')">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                  <input type="hidden" name="recurring_id" value="{{ rule.id }}">
+                  <input type="hidden" name="status" value="{{ status }}">
+                  <button type="submit" class="icon-btn" title="Pause">
+                    <i class="fa-solid fa-pause"></i>
+                  </button>
+                </form>
+                {% elif rule.status == "paused" %}
+                <form method="post" action="/recurring/resume" onsubmit="return confirm('Resume this recurring rule?')">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                  <input type="hidden" name="recurring_id" value="{{ rule.id }}">
+                  <input type="hidden" name="status" value="{{ status }}">
+                  <button type="submit" class="icon-btn" title="Resume">
+                    <i class="fa-solid fa-play"></i>
+                  </button>
+                </form>
+                {% endif %}
+
+                {% if rule.status != "ended" %}
+                <form method="post" action="/recurring/end" onsubmit="return confirm('End this recurring rule?')">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                  <input type="hidden" name="recurring_id" value="{{ rule.id }}">
+                  <input type="hidden" name="status" value="{{ status }}">
+                  <button type="submit" class="icon-btn tr-del" title="End recurring rule">
+                    <i class="fa-solid fa-stop"></i>
+                  </button>
+                </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="9">No recurring rules found.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+</section>
+{% endblock %}

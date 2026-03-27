@@ -1,0 +1,434 @@
+{% extends "base.html" %}
+{% block title %}{{ FT_APP_NAME }} ¦ Dashboard{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/dash.css">
+{% endblock %}
+{% block content %}
+<section class="page page-dashboard">
+<div class="title-row">
+  <h1>Dashboard</h1>
+</div>
+<section class="dashboard-container">
+  <section class="dashboard-header">
+    <div class="header-panels">
+      <div class="panel panel-compact panel-total">
+        <div class="panel-header">
+          <h3>Total Balance</h3>
+          <span class="pill">Consolidated</span>
+        </div>
+        <div class="balance-amount">₹ {{ summary.balance | money }}</div>
+        {% set today_net = (summary.today_income | default(0)) - (summary.today_expense | default(0)) %}
+        <div class="balance-sub">
+          <span class="metric green">Income (D): ₹ {{ summary.today_income | money }}</span>
+          <span class="metric red">Expense (D): ₹ {{ summary.today_expense | money }}</span>
+          <span class="metric {% if today_net < 0 %}red{% else %}green{% endif %}">
+            Net (D): ₹ {{ today_net | money }}
+          </span>
+          <span class="metric">Net (MTD): ₹ {{ summary.month_net | money }}</span>
+        </div>
+      </div>
+      <div class="panel panel-compact panel-mini panel-savings">
+        <div class="panel-header">
+          <h3>Savings Ratio</h3>
+          <span class="pill">MTD</span>
+        </div>
+        {% if summary.savings_rate is not none %}
+          {% set rate_value = summary.savings_rate | default(0) %}
+          {% set rate_progress = rate_value %}
+          {% if rate_progress < 0 %}{% set rate_progress = 0 %}{% endif %}
+          {% if rate_progress > 100 %}{% set rate_progress = 100 %}{% endif %}
+          <div class="savings-rate savings-top">
+            <span class="rate">{{ rate_value }}%</span>
+            <span class="savings-label">Income Retained</span>
+          </div>
+          {% if summary.savings_rate_change is not none %}
+            <span class="trend {% if summary.savings_rate_change < 0 %}red{% else %}green{% endif %}">
+              {% if summary.savings_rate_change < 0 %}Down{% else %}Up{% endif %}
+              {{ summary.savings_rate_change | abs }}% vs Prev M
+            </span>
+          {% endif %}
+          <div class="savings-net {% if summary.month_net < 0 %}red{% else %}green{% endif %}">
+            {% if summary.month_net < 0 %}
+              MTD Deficit: ₹ {{ summary.month_net | abs | money }}
+            {% else %}
+              MTD Savings: ₹ {{ summary.month_net | money }}
+            {% endif %}
+          </div>
+          <div class="savings-bar" aria-hidden="true">
+            <span style="width: {{ rate_progress }}%"></span>
+          </div>
+          <div class="savings-breakdown">
+            <div class="savings-item income">
+              <span>Income</span>
+              <strong>₹ {{ summary.month_income | money }}</strong>
+            </div>
+            <div class="savings-item expense">
+              <span>Expense</span>
+              <strong>₹ {{ summary.month_expense | money }}</strong>
+            </div>
+          </div>
+        {% else %}
+          <p class="empty-state">No income recorded this month.</p>
+        {% endif %}
+      </div>
+      <div class="panel panel-balance-accounts">
+        <div class="panel-header">
+          <h3>Account Balances</h3>
+          <span class="pill">Active</span>
+        </div>
+        {% if summary.account_balances %}
+          <ul class="account-list scroll-list">
+            {% for account in summary.account_balances %}
+              <li>
+                <div>
+                  <span class="account-name">{{ account.name }}</span>
+                  {% if account.bank_name %}
+                    <span class="muted">({{ account.bank_name }})</span>
+                  {% endif %}
+                </div>
+                <span class="account-balance">₹ {{ account.balance | money }}</span>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="empty-state">No accounts yet.</p>
+        {% endif %}
+      </div>
+      <div class="panel recurring-overview-panel">
+        <div class="panel-header">
+          <h3>Recurring Schedule</h3>
+          <span class="pill">MTD</span>
+        </div>
+        <div class="rt-dashboard">
+          {% set ro = summary.recurring_overview %}
+          <section class="rt-summary-grid">
+            <article class="rt-summary-card">
+              <span class="rt-summary-label">Total Scheduled</span>
+              <strong class="rt-summary-value">₹ {{ "%.2f"|format(ro.total_scheduled_amount | default(0)) }}</strong>
+              <small class="rt-summary-note">Current cycle outlook</small>
+            </article>
+            <article class="rt-summary-card">
+              <span class="rt-summary-label">Monthly Progress</span>
+              <strong class="rt-summary-value">₹ {{ "%.2f"|format(ro.paid_this_month_total | default(0)) }}</strong>
+              <div class="rt-progress" role="progressbar" aria-valuenow="{{ ro.paid_progress_percent | default(0) }}" aria-valuemin="0" aria-valuemax="100">
+                <span style="width: {{ ro.paid_progress_percent | default(0) }}%"></span>
+              </div>
+              <small class="rt-summary-note">Paid: ₹ {{ "%.2f"|format(ro.paid_this_month_total | default(0)) }} | Remaining: ₹ {{ "%.2f"|format(ro.remaining_amount | default(0)) }}</small>
+            </article>
+            <article class="rt-summary-card">
+              <span class="rt-summary-label">Upcoming This Month</span>
+              <strong class="rt-summary-value">{{ ro.upcoming_count | default(0) }} Payments</strong>
+              <small class="rt-summary-note">Next due: {{ ro.next_due_label | default("None") }}</small>
+            </article>
+          </section>
+
+          <section class="rt-day-grid" data-day-grid>
+            <section class="rt-block">
+              <h4>Today - ₹ {{ "%.2f"|format(ro.today_total | default(0)) }}</h4>
+              {% if ro.today %}
+                <ul class="rt-list">
+                  {% for item in ro.today %}
+                    <li class="rt-item freq-{{ (item.frequency or 'monthly') | lower }} {% if item.status == 'failed' %}is-failed{% endif %}">
+                      <div class="rt-row-top">
+                        <strong class="rt-name">{{ item.description }}</strong>
+                        <strong class="rt-amount">₹ {{ "%.2f"|format(item.amount | default(0)) }}</strong>
+                      </div>
+                      <div class="rt-row-bottom">
+                        <span class="rt-account">{{ item.account_name }}</span>
+                        <span class="rt-frequency">{{ (item.frequency or "scheduled") | lower }}</span>
+                      </div>
+                    </li>
+                  {% endfor %}
+                </ul>
+              {% else %}
+                <p class="empty-state">No recurring transactions today.</p>
+              {% endif %}
+            </section>
+
+            <section class="rt-block">
+              <h4>Tomorrow - ₹ {{ "%.2f"|format(ro.tomorrow_total | default(0)) }}</h4>
+              {% if ro.tomorrow %}
+                <ul class="rt-list">
+                  {% for item in ro.tomorrow %}
+                    <li class="rt-item freq-{{ (item.frequency or 'monthly') | lower }} {% if item.status == 'critical' or item.status == 'risk' %}is-critical{% endif %}">
+                      <div class="rt-row-top">
+                        <strong class="rt-name">{{ item.description }}</strong>
+                        <strong class="rt-amount">₹ {{ "%.2f"|format(item.amount | default(0)) }}</strong>
+                      </div>
+                      <div class="rt-row-bottom">
+                        <span class="rt-account">{{ item.account_name }}</span>
+                        <span class="rt-frequency">{{ (item.frequency or "scheduled") | lower }}</span>
+                      </div>
+                    </li>
+                  {% endfor %}
+                </ul>
+              {% else %}
+                <p class="empty-state">No recurring transactions tomorrow.</p>
+              {% endif %}
+            </section>
+          </section>
+
+          <div class="rt-month-sections">
+            <section class="rt-collapsible" data-collapsible>
+              <button type="button" class="rt-collapse-toggle" data-toggle aria-expanded="false">
+                <span>Daily (Month Projection) - ₹ {{ "%.2f"|format(ro.daily_projected_total | default(0)) }}</span>
+                <span class="rt-toggle-icon" aria-hidden="true">▾</span>
+              </button>
+              <div class="rt-collapse-body" data-body hidden>
+                {% if ro.daily_items %}
+                  <ul class="rt-list rt-list-grid rt-list-3col">
+                    {% for item in ro.daily_items %}
+                      <li class="rt-item freq-daily {% if item.status == 'failed' %}is-failed{% elif item.status == 'critical' or item.status == 'risk' %}is-critical{% endif %}">
+                        <div class="rt-row-top">
+                          <strong class="rt-name">{{ item.description }}</strong>
+                          <strong class="rt-amount">₹ {{ "%.2f"|format(item.amount | default(0)) }}</strong>
+                        </div>
+                        <div class="rt-row-bottom">
+                          <span class="rt-account">{{ item.account_name }}</span>
+                          <span class="rt-frequency">daily</span>
+                        </div>
+                      </li>
+                    {% endfor %}
+                  </ul>
+                {% else %}
+                  <p class="empty-state">No daily recurring transactions.</p>
+                {% endif %}
+              </div>
+            </section>
+
+            <section class="rt-collapsible" data-collapsible>
+              <button type="button" class="rt-collapse-toggle" data-toggle aria-expanded="false">
+                <span>Upcoming (This Month) - ₹ {{ "%.2f"|format(ro.upcoming_total | default(0)) }}</span>
+                <span class="rt-toggle-icon" aria-hidden="true">▾</span>
+              </button>
+              <div class="rt-collapse-body" data-body hidden>
+                {% if ro.upcoming_groups %}
+                  {% for group in ro.upcoming_groups %}
+                    <div class="rt-date-group">
+                      <h5>{{ group.date_label }}</h5>
+                      <ul class="rt-list rt-list-grid">
+                        {% for item in group["items"] %}
+                          <li class="rt-item freq-{{ (item.frequency or 'monthly') | lower }} {% if item.status == 'critical' or item.status == 'risk' %}is-critical{% endif %}">
+                            <div class="rt-row-top">
+                              <strong class="rt-name">{{ item.description }}</strong>
+                              <strong class="rt-amount">₹ {{ "%.2f"|format(item.amount | default(0)) }}</strong>
+                            </div>
+                            <div class="rt-row-bottom">
+                              <span class="rt-account">{{ item.account_name }}</span>
+                              <span class="rt-frequency">{{ (item.frequency or "scheduled") | lower }}</span>
+                            </div>
+                          </li>
+                        {% endfor %}
+                      </ul>
+                    </div>
+                  {% endfor %}
+                {% else %}
+                  <p class="empty-state">No upcoming transactions this month.</p>
+                {% endif %}
+              </div>
+            </section>
+
+            <section class="rt-collapsible" data-collapsible>
+              <button type="button" class="rt-collapse-toggle" data-toggle aria-expanded="false">
+                <span>Processed This Month - ₹ {{ "%.2f"|format(ro.processed_total | default(0)) }}</span>
+                <span class="rt-toggle-icon" aria-hidden="true">▾</span>
+              </button>
+              <div class="rt-collapse-body" data-body hidden>
+                {% if ro.processed_groups %}
+                  {% for group in ro.processed_groups %}
+                    <div class="rt-date-group">
+                      <h5>{{ group.date_label }}</h5>
+                      <ul class="rt-list rt-list-grid">
+                        {% for item in group["items"] %}
+                          <li class="rt-item freq-{{ (item.frequency or 'monthly') | lower }} {% if item.status == 'failed' %}is-failed{% endif %}">
+                            <div class="rt-row-top">
+                              <strong class="rt-name">{{ item.description }}</strong>
+                              <strong class="rt-amount">₹ {{ "%.2f"|format(item.amount | default(0)) }}</strong>
+                            </div>
+                            <div class="rt-row-bottom">
+                              <span class="rt-account">{{ item.account_name }}</span>
+                              <span class="rt-frequency">{{ (item.frequency or "scheduled") | lower }}</span>
+                            </div>
+                          </li>
+                        {% endfor %}
+                      </ul>
+                    </div>
+                  {% endfor %}
+                {% else %}
+                  <p class="empty-state">No processed recurring transactions this month.</p>
+                {% endif %}
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel-grid charts">
+    <div class="panel">
+      <div class="panel-header">
+        <h3>Spend by Category</h3>
+        <span class="pill">MTD</span>
+      </div>
+      {% if summary.top_spending_categories %}
+        <div class="chart-wrap chart-square">
+          <canvas id="spendingCategoryChart" height="160"></canvas>
+        </div>
+      {% else %}
+        <p class="empty-state">No spend data for MTD.</p>
+      {% endif %}
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <h3>Daily Cash Flow</h3>
+        <span class="pill">{{ summary.cashflow_month_label }}</span>
+      </div>
+      <div class="chart-wrap chart-square">
+        <canvas id="cashflowChart" height="160"></canvas>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <h3>Monthly Income vs Expense</h3>
+        <span class="pill">Through {{ summary.monthly_till_label }}</span>
+      </div>
+      <div class="chart-wrap chart-square">
+        <canvas id="incomeExpenseChart" height="160"></canvas>
+      </div>
+    </div>
+    <div class="panel panel-largest">
+      <div class="panel-header">
+        <h3>High-Value Transactions</h3>
+        <span class="pill">MTD</span>
+      </div>
+      {% if summary.largest_transactions %}
+        <ul class="insight-list">
+          {% for tx in summary.largest_transactions %}
+            <li>
+              <div>
+                <span class="insight-title">{{ tx.description }}</span>
+                <span class="muted">{{ tx.account_name }} - {{ tx.created_at | localtime(request) | dateformat }}</span>
+              </div>
+              <span class="insight-amount red">₹ {{ tx.amount | money }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="empty-state">No high-value transactions in MTD.</p>
+      {% endif %}
+    </div>
+    <div class="panel panel-recent">
+      <div class="panel-header">
+        <h3>Recent Transactions</h3>
+        <span class="pill">Latest 5</span>
+      </div>
+      <!-- <div class="table-scroll"> -->
+      <table class="tx-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Description</th>
+            <th>Type</th>
+            <th>Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for tx in transactions %}
+            <tr>
+            <td>{{ tx.created_at | localtime(request) | dateformat }}</td>
+              <td>
+                {% if tx.type == "transfer" %}
+                  {% if tx.transfer is defined and tx.transfer %}
+                    {{ tx.description }} — {{ tx.transfer.source | default("Unknown") }} → {{ tx.transfer.target | default("Unknown") }}
+                  {% else %}
+                    {{ tx.description }}
+                  {% endif %}
+                {% else %}
+                  {{ tx.description }}
+                {% endif %}
+              </td>
+              <td>
+                <span class="badge badge-{{ tx.type }}">{{ tx.type }}</span>
+              </td>
+              <td>
+                {% if tx.type == "debit" %}
+                  <span class="amount red">- ₹{{ tx.amount | money }}</span>
+                {% elif tx.type == "credit" %}
+                  <span class="amount green">+ ₹{{ tx.amount | money }}</span>
+                {% elif tx.type == "transfer" %}
+                  <span class="amount">₹{{ tx.amount | money }}</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="4" class="empty-state">No transactions.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <!-- </div> -->
+    </div>
+  </section>
+</section>
+</section>
+
+<div
+  id="dashboard-data"
+  class="visually-hidden"
+  data-daily-labels="{% for d in summary.trend_daily %}{{ d.day }}{% if not loop.last %}|{% endif %}{% endfor %}"
+  data-daily-income="{% for d in summary.trend_daily %}{{ d.income }}{% if not loop.last %}|{% endif %}{% endfor %}"
+  data-daily-expense="{% for d in summary.trend_daily %}{{ d.expense }}{% if not loop.last %}|{% endif %}{% endfor %}"
+  data-monthly-labels="{% for d in summary.trend_monthly %}{{ d.month_short }}{% if not loop.last %}|{% endif %}{% endfor %}"
+  data-monthly-income="{% for d in summary.trend_monthly %}{{ d.income }}{% if not loop.last %}|{% endif %}{% endfor %}"
+  data-monthly-expense="{% for d in summary.trend_monthly %}{{ d.expense }}{% if not loop.last %}|{% endif %}{% endfor %}"
+  data-category-labels="{% for c in summary.top_spending_categories %}{{ c.name }}{% if not loop.last %}|{% endif %}{% endfor %}"
+  data-category-totals="{% for c in summary.top_spending_categories %}{{ c.total }}{% if not loop.last %}|{% endif %}{% endfor %}"
+></div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const dashboard = document.querySelector(".rt-dashboard");
+    if (!dashboard) return;
+    const sections = dashboard.querySelectorAll("[data-collapsible]");
+
+    function syncDaySections() {
+      const anyOpen = Array.from(sections).some(function (section) {
+        return section.classList.contains("is-open");
+      });
+      dashboard.classList.toggle("rt-month-expanded", anyOpen);
+      dashboard.classList.toggle("rt-days-expanded", !anyOpen);
+    }
+
+    function setSectionState(section, open) {
+      const toggle = section.querySelector("[data-toggle]");
+      const body = section.querySelector("[data-body]");
+      if (!toggle || !body) return;
+      section.classList.toggle("is-open", open);
+      toggle.setAttribute("aria-expanded", String(open));
+      body.hidden = !open;
+    }
+
+    sections.forEach(function (section) {
+      const toggle = section.querySelector("[data-toggle]");
+      if (!toggle) return;
+      setSectionState(section, section.classList.contains("is-open"));
+      toggle.addEventListener("click", function () {
+        const isOpen = section.classList.contains("is-open");
+        if (isOpen) {
+          setSectionState(section, false);
+        } else {
+          sections.forEach(function (other) {
+            setSectionState(other, other === section);
+          });
+        }
+        syncDaySections();
+      });
+    });
+    syncDaySections();
+  });
+</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+<script src="/static/js/dashboard_charts.js" defer></script>
+{% endblock %}

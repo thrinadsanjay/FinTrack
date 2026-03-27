@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}{{ FT_APP_NAME }} ¦ Security Check{% endblock %}
+
+{% block content %}
+<section class="page page-auth">
+  <div class="login-bg">
+    <div class="login-card animate-in">
+      <h2 class="login-title">Security Check Failed</h2>
+      <p class="login-subtitle">Your session token is invalid or expired.</p>
+      <p class="login-error">{{ error or "Invalid CSRF token" }}</p>
+      <div class="login-options" style="justify-content:center;">
+        <a href="/" class="btn-secondary">Go to Dashboard</a>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

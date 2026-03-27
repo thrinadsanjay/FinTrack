@@ -1,0 +1,94 @@
+name: FinTracker Rollback
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Run rollback on production server
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          COMPOSE_FILE: docker/compose.yml
+          ENV_FILE: .env
+          HEALTH_URL: http://localhost/health
+          HEALTH_ATTEMPTS: '15'
+          HEALTH_INTERVAL_SECONDS: '300'
+          STARTUP_WAIT_SECONDS: '45'
+          DEPLOY_LOG_FILE: deployments.log
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          envs: DEPLOY_PATH,COMPOSE_FILE,ENV_FILE,HEALTH_URL,HEALTH_ATTEMPTS,HEALTH_INTERVAL_SECONDS,STARTUP_WAIT_SECONDS,DEPLOY_LOG_FILE
+          script_stop: true
+          script: |
+            set -euo pipefail
+            cd "${DEPLOY_PATH:-/home/ubuntu/fintracker}"
+            chmod +x scripts/rollback.sh scripts/health_check.sh scripts/version.sh
+            ./scripts/rollback.sh
+
+      - name: Rollback summary
+        if: success()
+        run: |
+          {
+            echo "## Rollback succeeded"
+            echo "- Branch: Dev"
+            echo "- Workflow: manual rollback"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Email rollback success notification
+        if: success() && secrets.EMAIL_SMTP_HOST != '' && secrets.EMAIL_SMTP_USERNAME != '' && secrets.EMAIL_SMTP_PASSWORD != '' && secrets.EMAIL_FROM != '' && secrets.EMAIL_TO != ''
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.EMAIL_SMTP_HOST }}
+          server_port: ${{ secrets.EMAIL_SMTP_PORT != '' && secrets.EMAIL_SMTP_PORT || '587' }}
+          username: ${{ secrets.EMAIL_SMTP_USERNAME }}
+          password: ${{ secrets.EMAIL_SMTP_PASSWORD }}
+          subject: FinTracker rollback succeeded (${{ github.repository }})
+          to: ${{ secrets.EMAIL_TO }}
+          from: ${{ secrets.EMAIL_FROM }}
+          secure: ${{ secrets.EMAIL_SMTP_SECURE != '' && secrets.EMAIL_SMTP_SECURE || 'false' }}
+          body: |
+            FinTracker manual rollback completed successfully.
+
+            Repository: ${{ github.repository }}
+            Branch: Dev
+            Actor: ${{ github.actor }}
+            Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+      - name: Rollback failure summary
+        if: failure()
+        run: |
+          {
+            echo "## Rollback failed"
+            echo "- Branch: Dev"
+            echo "- Workflow: manual rollback"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Email rollback failure notification
+        if: failure() && secrets.EMAIL_SMTP_HOST != '' && secrets.EMAIL_SMTP_USERNAME != '' && secrets.EMAIL_SMTP_PASSWORD != '' && secrets.EMAIL_FROM != '' && secrets.EMAIL_TO != ''
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.EMAIL_SMTP_HOST }}
+          server_port: ${{ secrets.EMAIL_SMTP_PORT != '' && secrets.EMAIL_SMTP_PORT || '587' }}
+          username: ${{ secrets.EMAIL_SMTP_USERNAME }}
+          password: ${{ secrets.EMAIL_SMTP_PASSWORD }}
+          subject: FinTracker rollback failed (${{ github.repository }})
+          to: ${{ secrets.EMAIL_TO }}
+          from: ${{ secrets.EMAIL_FROM }}
+          secure: ${{ secrets.EMAIL_SMTP_SECURE != '' && secrets.EMAIL_SMTP_SECURE || 'false' }}
+          body: |
+            FinTracker manual rollback failed.
+
+            Repository: ${{ github.repository }}
+            Branch: Dev
+            Actor: ${{ github.actor }}
+            Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
