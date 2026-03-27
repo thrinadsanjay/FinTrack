@@ -54,8 +54,8 @@ services:
     volumes:
       - ../logs:/fintracker/logs:z
       - ../backups:/fintracker/backups:z
-    environment:
-      - FT_LOG_DIR=/fintracker/logs
+    #environment:
+    #  - FT_LOG_DIR=/fintracker/logs
     depends_on:
       mongodb:
         condition: service_healthy
