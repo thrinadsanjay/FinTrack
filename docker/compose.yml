@@ -43,7 +43,7 @@ services:
 
   backend:
     <<: *common
-    image: backend:${FT_VERSION}
+    image: backend:${FT_APP_VERSION}
     build:
       context: ../
       dockerfile: Dockerfile
