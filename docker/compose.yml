@@ -43,15 +43,17 @@ services:
 
   backend:
     <<: *common
+    image: fin_tracker_backend:${FT_APP_VERSION}
     build:
       context: ../
       dockerfile: Dockerfile
     hostname: ft_app
     restart: unless-stopped
     ports:
-      - "8008:8000"
+      - "8001:8000"
     volumes:
       - ../logs:/fintracker/logs:z
+      - ../backups:/fintracker/backups:z
     environment:
       - FT_LOG_DIR=/fintracker/logs
     depends_on:
