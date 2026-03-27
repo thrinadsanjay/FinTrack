@@ -50,7 +50,7 @@ services:
     hostname: ft_app
     restart: unless-stopped
     ports:
-      - "8001:8000"
+      - "8000:8000"
     volumes:
       - ../logs:/fintracker/logs:z
       - ../backups:/fintracker/backups:z
