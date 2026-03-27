@@ -146,8 +146,9 @@ async def edit_profile_page(request: Request):
     notifications = await get_user_notifications(session_user["user_id"])
 
     return templates.TemplateResponse(
-        "profile.html",
-        {
+        request=request,
+        name="profile.html",
+        context={
             "request": request,
             "user": session_user,
             "profile": profile,

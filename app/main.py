@@ -281,8 +281,9 @@ async def csrf_exception_handler(request: Request, exc: CsrfValidationError):
     accept = request.headers.get("accept", "")
     if "text/html" in accept:
         return templates.TemplateResponse(
-            "csrf_error.html",
-            {
+            request=request,
+            name="csrf_error.html",
+            context={
                 "request": request,
                 "error": str(exc),
             },
@@ -296,8 +297,9 @@ async def app_error_handler(request: Request, exc: AppError):
     accept = request.headers.get("accept", "")
     if "text/html" in accept:
         return templates.TemplateResponse(
-            "app_error.html",
-            {
+            request=request,
+            name="app_error.html",
+            context={
                 "request": request,
                 "error": exc.detail,
             },
@@ -314,8 +316,9 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     if "text/html" in accept:
         try:
             return templates.TemplateResponse(
-                "app_error.html",
-                {
+                request=request,
+                name="app_error.html",
+                context={
                     "request": request,
                     "error": str(exc),
                 },

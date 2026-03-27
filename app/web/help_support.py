@@ -28,8 +28,9 @@ async def help_support_page(request: Request):
         except Exception:
             notifications = []
     return templates.TemplateResponse(
-        "help_support.html",
-        {
+        request=request,
+        name="help_support.html",
+        context={
             "request": request,
             "user": session_user,
             "support_email": app_cfg.get("support_email"),

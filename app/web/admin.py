@@ -392,8 +392,9 @@ async def admin_dashboard(request: Request):
         admin_alert_error = "Unable to save settings. Please retry."
 
     return templates.TemplateResponse(
-        "admin.html",
-        {
+        request=request,
+        name="admin.html",
+        context={
             "request": request,
             "user": request.session.get("user"),
             "current_admin_user_id": (request.session.get("user") or {}).get("user_id"),

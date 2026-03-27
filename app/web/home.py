@@ -26,8 +26,9 @@ async def dashboard(request: Request):
     transactions = await get_recent_transactions(user["user_id"])
 
     return templates.TemplateResponse(
-        "home.html",
-        {
+        request=request,
+        name="home.html",
+        context={
             "request": request,
             "user": user,
             "summary": summary,

@@ -208,7 +208,11 @@ async def _resolve_chat_id_from_register(bot_token: str, since: datetime | None 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     auth_state = await _auth_settings_state()
-    return templates.TemplateResponse("login.html", {"request": request, "auth_state": auth_state})
+    return templates.TemplateResponse(
+        request=request,
+        name="login.html",
+        context={"request": request, "auth_state": auth_state},
+    )
 
 
 @router.get("/login/local")
@@ -844,8 +848,9 @@ async def reset_password_page(request: Request):
         return RedirectResponse("/", status_code=303)
 
     return templates.TemplateResponse(
-        "reset_password.html",
-        {"request": request},
+        request=request,
+        name="reset_password.html",
+        context={"request": request},
     )
 
 
@@ -868,8 +873,9 @@ async def reset_password_submit(
 
     if password != confirm_password:
         return templates.TemplateResponse(
-            "reset_password.html",
-            {"request": request, "error": "Passwords do not match"},
+            request=request,
+            name="reset_password.html",
+            context={"request": request, "error": "Passwords do not match"},
         )
 
     user = request.session["user"]

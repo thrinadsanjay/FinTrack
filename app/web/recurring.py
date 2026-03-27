@@ -61,8 +61,9 @@ async def _render_recurring_page(
         )
 
     return templates.TemplateResponse(
-        "recurring_list.html",
-        {
+        request=request,
+        name="recurring_list.html",
+        context={
             "request": request,
             "user": user,
             "notifications": notifications,

@@ -40,8 +40,9 @@ async def accounts_page(request: Request):
     notifications = await get_user_notifications(user["user_id"])
 
     return templates.TemplateResponse(
-        "accounts.html",
-        {
+        request=request,
+        name="accounts.html",
+        context={
             "request": request,
             "user": user,
             "accounts": accounts,
@@ -79,8 +80,9 @@ async def add_account(
         )
     except AppError as e:
         return templates.TemplateResponse(
-            "accounts.html",
-            {
+            request=request,
+            name="accounts.html",
+            context={
                 "request": request,
                 "user": user,
                 "error": str(e),

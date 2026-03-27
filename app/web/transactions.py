@@ -39,8 +39,9 @@ async def transactions_page(request: Request):
     notifications = await get_user_notifications(user["user_id"])
 
     return templates.TemplateResponse(
-        "transactions_add.html",
-        {
+        request=request,
+        name="transactions_add.html",
+        context={
             "request": request,
             "user": user,
             "accounts": accounts,
@@ -101,8 +102,9 @@ async def add_transaction(
         accounts = await get_accounts(user["user_id"])
         notifications = await get_user_notifications(user["user_id"])
         return templates.TemplateResponse(
-            "transactions_add.html",
-            {
+            request=request,
+            name="transactions_add.html",
+            context={
                 "request": request,
                 "user": user,
                 "accounts": accounts,
@@ -287,8 +289,9 @@ async def transactions_list_page(
         return str(request.url.include_query_params(sort_by=field, sort_dir=next_dir))
 
     return templates.TemplateResponse(
-        "transactions_list.html",
-        {
+        request=request,
+        name="transactions_list.html",
+        context={
             "request": request,
             "user": user,
             "transactions": transactions,
