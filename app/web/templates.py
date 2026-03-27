@@ -7,7 +7,7 @@ from app.helpers.phone import PHONE_COUNTRIES, DEFAULT_PHONE_COUNTRY, timezone_f
 
 templates = Jinja2Templates(directory="app/frontend/templates")
 templates.env.auto_reload = True
-templates.env.cache = {}
+# templates.env.cache = {}
 
 
 def money(value) -> str:
