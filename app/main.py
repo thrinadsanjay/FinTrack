@@ -309,21 +309,52 @@ async def app_error_handler(request: Request, exc: AppError):
     return JSONResponse(payload, status_code=exc.status_code)
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
-    logger.exception("Unhandled application error on %s", request.url.path, exc_info=exc)
+    # NEVER pass request / exc / dict to logger
+    logger.error(
+        "Unhandled application error | path=%s | error=%s",
+        request.url.path,
+        str(exc),
+    )
+
     accept = request.headers.get("accept", "")
+
     if "text/html" in accept:
         try:
             return templates.TemplateResponse(
                 "app_error.html",
                 {
                     "request": request,
-                    "error": str(exc),
+                    "error": "Unexpected error occurred. Please retry.",
                 },
                 status_code=500,
             )
         except Exception:
-            return PlainTextResponse("Unexpected error. Please retry.", status_code=500)
-    return JSONResponse({"detail": "Internal server error"}, status_code=500)
+            return PlainTextResponse(
+                "Unexpected error. Please retry.",
+                status_code=500,
+            )
+
+    return JSONResponse(
+        {"detail": "Internal server error"},
+        status_code=500,
+    )
+#@app.exception_handler(Exception)
+#async def unhandled_exception_handler(request: Request, exc: Exception):
+#    logger.exception("Unhandled application error on %s", request.url.path, exc_info=exc)
+#    accept = request.headers.get("accept", "")
+#    if "text/html" in accept:
+#        try:
+#            return templates.TemplateResponse(
+#                "app_error.html",
+#                {
+#                    "request": request,
+#                    "error": str(exc),
+#                },
+#                status_code=500,
+#            )
+#        except Exception:
+#            return PlainTextResponse("Unexpected error. Please retry.", status_code=500)
+#    return JSONResponse({"detail": "Internal server error"}, status_code=500)
 
 
 # ======================================================
