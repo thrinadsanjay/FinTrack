@@ -43,6 +43,7 @@ services:
 
   backend:
     <<: *common
+    image: backend:${FT_VERSION}
     build:
       context: ../
       dockerfile: Dockerfile
@@ -52,6 +53,7 @@ services:
       - "8008:8000"
     volumes:
       - ../logs:/fintracker/logs:z
+      - ../backups:/fintracker/backups:z
     environment:
       - FT_LOG_DIR=/fintracker/logs
     depends_on:
