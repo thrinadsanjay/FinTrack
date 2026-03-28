@@ -1,21 +1,31 @@
 {% extends "base.html" %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="/static/css/login.css?v=20260328-1">
+<link rel="stylesheet" href="/static/css/login.css?v=20260328-2">
 {% endblock %}
 
 {% block content %}
 {% set query = request.query_params %}
-{% set auth_state = (login_state or query.get('auth') or '')|string %}
+{% set auth_cfg = auth_state or {} %}
+{% set login_state = (login_state or query.get('auth') or '')|string %}
 {% set error_code = (login_error or query.get('error') or '')|string %}
 {% set info_message = (login_message or query.get('msg') or query.get('message') or '')|string %}
-{% set telegram_sent = auth_state == 'telegram_otp_sent' %}
-{% set telegram_open = telegram_sent or error_code.startswith('telegram_') or query.get('panel') == 'telegram' %}
-{% set local_open = query.get('panel') == 'local' or (not telegram_open) %}
-{% set phone_country = (query.get('country') or query.get('telegram_country') or default_phone_country or 'IN')|upper %}
+{% set telegram_sent = login_state == 'telegram_otp_sent' %}
+{% set local_enabled = auth_cfg.get('local_enabled', True) %}
+{% set oauth_enabled = auth_cfg.get('oauth_enabled', False) %}
+{% set oauth_configured = auth_cfg.get('oauth_configured', False) %}
+{% set google_enabled = auth_cfg.get('google_enabled', False) %}
+{% set telegram_enabled = auth_cfg.get('telegram_enabled', False) %}
+{% set sso_label = auth_cfg.get('sso_label', 'Continue with SSO') %}
+{% set oauth_href = '/login/oauth?idp=google' if google_enabled else '/login/oauth' %}
+{% set local_open = local_enabled and (query.get('panel') == 'local' or (not telegram_sent and query.get('panel') != 'telegram')) %}
+{% set telegram_open = telegram_enabled and (telegram_sent or error_code.startswith('telegram_') or query.get('panel') == 'telegram') %}
+{% if not local_open and local_enabled and not telegram_open %}
+  {% set local_open = true %}
+{% endif %}
+{% set phone_country = (query.get('country') or query.get('telegram_country') or auth_cfg.get('default_telegram_country') or 'IN')|upper %}
 {% set phone_local = query.get('phone_local') or query.get('phone') or query.get('mobile') or '' %}
-{% set selected_country_code = phone_country %}
-<div class="login-page" data-login-page data-login-state="{{ auth_state }}" data-login-error="{{ error_code }}">
+<div class="login-page" data-login-page data-login-state="{{ login_state }}" data-login-error="{{ error_code }}">
   <section class="login-layout">
     <aside class="login-brand" aria-hidden="true">
       <div class="login-brand__badge">FinTrack</div>
@@ -37,12 +47,18 @@
         <div>
           <p class="login-panel__eyebrow">Account Access</p>
           <h1>Welcome Back</h1>
-          <p class="login-panel__copy">Use local login, Google, or Telegram OTP.</p>
+          <p class="login-panel__copy">Use the configured sign-in method for this environment.</p>
         </div>
-        <a class="login-google" href="/login/oauth?idp=google" aria-label="Continue with Google">
+        {% if oauth_enabled %}
+        <a class="login-google" href="{{ oauth_href }}" aria-label="{{ sso_label }}" title="{{ sso_label }}">
           <img src="/static/icons/google.svg" alt="Google">
         </a>
+        {% endif %}
       </header>
+
+      {% if not oauth_enabled and auth_cfg.get('auth_enabled') and not oauth_configured and not local_enabled and not telegram_enabled %}
+      <div class="login-banner login-banner--error">SSO is enabled but Keycloak is not fully configured. Set Keycloak URL, realm, and client ID.</div>
+      {% endif %}
 
       {% if info_message %}
       <div class="login-banner login-banner--success">{{ info_message }}</div>
@@ -50,72 +66,80 @@
       <div class="login-banner login-banner--error">{{ info_message or query.get('msg') or 'Login failed. Please try again.' }}</div>
       {% endif %}
 
-      <div class="login-switcher" role="tablist" aria-label="Login methods">
-        <button type="button" class="login-switcher__button{% if local_open %} is-active{% endif %}" data-local-toggle aria-selected="{{ 'true' if local_open else 'false' }}">Local</button>
-        <button type="button" class="login-switcher__button{% if telegram_open %} is-active{% endif %}" data-telegram-open aria-selected="{{ 'true' if telegram_open else 'false' }}">Telegram</button>
-      </div>
-
-      <div class="login-card" data-local-panel {% if not local_open %}hidden{% endif %}>
-        <form method="post" action="/login/local" class="login-form">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
-          <div class="field">
-            <label for="username">Username</label>
-            <input id="username" name="username" type="text" autocomplete="username" placeholder="Enter your username" value="{{ request.query_params.get('username', '') }}">
-          </div>
-          <div class="field">
-            <label for="password">Password</label>
-            <div class="password-field">
-              <input id="password" name="password" type="password" autocomplete="current-password" placeholder="Enter your password">
-              <button type="button" class="password-toggle" data-password-toggle aria-label="Show password">
-                <i class="fa-regular fa-eye"></i>
-              </button>
-            </div>
-          </div>
-          <button class="primary-button" type="submit">Login</button>
-        </form>
-      </div>
-
-      <div class="login-card login-card--telegram" data-telegram-panel {% if not telegram_open %}hidden{% endif %}>
-        {% if not telegram_sent %}
-        <form method="post" action="/login/telegram/send-otp" class="login-form">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
-          <input type="hidden" name="phone" value="" data-phone-full>
-          <input type="hidden" name="telegram_country" value="{{ phone_country }}" data-phone-country-hidden>
-          <div class="field">
-            <label for="telegram_country">Mobile Number</label>
-            <div class="phone-input" data-phone-input data-default-country="{{ phone_country }}">
-              <select id="telegram_country" class="phone-input__country" name="country" data-phone-country>
-                {% include "partials/phone_country_options.html" %}
-              </select>
-              <input class="phone-input__number" type="tel" name="phone_local" inputmode="numeric" autocomplete="tel-national" placeholder="Mobile number" value="{{ phone_local }}" data-phone-local>
-            </div>
-          </div>
-          <button class="primary-button primary-button--secondary" type="submit">Send OTP</button>
-        </form>
-        {% else %}
-        <form method="post" action="/login/telegram/verify-otp" class="login-form">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
-          <input type="hidden" name="phone" value="" data-phone-full>
-          <input type="hidden" name="telegram_country" value="{{ phone_country }}" data-phone-country-hidden>
-          <div class="field">
-            <label for="telegram_country_locked">Mobile Number</label>
-            <div class="phone-input phone-input--readonly" data-phone-input data-default-country="{{ phone_country }}">
-              <select id="telegram_country_locked" class="phone-input__country" name="country" data-phone-country disabled>
-                {% include "partials/phone_country_options.html" %}
-              </select>
-              <input class="phone-input__number" type="tel" name="phone_local" inputmode="numeric" autocomplete="tel-national" value="{{ phone_local }}" data-phone-local readonly>
-            </div>
-          </div>
-          <div class="field">
-            <label for="telegram_otp">OTP</label>
-            <input id="telegram_otp" name="otp" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit OTP" data-telegram-otp>
-          </div>
-          <button class="primary-button" type="submit">Login</button>
-        </form>
+      {% if local_enabled or telegram_enabled %}
+        {% if local_enabled and telegram_enabled %}
+        <div class="login-switcher" role="tablist" aria-label="Login methods">
+          <button type="button" class="login-switcher__button{% if local_open %} is-active{% endif %}" data-local-toggle aria-selected="{{ 'true' if local_open else 'false' }}">Local</button>
+          <button type="button" class="login-switcher__button{% if telegram_open %} is-active{% endif %}" data-telegram-open aria-selected="{{ 'true' if telegram_open else 'false' }}">Telegram</button>
+        </div>
         {% endif %}
-      </div>
+
+        {% if local_enabled %}
+        <div class="login-card" data-local-panel {% if local_enabled and telegram_enabled and not local_open %}hidden{% endif %}>
+          <form method="post" action="/login/local" class="login-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+            <div class="field">
+              <label for="username">Username</label>
+              <input id="username" name="username" type="text" autocomplete="username" placeholder="Enter your username" value="{{ request.query_params.get('username', '') }}">
+            </div>
+            <div class="field">
+              <label for="password">Password</label>
+              <div class="password-field">
+                <input id="password" name="password" type="password" autocomplete="current-password" placeholder="Enter your password">
+                <button type="button" class="password-toggle" data-password-toggle aria-label="Show password">
+                  <i class="fa-regular fa-eye"></i>
+                </button>
+              </div>
+            </div>
+            <button class="primary-button" type="submit">Login</button>
+          </form>
+        </div>
+        {% endif %}
+
+        {% if telegram_enabled %}
+        <div class="login-card login-card--telegram" data-telegram-panel {% if local_enabled and telegram_enabled and not telegram_open %}hidden{% endif %}>
+          {% if not telegram_sent %}
+          <form method="post" action="/login/telegram/send-otp" class="login-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+            <input type="hidden" name="phone" value="" data-phone-full>
+            <input type="hidden" name="telegram_country" value="{{ phone_country }}" data-phone-country-hidden>
+            <div class="field">
+              <label for="telegram_country">Mobile Number</label>
+              <div class="phone-input" data-phone-input data-default-country="{{ phone_country }}">
+                <select id="telegram_country" class="phone-input__country" name="country" data-phone-country>
+                  {% include "partials/phone_country_options.html" %}
+                </select>
+                <input class="phone-input__number" type="tel" name="phone_local" inputmode="numeric" autocomplete="tel-national" placeholder="Mobile number" value="{{ phone_local }}" data-phone-local>
+              </div>
+            </div>
+            <button class="primary-button primary-button--secondary" type="submit">Send OTP</button>
+          </form>
+          {% else %}
+          <form method="post" action="/login/telegram/verify-otp" class="login-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+            <input type="hidden" name="phone" value="" data-phone-full>
+            <input type="hidden" name="telegram_country" value="{{ phone_country }}" data-phone-country-hidden>
+            <div class="field">
+              <label for="telegram_country_locked">Mobile Number</label>
+              <div class="phone-input phone-input--readonly" data-phone-input data-default-country="{{ phone_country }}">
+                <select id="telegram_country_locked" class="phone-input__country" name="country" data-phone-country disabled>
+                  {% include "partials/phone_country_options.html" %}
+                </select>
+                <input class="phone-input__number" type="tel" name="phone_local" inputmode="numeric" autocomplete="tel-national" value="{{ phone_local }}" data-phone-local readonly>
+              </div>
+            </div>
+            <div class="field">
+              <label for="telegram_otp">OTP</label>
+              <input id="telegram_otp" name="otp" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit OTP" data-telegram-otp>
+            </div>
+            <button class="primary-button" type="submit">Login</button>
+          </form>
+          {% endif %}
+        </div>
+        {% endif %}
+      {% endif %}
     </section>
   </section>
-  <script defer src="/static/js/login.js?v=20260328-1"></script>
+  <script defer src="/static/js/login.js?v=20260328-2"></script>
 </div>
 {% endblock %}
