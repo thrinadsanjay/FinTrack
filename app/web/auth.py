@@ -107,16 +107,32 @@ async def _auth_settings_state() -> dict:
 
     auth_enabled = bool(auth_cfg.get("enabled", True))
     local_enabled = bool(auth_cfg.get("allow_local_login", True))
-    google_enabled = bool(auth_cfg.get("allow_google_login", True))
+    provider = str(auth_cfg.get("provider") or "keycloak").strip().lower() or "keycloak"
+    keycloak_url = str(auth_cfg.get("keycloak_url") or settings.FT_KEYCLOAK_URL or "").strip().rstrip("/")
+    realm = str(auth_cfg.get("realm") or settings.FT_KEYCLOAK_REALM or "").strip()
+    client_id = str(auth_cfg.get("client_id") or settings.FT_CLIENT_ID or "").strip()
+    oauth_configured = all([keycloak_url, realm, client_id])
+    oauth_enabled = bool(auth_enabled and oauth_configured)
+    google_enabled = bool(oauth_enabled and auth_cfg.get("allow_google_login", True))
     telegram_login_enabled = bool(auth_cfg.get("allow_telegram_login", False))
-    telegram_enabled = bool(telegram_cfg.get("enabled", False))
+    telegram_enabled = bool(auth_enabled and telegram_login_enabled and bool(telegram_cfg.get("enabled", False)))
+
+    if provider == "google":
+        sso_label = "Continue with Google"
+    elif provider == "keycloak":
+        sso_label = "Continue with Keycloak"
+    else:
+        sso_label = f"Continue with {provider.title()}"
 
     return {
         "auth_enabled": auth_enabled,
         "local_enabled": bool(auth_enabled and local_enabled),
-        "oauth_enabled": bool(auth_enabled),
-        "google_enabled": bool(auth_enabled and google_enabled),
-        "telegram_enabled": bool(auth_enabled and telegram_login_enabled and telegram_enabled),
+        "oauth_enabled": oauth_enabled,
+        "oauth_configured": oauth_configured,
+        "provider": provider,
+        "sso_label": sso_label,
+        "google_enabled": google_enabled,
+        "telegram_enabled": telegram_enabled,
         "telegram_bot_username": str(telegram_cfg.get("bot_username") or "").strip(),
         "default_telegram_country": str(
             app_cfg.get("default_country")
@@ -815,6 +831,7 @@ async def callback(request: Request, code: str, state: str | None = None):
             data={
                 "grant_type": "authorization_code",
                 "client_id": settings.FT_CLIENT_ID,
+                **({"client_secret": settings.FT_CLIENT_SECRET} if settings.FT_CLIENT_SECRET else {}),
                 "code": code,
                 "redirect_uri": callback_uri,
             },

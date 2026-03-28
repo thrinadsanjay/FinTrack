@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     FT_KEYCLOAK_URL: str = ""
     FT_KEYCLOAK_REALM: str = ""
     FT_CLIENT_ID: str = ""
+    FT_CLIENT_SECRET: str = ""
     FT_KEYCLOAK_ADMIN_ROLES: str = "fintracker-admin,admin"
     FT_KEYCLOAK_ADMIN_GROUPS: str = "/fintracker-admin,fintracker-admin"
     FT_SESSION_SECRET: str = "change-me-before-production"

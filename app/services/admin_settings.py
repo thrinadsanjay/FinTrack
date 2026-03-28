@@ -83,6 +83,7 @@ def default_admin_settings() -> dict:
             "keycloak_url": settings.FT_KEYCLOAK_URL,
             "realm": settings.FT_KEYCLOAK_REALM,
             "client_id": settings.FT_CLIENT_ID,
+            "client_secret": settings.FT_CLIENT_SECRET or "",
             "allow_local_login": bool(settings.FT_AUTH_ALLOW_LOCAL_LOGIN),
             "allow_google_login": True,
             "allow_telegram_login": bool(settings.FT_TELEGRAM_ENABLED),
