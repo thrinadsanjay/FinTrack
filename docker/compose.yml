@@ -2,6 +2,8 @@ name: fin_tracker
 
 volumes:
   mongodb_data:
+  app_logs:
+  app_backups:
 
 networks:
   ft-net:
@@ -16,7 +18,7 @@ x-common: &common
 services:
   mongodb:
     <<: *common
-    image: mongo:7
+    image: mongo:7.0
     hostname: mongodb
     restart: unless-stopped
     ports:
@@ -32,9 +34,10 @@ services:
 
   mongo-express:
     <<: *common
-    image: mongo-express:latest
+    image: mongo-express:1.0.2
     hostname: mongo-express
     restart: unless-stopped
+    profiles: ["tools"]
     ports:
       - "8081:8081"
     depends_on:
@@ -43,7 +46,7 @@ services:
 
   backend:
     <<: *common
-    image: fin_tracker_backend:${FT_APP_VERSION}
+    image: fin_tracker_backend:${FT_APP_VERSION:-1.0.0}
     build:
       context: ../
       dockerfile: Dockerfile
@@ -52,10 +55,11 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ../logs:/fintracker/logs:z
-      - ../backups:/fintracker/backups:z
+      - app_logs:/fintracker/logs
+      - app_backups:/fintracker/backups
     environment:
-      - FT_LOG_DIR=/fintracker/logs
+      FT_LOG_DIR: /fintracker/logs
+      FT_BACKUP_DESTINATION: ${FT_BACKUP_DESTINATION:-/fintracker/backups}
     depends_on:
       mongodb:
         condition: service_healthy

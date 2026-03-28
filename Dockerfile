@@ -1,11 +1,16 @@
-FROM python:3.10.19-alpine 
+FROM python:3.10.19-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
 WORKDIR /fintracker
 
-COPY requirements.txt /fintracker
+COPY requirements.txt ./requirements.txt
 
-COPY app /fintracker/app
+RUN pip install --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
 
-RUN pip install --no-cache-dir -r /fintracker/requirements.txt --trusted-host files.pythonhosted.org --trusted-host pypi.org
+COPY app ./app
 
 EXPOSE 8000

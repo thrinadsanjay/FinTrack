@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', path='css/login.css') }}?v=20260326-3">
+<link rel="stylesheet" href="/static/css/login.css?v=20260328-1">
 {% endblock %}
 
 {% block content %}
@@ -23,7 +23,7 @@
       <div class="login-brand__ring login-brand__ring--one"></div>
       <div class="login-brand__ring login-brand__ring--two"></div>
       <div class="login-brand__mark">
-        <img src="{{ url_for('static', path='icons/FinTracker_exact.svg') }}" alt="FinTrack" class="login-brand__logo">
+        <img src="/static/icons/FinTracker_exact.svg" alt="FinTrack" class="login-brand__logo">
       </div>
       <div class="login-brand__meta">
         <span>Personal finance</span>
@@ -40,7 +40,7 @@
           <p class="login-panel__copy">Use local login, Google, or Telegram OTP.</p>
         </div>
         <a class="login-google" href="/login/oauth?idp=google" aria-label="Continue with Google">
-          <img src="{{ url_for('static', path='icons/google.svg') }}" alt="Google">
+          <img src="/static/icons/google.svg" alt="Google">
         </a>
       </header>
 
@@ -116,6 +116,6 @@
       </div>
     </section>
   </section>
-  <script defer src="{{ url_for('static', path='js/login.js') }}?v=20260326-3"></script>
+  <script defer src="/static/js/login.js?v=20260328-1"></script>
 </div>
 {% endblock %}

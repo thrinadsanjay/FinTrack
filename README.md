@@ -161,17 +161,34 @@ Use [.env.example](./.env.example) as the committed template for GitLab and envi
 
 ### Option A: Docker Compose (Recommended)
 
+This path is intended to work on a fresh host with Docker Compose installed.
+
 From repository root:
 
 ```bash
+cp env.example .env
+# edit .env and replace placeholder secrets and URLs
 docker compose -f docker/compose.yml up -d --build
 ```
 
-Exposed ports:
+Default services started:
 
 - App: `8000`
 - MongoDB: `27017`
-- Mongo Express: `8081`
+
+Optional tools profile:
+
+```bash
+docker compose -f docker/compose.yml --profile tools up -d
+```
+
+That additionally starts Mongo Express on `8081`.
+
+Persistent data is stored in Docker named volumes:
+
+- `mongodb_data`
+- `app_logs`
+- `app_backups`
 
 Stop stack:
 
