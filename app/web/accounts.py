@@ -20,6 +20,7 @@ from app.services.accounts import (
     delete_account,
 )
 from app.services.dashboard import get_user_notifications
+from app.services.credit_cards import get_credit_card_account_insights, generate_bill_snapshot_for_account
 
 
 router = APIRouter()
@@ -87,6 +88,7 @@ async def _build_accounts_context(request: Request, user: dict, *, error: str | 
     credit_cards = [acc for acc in accounts if acc.get("type") == "credit_card"]
     regular_accounts = [acc for acc in accounts if acc.get("type") != "credit_card"]
     credit_card_emis = await get_credit_card_emi_map(user["user_id"])
+    credit_card_insights = await get_credit_card_account_insights(user_id=user["user_id"])
     return {
         "request": request,
         "user": user,
@@ -95,6 +97,7 @@ async def _build_accounts_context(request: Request, user: dict, *, error: str | 
         "regular_accounts": regular_accounts,
         "credit_cards": credit_cards,
         "credit_card_emis": credit_card_emis,
+        "credit_card_insights": credit_card_insights,
         "account_types": ACCOUNT_TYPES,
         "card_networks": CARD_NETWORKS,
         "notifications": await get_user_notifications(user["user_id"]),
@@ -134,6 +137,9 @@ async def add_account(
     minimum_due: str | None = Form(None),
     statement_balance: str | None = Form(None),
     card_network: str | None = Form(None),
+    billing_cycle_start_day: str | None = Form(None),
+    billing_cycle_end_day: str | None = Form(None),
+    due_day: str | None = Form(None),
     bill_generation_date: str | None = Form(None),
     payment_due_date: str | None = Form(None),
     csrf_token: str = Form(...),
@@ -151,6 +157,9 @@ async def add_account(
             minimum_due=_parse_optional_float(minimum_due),
             statement_balance=_parse_optional_float(statement_balance),
             card_network=card_network,
+            billing_cycle_start_day=_parse_optional_int(billing_cycle_start_day, label="billing cycle start day"),
+            billing_cycle_end_day=_parse_optional_int(billing_cycle_end_day, label="billing cycle end day"),
+            due_day=_parse_optional_int(due_day, label="due day"),
             bill_generation_date=_parse_optional_date(bill_generation_date),
             payment_due_date=_parse_optional_date(payment_due_date),
             request=request,
@@ -223,6 +232,9 @@ async def edit_credit_card(
     minimum_due: str | None = Form(None),
     statement_balance: str | None = Form(None),
     card_network: str | None = Form(None),
+    billing_cycle_start_day: str | None = Form(None),
+    billing_cycle_end_day: str | None = Form(None),
+    due_day: str | None = Form(None),
     bill_generation_date: str | None = Form(None),
     payment_due_date: str | None = Form(None),
     csrf_token: str = Form(...),
@@ -237,8 +249,37 @@ async def edit_credit_card(
             minimum_due=_parse_optional_float(minimum_due),
             statement_balance=_parse_optional_float(statement_balance),
             card_network=card_network,
+            billing_cycle_start_day=_parse_optional_int(billing_cycle_start_day, label="billing cycle start day"),
+            billing_cycle_end_day=_parse_optional_int(billing_cycle_end_day, label="billing cycle end day"),
+            due_day=_parse_optional_int(due_day, label="due day"),
             bill_generation_date=_parse_optional_date(bill_generation_date),
             payment_due_date=_parse_optional_date(payment_due_date),
+            request=request,
+        )
+    except AppError as e:
+        return templates.TemplateResponse(
+            request=request,
+            name="accounts.html",
+            context=await _build_accounts_context(request, user, error=str(e)),
+            status_code=e.status_code,
+        )
+
+    return RedirectResponse("/accounts", status_code=303)
+
+
+@router.post("/credit-card/generate-bill")
+@login_required
+async def generate_credit_card_bill(
+    request: Request,
+    account_id: str = Form(...),
+    csrf_token: str = Form(...),
+):
+    verify_csrf_token(request, csrf_token)
+    user = request.session.get("user")
+    try:
+        await generate_bill_snapshot_for_account(
+            user_id=user["user_id"],
+            account_id=account_id,
             request=request,
         )
     except AppError as e:

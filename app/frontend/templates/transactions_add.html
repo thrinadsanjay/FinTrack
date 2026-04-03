@@ -14,6 +14,7 @@
 <div class="card transaction-card form-scroll">
   <form method="post" action="/transactions/add" id="transaction-form" data-inline-success-form data-inline-success-message="Transaction saved">
     <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+    <input type="hidden" name="credit_bill_id" value="{{ tx_defaults.credit_bill_id if tx_defaults is defined else "" }}">
 
     {% set alert_error = error %}
     {% include "partials/form_alert.html" %}

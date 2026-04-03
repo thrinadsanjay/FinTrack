@@ -658,6 +658,41 @@
   border-bottom: none;
 }
 
+.credit-card-bill-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 86px;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.credit-card-bill-badge-paid {
+  background: color-mix(in srgb, var(--color-success) 16%, transparent);
+  color: var(--color-success);
+}
+
+.credit-card-bill-badge-partial {
+  background: color-mix(in srgb, var(--color-warning) 24%, transparent);
+  color: var(--color-warning);
+}
+
+.credit-card-bill-badge-unpaid,
+.credit-card-bill-badge-generated {
+  background: color-mix(in srgb, var(--color-danger) 14%, transparent);
+  color: var(--color-danger);
+}
+
+.credit-card-bill-badge-not-generated {
+  background: color-mix(in srgb, var(--color-muted) 22%, transparent);
+  color: var(--color-muted);
+}
+
 .credit-card-emi-cell-head {
   display: grid;
   gap: 3px;

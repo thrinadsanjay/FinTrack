@@ -18,7 +18,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const cardNetworkInput = document.getElementById("card_network");
   const statementBalanceInput = document.getElementById("statement_balance");
-  const paymentDueDateInput = document.getElementById("payment_due_date");
+  const billingCycleStartDayInput = document.getElementById("billing_cycle_start_day");
+  const billingCycleEndDayInput = document.getElementById("billing_cycle_end_day");
+  const dueDayInput = document.getElementById("due_day");
 
   const navItems = document.querySelectorAll("[data-card-target]");
   const detailPanels = document.querySelectorAll("[data-card-panel]");
@@ -38,6 +40,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const payBillModalTitle = document.getElementById("payBillModalTitle");
   const payBillTargetAccountId = document.getElementById("pay_bill_target_account_id");
+  const payBillCreditBillId = document.getElementById("pay_bill_credit_bill_id");
   const payBillAmount = document.getElementById("pay_bill_amount");
   const payBillOutstanding = document.getElementById("pay_bill_outstanding");
   const payBillMinimumDue = document.getElementById("pay_bill_minimum_due");
@@ -118,11 +121,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (type === "credit_card") {
       const statementBalance = statementBalanceInput?.value || "0";
-      const dueDate = paymentDueDateInput?.value || "Not set";
+      const cycleStart = billingCycleStartDayInput?.value || "1";
+      const cycleEnd = billingCycleEndDayInput?.value || "30";
+      const dueDay = dueDayInput?.value || "5";
       const cardNetwork = cardNetworkInput?.options[cardNetworkInput.selectedIndex]?.text || "Visa";
       setupSummary.innerHTML = `
         <span>Credit card details ready</span>
-        <small>${cardNetwork} · Statement ${money(statementBalance)} · Due ${dueDate}</small>
+        <small>${cardNetwork} · Statement ${money(statementBalance)} · Cycle ${cycleStart}-${cycleEnd} · Due day ${dueDay}</small>
       `;
       balanceHidden.value = "0";
     } else {
@@ -167,6 +172,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   bankInput?.addEventListener("input", generateName);
   cardNetworkInput?.addEventListener("change", () => syncSetupSummary());
+  billingCycleStartDayInput?.addEventListener("input", () => syncSetupSummary());
+  billingCycleEndDayInput?.addEventListener("input", () => syncSetupSummary());
+  dueDayInput?.addEventListener("input", () => syncSetupSummary());
+  statementBalanceInput?.addEventListener("input", () => syncSetupSummary());
   typeSelect?.addEventListener("change", () => {
     generateName();
     syncTypeSetup(true);
@@ -464,10 +473,14 @@ document.addEventListener("DOMContentLoaded", () => {
       const cardName = button.dataset.cardName || "this card";
       const statementBalance = Number.parseFloat(button.dataset.cardStatementBalance || "0") || 0;
       const outstanding = Number.parseFloat(button.dataset.cardOutstanding || "0") || 0;
-      const minimumDue = statementBalance > 0 ? Number((statementBalance * 0.1).toFixed(2)) : 0;
+      const minimumDue = Number.parseFloat(button.dataset.cardMinimumDue || "0") || (statementBalance > 0 ? Number((statementBalance * 0.1).toFixed(2)) : 0);
+      const creditBillId = button.dataset.cardBillId || "";
 
       if (payBillTargetAccountId) {
         payBillTargetAccountId.value = cardId;
+      }
+      if (payBillCreditBillId) {
+        payBillCreditBillId.value = creditBillId;
       }
       if (payBillModalTitle) {
         payBillModalTitle.textContent = `Choose how much you want to pay for ${cardName}.`;

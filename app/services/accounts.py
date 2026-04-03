@@ -59,6 +59,9 @@ def _credit_card_meta(
     minimum_due: float | None,
     statement_balance: float | None,
     card_network: str | None,
+    billing_cycle_start_day: int | None,
+    billing_cycle_end_day: int | None,
+    due_day: int | None,
     bill_generation_date: date | datetime | None,
     payment_due_date: date | datetime | None,
 ) -> dict:
@@ -68,6 +71,9 @@ def _credit_card_meta(
             "minimum_due": None,
             "statement_balance": None,
             "card_network": None,
+            "billing_cycle_start_day": None,
+            "billing_cycle_end_day": None,
+            "due_day": None,
             "bill_generation_date": None,
             "payment_due_date": None,
         }
@@ -76,6 +82,9 @@ def _credit_card_meta(
         "minimum_due": _normalize_optional_amount(minimum_due) or 0.0,
         "statement_balance": _normalize_optional_amount(statement_balance) or 0.0,
         "card_network": (card_network or "visa").strip().lower() if acc_type == "credit_card" else None,
+        "billing_cycle_start_day": int(billing_cycle_start_day or 1),
+        "billing_cycle_end_day": int(billing_cycle_end_day or 30),
+        "due_day": int(due_day or 5),
         "bill_generation_date": _normalize_optional_due_date(bill_generation_date),
         "payment_due_date": _normalize_optional_due_date(payment_due_date),
     }
@@ -134,6 +143,9 @@ async def create_account(
     minimum_due: float | None = None,
     statement_balance: float | None = None,
     card_network: str | None = None,
+    billing_cycle_start_day: int | None = None,
+    billing_cycle_end_day: int | None = None,
+    due_day: int | None = None,
     bill_generation_date: date | datetime | None = None,
     payment_due_date: date | datetime | None = None,
     request: Request | None = None,
@@ -157,6 +169,9 @@ async def create_account(
             minimum_due=minimum_due,
             statement_balance=statement_balance,
             card_network=card_network,
+            billing_cycle_start_day=billing_cycle_start_day,
+            billing_cycle_end_day=billing_cycle_end_day,
+            due_day=due_day,
             bill_generation_date=bill_generation_date,
             payment_due_date=payment_due_date,
         )
@@ -169,6 +184,11 @@ async def create_account(
             status_code=400,
             detail="You already have an account with this name."
         )
+
+    if acc_type == "credit_card":
+        from app.services.credit_cards import sync_credit_card_account_record
+
+        await sync_credit_card_account_record(user_id=user_id, account_id=str(result.inserted_id))
 
     await audit_log(
         action="ACCOUNT_CREATED",
@@ -183,6 +203,9 @@ async def create_account(
             "minimum_due": doc.get("minimum_due"),
             "statement_balance": doc.get("statement_balance"),
             "card_network": doc.get("card_network"),
+            "billing_cycle_start_day": doc.get("billing_cycle_start_day"),
+            "billing_cycle_end_day": doc.get("billing_cycle_end_day"),
+            "due_day": doc.get("due_day"),
             "bill_generation_date": doc.get("bill_generation_date").isoformat() if doc.get("bill_generation_date") else None,
             "payment_due_date": doc.get("payment_due_date").isoformat() if doc.get("payment_due_date") else None,
         },
@@ -275,6 +298,9 @@ async def update_credit_card_settings(
     minimum_due: float | None,
     statement_balance: float | None,
     card_network: str | None,
+    billing_cycle_start_day: int | None,
+    billing_cycle_end_day: int | None,
+    due_day: int | None,
     bill_generation_date: date | datetime | None,
     payment_due_date: date | datetime | None,
     request: Request | None = None,
@@ -295,12 +321,19 @@ async def update_credit_card_settings(
         "minimum_due": _normalize_optional_amount(minimum_due) or 0.0,
         "statement_balance": _normalize_optional_amount(statement_balance) or 0.0,
         "card_network": (card_network or account.get("card_network") or "visa").strip().lower(),
+        "billing_cycle_start_day": int(billing_cycle_start_day or account.get("billing_cycle_start_day") or 1),
+        "billing_cycle_end_day": int(billing_cycle_end_day or account.get("billing_cycle_end_day") or 30),
+        "due_day": int(due_day or account.get("due_day") or 5),
         "bill_generation_date": _normalize_optional_due_date(bill_generation_date),
         "payment_due_date": _normalize_optional_due_date(payment_due_date),
         "updated_at": _now(),
     }
 
     await db.accounts.update_one({"_id": account_oid}, {"$set": updates})
+
+    from app.services.credit_cards import sync_credit_card_account_record
+
+    await sync_credit_card_account_record(user_id=user_id, account_id=account_id)
 
     await audit_log(
         action="ACCOUNT_CREDIT_CARD_UPDATED",
@@ -312,6 +345,9 @@ async def update_credit_card_settings(
             "minimum_due": updates["minimum_due"],
             "statement_balance": updates["statement_balance"],
             "card_network": updates["card_network"],
+            "billing_cycle_start_day": updates["billing_cycle_start_day"],
+            "billing_cycle_end_day": updates["billing_cycle_end_day"],
+            "due_day": updates["due_day"],
             "bill_generation_date": updates["bill_generation_date"].isoformat() if updates["bill_generation_date"] else None,
             "payment_due_date": updates["payment_due_date"].isoformat() if updates["payment_due_date"] else None,
             "current_outstanding": _credit_card_outstanding(account.get("balance", 0)),
@@ -514,6 +550,11 @@ async def delete_account(
         {"account_id": account_oid, "user_id": user_oid, "deleted_at": None},
         {"$set": {"deleted_at": _now(), "updated_at": _now()}},
     )
+
+    if account.get("type") == "credit_card":
+        from app.services.credit_cards import archive_credit_card_account_record
+
+        await archive_credit_card_account_record(user_id=user_id, account_id=account_id)
 
     await audit_log(
         action="ACCOUNT_DELETED",

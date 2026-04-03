@@ -29,6 +29,7 @@ from app.routers import (
     auth,
     accounts,
     transactions,
+    credit_cards,
     categories,
     recurring_deposit,
     chat,
@@ -49,6 +50,12 @@ from app.web.templates import templates
 from app.schedulers.recurring_scheduler import configure_recurring_schedule, run_recurring_transactions
 from app.schedulers.notification_scheduler import run_notification_alert_sweep
 from app.schedulers.backup_scheduler import configure_backup_schedule
+from app.schedulers.credit_card_scheduler import (
+    run_credit_card_bill_generation,
+    run_credit_card_due_alerts,
+    run_credit_card_interest_and_fees,
+    run_credit_card_emi_schedule_refresh,
+)
 from app.services.telegram_polling import run_telegram_poll_once
 
 
@@ -195,6 +202,7 @@ app.include_router(health.router, tags=["Health"])
 app.include_router(auth.router, prefix="/api", tags=["Auth"])
 app.include_router(accounts.router, prefix="/api/accounts", tags=["Accounts"])
 app.include_router(transactions.router, prefix="/api/transactions", tags=["Transactions"])
+app.include_router(credit_cards.router, prefix="/api/credit-cards", tags=["Credit Cards"])
 app.include_router(categories.router, prefix="/api/categories", tags=["Categories"])
 app.include_router(recurring_deposit.router, prefix="/api/recurring-deposits", tags=["Recurring Deposits"])
 app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
@@ -257,6 +265,50 @@ async def on_startup():
         trigger="interval",
         seconds=notification_alert_interval_seconds,
         id="notification-alert-sweep",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+
+    scheduler.add_job(
+        run_credit_card_bill_generation,
+        trigger="cron",
+        hour=1,
+        minute=5,
+        id="credit-card-bill-generation",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+
+    scheduler.add_job(
+        run_credit_card_due_alerts,
+        trigger="cron",
+        hour=8,
+        minute=0,
+        id="credit-card-due-alerts",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+
+    scheduler.add_job(
+        run_credit_card_interest_and_fees,
+        trigger="cron",
+        hour=2,
+        minute=15,
+        id="credit-card-interest-fees",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+
+    scheduler.add_job(
+        run_credit_card_emi_schedule_refresh,
+        trigger="cron",
+        hour=0,
+        minute=30,
+        id="credit-card-emi-refresh",
         replace_existing=True,
         max_instances=1,
         coalesce=True,

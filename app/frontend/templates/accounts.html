@@ -103,12 +103,16 @@
                 <input type="number" step="0.01" name="statement_balance" id="statement_balance" placeholder="0">
               </div>
               <div class="account-field">
-                <label>Bill Generation Date</label>
-                <input type="date" name="bill_generation_date" id="bill_generation_date">
+                <label>Billing Cycle Start Day</label>
+                <input type="number" min="1" max="31" step="1" name="billing_cycle_start_day" id="billing_cycle_start_day" placeholder="1">
               </div>
               <div class="account-field">
-                <label>Payment Due Date</label>
-                <input type="date" name="payment_due_date" id="payment_due_date">
+                <label>Billing Cycle End Day</label>
+                <input type="number" min="1" max="31" step="1" name="billing_cycle_end_day" id="billing_cycle_end_day" placeholder="30">
+              </div>
+              <div class="account-field">
+                <label>Due Day</label>
+                <input type="number" min="1" max="31" step="1" name="due_day" id="due_day" placeholder="18">
               </div>
             </div>
             <p class="account-inline-note">Use Pay Bill from Credit Card Management to open a prefilled card-payment flow.</p>
@@ -240,6 +244,11 @@
               {% set card_id = card._id|string %}
               {% set outstanding = (-card.balance) if (card.balance or 0) < 0 else 0 %}
               {% set emi_rows = credit_card_emis.get(card._id, []) %}
+              {% set insights = credit_card_insights.get(card_id) or {} %}
+              {% set utilization = insights.get('utilization') or {} %}
+              {% set estimated_bill = insights.get('estimated_bill') or {} %}
+              {% set latest_bill = insights.get('latest_bill') or {} %}
+              {% set recent_bills = insights.get('recent_bills') or [] %}
               <section class="credit-card-detail{% if loop.first %} is-active{% endif %}" data-card-panel="{{ card_id }}">
                 <div class="credit-card-detail__header">
                   <div>
@@ -250,7 +259,14 @@
                     <button type="button" class="credit-card-detail__menu-toggle" data-card-menu-toggle aria-expanded="false" aria-controls="cardMenu-{{ card_id }}">⋯</button>
                     <div class="credit-card-detail__menu is-hidden" id="cardMenu-{{ card_id }}" data-card-menu>
                       <button type="button" class="credit-card-detail__menu-item" data-card-section-toggle="edit">Edit card</button>
-                                            <button type="button" class="credit-card-detail__menu-item js-open-pay-modal" data-card-id="{{ card_id }}" data-card-name="{{ card.name }}" data-card-statement-balance="{{ card.statement_balance or 0 }}" data-card-outstanding="{{ outstanding }}">Pay bill</button>
+                      {% if not latest_bill %}
+                      <form method="post" action="/accounts/credit-card/generate-bill" class="credit-card-detail__menu-form" data-inline-success-form data-inline-success-message="Bill generated">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                        <input type="hidden" name="account_id" value="{{ card._id }}">
+                        <button type="submit" class="credit-card-detail__menu-item">Generate bill</button>
+                      </form>
+                      {% endif %}
+                      <button type="button" class="credit-card-detail__menu-item js-open-pay-modal" data-card-id="{{ card_id }}" data-card-name="{{ card.name }}" data-card-statement-balance="{{ (latest_bill.get('outstanding_amount') if latest_bill else card.statement_balance) or 0 }}" data-card-minimum-due="{{ (latest_bill.get('minimum_due') if latest_bill else ((card.statement_balance or 0) * 0.1)) or 0 }}" data-card-outstanding="{{ outstanding }}" data-card-bill-id="{{ latest_bill.get('id') if latest_bill else '' }}">Pay bill</button>
                       <button type="button" class="credit-card-detail__menu-item js-open-emi-modal" data-card-id="{{ card_id }}" data-card-name="{{ card.name }}">Add new EMI</button>
                       <button type="button" class="credit-card-detail__menu-item is-disabled" disabled title="Disable flow not wired yet">Disable card</button>
                       <form method="post" action="/accounts/delete" class="credit-card-detail__menu-form" data-inline-success-form data-inline-success-message="Card deleted">
@@ -272,12 +288,12 @@
                     <strong>₹ {{ (card.statement_balance or 0) | money }}</strong>
                   </div>
                   <div class="credit-card-metric">
-                    <span>Generation Date</span>
-                    <strong>{% if card.bill_generation_date %}{{ card.bill_generation_date | localtime(request) | dateformat }}{% else %}Not set{% endif %}</strong>
+                    <span>Billing Cycle</span>
+                    <strong>{{ card.billing_cycle_start_day or 1 }} - {{ card.billing_cycle_end_day or 30 }}</strong>
                   </div>
                   <div class="credit-card-metric">
-                    <span>Due Date</span>
-                    <strong>{% if card.payment_due_date %}{{ card.payment_due_date | localtime(request) | dateformat }}{% else %}Not set{% endif %}</strong>
+                    <span>Due Day</span>
+                    <strong>{{ card.due_day or 5 }}</strong>
                   </div>
                   <div class="credit-card-metric">
                     <span>Minimum Due</span>
@@ -287,6 +303,76 @@
                     <span>Number of EMIs</span>
                     <strong>{{ emi_rows | length }}</strong>
                   </div>
+                  <div class="credit-card-metric">
+                    <span>Estimated Bill</span>
+                    <strong>₹ {{ (estimated_bill.get('estimated_amount') or 0) | money }}</strong>
+                  </div>
+                  <div class="credit-card-metric">
+                    <span>Available Limit</span>
+                    <strong>₹ {{ (utilization.get('available_limit') or 0) | money }}</strong>
+                  </div>
+                  <div class="credit-card-metric">
+                    <span>Utilization</span>
+                    <strong>{{ utilization.get('utilization_percent') or 0 }}%</strong>
+                  </div>
+                  <div class="credit-card-metric">
+                    <span>Estimated Min Due</span>
+                    <strong>₹ {{ (estimated_bill.get('minimum_due') or 0) | money }}</strong>
+                  </div>
+                  <div class="credit-card-metric">
+                    <span>Latest Bill Status</span>
+                    <strong>{{ (latest_bill.get('payment_status') or 'not generated') | replace('_', ' ') | title }}</strong>
+                  </div>
+                </div>
+
+                <div class="credit-card-bill-history-block">
+                  <div class="credit-card-section-head">
+                    <h5>Bill History</h5>
+                    <span>{{ recent_bills | length }} statement{% if recent_bills|length != 1 %}s{% endif %}</span>
+                  </div>
+
+                  {% if recent_bills %}
+                    <div class="credit-card-emi-table-wrap">
+                      <table class="credit-card-emi-table">
+                        <thead>
+                          <tr>
+                            <th>Cycle</th>
+                            <th>Statement</th>
+                            <th>Due Date</th>
+                            <th>Bill Amount</th>
+                            <th>Min Due</th>
+                            <th>Paid</th>
+                            <th>Outstanding</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {% for bill in recent_bills %}
+                            <tr>
+                              <td>{{ bill.cycle_key or 'Current' }}</td>
+                              <td>{% if bill.statement_date %}{{ bill.statement_date | localtime(request) | dateformat }}{% else %}Not set{% endif %}</td>
+                              <td>{% if bill.due_date %}{{ bill.due_date | localtime(request) | dateformat }}{% else %}Not set{% endif %}</td>
+                              <td>₹ {{ (bill.final_amount or 0) | money }}</td>
+                              <td>₹ {{ (bill.minimum_due or 0) | money }}</td>
+                              <td>₹ {{ (bill.paid_amount or 0) | money }}</td>
+                              <td>₹ {{ (bill.outstanding_amount or 0) | money }}</td>
+                              {% set bill_status = (bill.payment_status or 'unpaid') %}
+                              <td><span class="credit-card-bill-badge credit-card-bill-badge-{{ bill_status | replace('_', '-') }}">{{ bill_status | replace('_', ' ') | title }}</span></td>
+                            </tr>
+                          {% endfor %}
+                        </tbody>
+                      </table>
+                    </div>
+                  {% else %}
+                    <div class="credit-card-empty">
+                      <p>No bill snapshots generated for this card yet.</p>
+                      <form method="post" action="/accounts/credit-card/generate-bill" class="credit-card-empty__action" data-inline-success-form data-inline-success-message="Bill generated">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                        <input type="hidden" name="account_id" value="{{ card._id }}">
+                        <button type="submit" class="account-secondary">Generate Bill</button>
+                      </form>
+                    </div>
+                  {% endif %}
                 </div>
 
                 <form method="post" action="/accounts/credit-card/update" class="credit-card-settings-form is-collapsed" data-card-section="edit" data-inline-success-form data-inline-success-message="Credit card settings saved" hidden>
@@ -294,7 +380,7 @@
                   <input type="hidden" name="account_id" value="{{ card._id }}">
                   <div class="credit-card-section-head">
                     <h5>Billing Details</h5>
-                    <span>Keep statement and due dates in sync</span>
+                    <span>Define the cycle and due day used for billing</span>
                   </div>
                   <div class="credit-card-settings-grid">
                     <div class="account-field">
@@ -314,12 +400,16 @@
                       <input type="number" step="0.01" name="statement_balance" value="{{ card.statement_balance or '' }}">
                     </div>
                     <div class="account-field">
-                      <label>Bill Generation Date</label>
-                      <input type="date" name="bill_generation_date" value="{{ card.bill_generation_date.strftime('%Y-%m-%d') if card.bill_generation_date else '' }}">
+                      <label>Billing Cycle Start Day</label>
+                      <input type="number" min="1" max="31" step="1" name="billing_cycle_start_day" value="{{ card.billing_cycle_start_day or 1 }}">
                     </div>
                     <div class="account-field">
-                      <label>Payment Due Date</label>
-                      <input type="date" name="payment_due_date" value="{{ card.payment_due_date.strftime('%Y-%m-%d') if card.payment_due_date else '' }}">
+                      <label>Billing Cycle End Day</label>
+                      <input type="number" min="1" max="31" step="1" name="billing_cycle_end_day" value="{{ card.billing_cycle_end_day or 30 }}">
+                    </div>
+                    <div class="account-field">
+                      <label>Due Day</label>
+                      <input type="number" min="1" max="31" step="1" name="due_day" value="{{ card.due_day or 5 }}">
                     </div>
                   </div>
                   <button type="submit" class="account-secondary">Save Card Details</button>
@@ -473,6 +563,7 @@
       <input type="hidden" name="description" value="Card Payment">
       <input type="hidden" name="mode" value="online">
       <input type="hidden" name="target_account_id" id="pay_bill_target_account_id">
+      <input type="hidden" name="credit_bill_id" id="pay_bill_credit_bill_id">
 
       <div class="pay-bill-metrics">
         <div><span>Outstanding</span><strong id="pay_bill_outstanding">₹ 0.00</strong></div>

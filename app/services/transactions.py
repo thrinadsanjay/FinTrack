@@ -280,6 +280,7 @@ async def create_transaction(
     description: str,
     target_account_id: str | None = None,
     transfer_kind: str | None = None,
+    credit_bill_id: str | None = None,
     is_recurring: bool = False,
     frequency: str | None = None,
     interval: int = 1,
@@ -441,6 +442,26 @@ async def create_transaction(
             transfer_kind=transfer_kind,
             request=request,
         )
+        if tx_type == "card_payment" and credit_bill_id:
+            from app.services.credit_cards import record_bill_payment
+
+            await record_bill_payment(
+                user_id=user_id,
+                card_id=target_account_id,
+                bill_id=credit_bill_id,
+                payload=type(
+                    "CreditBillPaymentPayload",
+                    (),
+                    {
+                        "amount": amount,
+                        "payment_date": datetime.now(UTC).date(),
+                        "source_account_id": account_id,
+                        "payment_mode": mode,
+                        "reference_no": description or None,
+                    },
+                )(),
+                request=request,
+            )
     else:
         tx_id = await _add_single_transaction(
             user_oid=user_oid,

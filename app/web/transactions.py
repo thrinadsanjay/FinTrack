@@ -44,6 +44,7 @@ async def transactions_page(request: Request):
         "description": request.query_params.get("description", ""),
         "mode": request.query_params.get("mode", ""),
         "amount": request.query_params.get("amount", ""),
+        "credit_bill_id": request.query_params.get("credit_bill_id", ""),
     }
 
     return templates.TemplateResponse(
@@ -72,6 +73,7 @@ async def add_transaction(
     amount: float = Form(...),
     description: str = Form(""),
     target_account_id: str | None = Form(None),
+    credit_bill_id: str | None = Form(None),
     is_recurring: bool = Form(False),
     frequency: str | None = Form(None),
     interval: int = Form(1),
@@ -97,6 +99,7 @@ async def add_transaction(
             amount=amount,
             tx_type=tx_type,
             transfer_kind="card_payment" if tx_type == "card_payment" else None,
+            credit_bill_id=credit_bill_id,
             mode=mode,
             category_code=category_code,
             subcategory_code=subcategory_code,

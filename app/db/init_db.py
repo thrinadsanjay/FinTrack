@@ -40,6 +40,23 @@ async def init_indexes():
     await db.credit_card_emis.create_index([("user_id", 1), ("account_id", 1), ("deleted_at", 1)])
     await db.credit_card_emis.create_index([("user_id", 1), ("status", 1), ("next_due_date", 1)])
 
+    # Dedicated credit-card billing domain
+    await db.credit_cards.create_index([("user_id", 1), ("status", 1)])
+    await db.credit_cards.create_index([("user_id", 1), ("card_name", 1)], unique=True, name="unique_credit_card_name_per_user")
+    await db.credit_cards.create_index([("user_id", 1), ("source_account_id", 1)], unique=True, sparse=True, name="unique_credit_card_source_account_per_user")
+    await db.credit_card_transactions.create_index([("user_id", 1), ("card_id", 1), ("txn_date", -1)])
+    await db.credit_card_transactions.create_index([("user_id", 1), ("card_id", 1), ("frozen_in_bill", 1)])
+    await db.credit_card_transactions.create_index([("bill_id", 1)])
+    await db.credit_card_bills.create_index([("card_id", 1), ("cycle_key", 1)], unique=True, name="unique_credit_card_bill_per_cycle")
+    await db.credit_card_bills.create_index([("user_id", 1), ("due_date", 1), ("payment_status", 1)])
+    await db.credit_card_bill_items.create_index([("bill_id", 1)])
+    await db.credit_card_payments.create_index([("user_id", 1), ("card_id", 1), ("payment_date", -1)])
+    await db.credit_card_payments.create_index([("bill_id", 1)])
+    await db.credit_card_emi_schedule.create_index([("emi_id", 1), ("installment_no", 1)], unique=True, name="unique_credit_card_emi_installment")
+    await db.credit_card_emi_schedule.create_index([("user_id", 1), ("card_id", 1), ("due_date", 1)])
+    await db.credit_alerts.create_index([("scheduled_for", 1), ("status", 1)])
+    await db.credit_alerts.create_index([("user_id", 1), ("bill_id", 1), ("alert_type", 1)])
+
     # Notifications
     await db.notifications.create_index([("user_id", 1)])
     await db.notifications.create_index([("user_id", 1), ("is_read", 1)])
