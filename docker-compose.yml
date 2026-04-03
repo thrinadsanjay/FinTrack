@@ -1,0 +1,9 @@
+services:
+  fintracker:
+    image: ghcr.io/${GHCR_REPOSITORY}/fintracker:prod
+    container_name: fintracker-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"

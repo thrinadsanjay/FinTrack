@@ -252,6 +252,7 @@
   white-space: nowrap;
   margin-left: auto;
   text-align: right;
+  min-width: 92px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -602,7 +603,7 @@
 }
 
 .rt-summary-value {
-  font-size: 1rem;
+  font-size: 1.06rem;
   font-weight: 800;
   color: var(--color-text);
 }
@@ -1038,6 +1039,385 @@
   .tx-table td {
     white-space: normal;
     word-break: break-word;
+  }
+}
+
+
+.panel-credit-card-summary {
+  background:
+    radial-gradient(circle at top right, rgba(56, 189, 248, 0.18), transparent 34%),
+    linear-gradient(180deg, color-mix(in srgb, var(--color-surface-strong) 96%, transparent), color-mix(in srgb, var(--color-surface) 90%, transparent));
+  min-height: 338px;
+}
+
+.panel-header--credit-cards {
+  align-items: flex-start;
+}
+
+.panel-header--credit-cards p {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  color: var(--color-muted);
+}
+
+.credit-card-wallet {
+  position: relative;
+  min-height: 242px;
+  margin-top: 8px;
+}
+
+.credit-card-wallet__hero,
+.credit-card-wallet__mini {
+  position: absolute;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #f8fbff;
+  box-shadow:
+    0 14px 26px rgba(15, 23, 42, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -8px 18px rgba(2, 6, 23, 0.12);
+}
+
+.credit-card-wallet__hero {
+  left: 45%;
+  top: 15px;
+  z-index: 4;
+  width: 70%;
+  min-height: 188px;
+  transform: translateX(-50%);
+  padding: 18px 18px 16px;
+  display: grid;
+  gap: 16px;
+  align-content: space-between;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease, opacity 0.18s ease;
+}
+
+.credit-card-wallet__hero:hover,
+.credit-card-wallet__hero:focus-visible {
+  transform: translateX(-50%) translateY(-2px);
+  box-shadow: 0 18px 30px rgba(15, 23, 42, 0.26);
+  filter: brightness(1.02);
+}
+
+.credit-card-wallet__hero:focus-visible,
+.credit-card-wallet__mini:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+  outline-offset: 2px;
+}
+
+.credit-card-wallet__hero.is-swapping {
+  opacity: 0.82;
+  transform: translateX(-50%) scale(0.988);
+}
+
+.credit-card-wallet__hero.is-rotating-out {
+  opacity: 0.72;
+  transform: translateX(-46%) scale(0.982);
+}
+
+.credit-card-wallet__mini {
+  top: 0px;
+  min-height: 224px;
+  width: 70%;
+  padding: 18px 18px 16px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.18s ease, filter 0.18s ease, opacity 0.18s ease;
+}
+
+.credit-card-wallet__mini:nth-child(1) {
+  left: 4%;
+  z-index: 1;
+  min-height: 224px;
+}
+
+.credit-card-wallet__mini:nth-child(2) {
+  right: 13%;
+  top: 30px;
+  min-height: 224px;
+  z-index: 2;
+}
+
+.credit-card-wallet__mini:nth-child(3) {
+  right: 6%;
+  top: 45px;
+  min-height: 224px;
+  z-index: 1;
+}
+
+.credit-card-wallet__mini:nth-child(n+4) {
+  right: 0%;
+  top: 60px;
+  min-height: 224px;
+  z-index: 0;
+  opacity: 0.9;
+}
+
+.credit-card-wallet__mini:hover,
+.credit-card-wallet__mini:focus-visible {
+  filter: brightness(1.03);
+}
+
+.credit-card-wallet__mini.is-promoting {
+  transform: translateY(-8px);
+  opacity: 0.95;
+}
+
+.credit-card-wallet__hero::before,
+.credit-card-wallet__mini::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 28%, rgba(255, 255, 255, 0.05) 70%, rgba(255, 255, 255, 0.08)),
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.14), transparent 34%);
+  pointer-events: none;
+}
+
+.credit-card-wallet__hero::after,
+.credit-card-wallet__mini::after {
+  content: "";
+  position: absolute;
+  inset: 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+}
+
+.credit-card-wallet__shine {
+  position: absolute;
+  inset: auto -18% -46% 42%;
+  height: 120px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.2), transparent 70%);
+  pointer-events: none;
+}
+
+.credit-card-wallet__stripe {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 62px;
+  height: 16px;
+  background: linear-gradient(180deg, rgba(2, 6, 23, 0.92), rgba(15, 23, 42, 0.76));
+  opacity: 0.92;
+}
+
+.credit-card-wallet__chip {
+  position: absolute;
+  top: 16px;
+  left: 18px;
+  width: 34px;
+  height: 28px;
+  border-radius: 9px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(203, 213, 225, 0.78)),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.15) 0 32%, transparent 32% 36%, rgba(15, 23, 42, 0.12) 36% 68%, transparent 68% 72%, rgba(15, 23, 42, 0.12) 72% 100%);
+}
+
+.credit-card-wallet__chip::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 50%;
+  height: 1px;
+  background: rgba(15, 23, 42, 0.14);
+  transform: translateY(-50%);
+}
+
+.credit-card-wallet__topline,
+.credit-card-wallet__statement-block,
+.credit-card-wallet__footer,
+.credit-card-wallet__network,
+.credit-card-wallet__number {
+  position: relative;
+  z-index: 1;
+}
+
+.credit-card-wallet__topline,
+.credit-card-wallet__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.credit-card-wallet__bank {
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.credit-card-wallet__network {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 56px;
+}
+
+.credit-card-wallet__network img {
+  display: block;
+  height: 20px;
+  width: auto;
+  max-width: 70px;
+  object-fit: contain;
+}
+
+.credit-card-wallet__number {
+  display: inline-flex;
+  width: fit-content;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  color: rgba(248, 250, 252, 0.92);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.credit-card-wallet__statement-block span,
+.credit-card-wallet__footer span {
+  display: block;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(226, 232, 240, 0.82);
+}
+
+.credit-card-wallet__statement-block strong,
+.credit-card-wallet__footer strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 1.18rem;
+  font-weight: 800;
+}
+
+.credit-card-wallet__totals {
+  text-align: right;
+}
+
+ .credit-card-wallet__mini .credit-card-wallet__bank {
+  position: absolute;
+  top: 14px;
+  color: rgba(248, 250, 252, 0.96);
+  font-weight: 800;
+  text-shadow: 0 1px 4px rgba(15, 23, 42, 0.28);
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  font-size: 0.7rem;
+  max-height: calc(100% - 28px);
+  z-index: 1;
+}
+
+.credit-card-wallet__mini:nth-child(1) .credit-card-wallet__bank {
+  left: 8px;
+  text-align: left;
+}
+
+.credit-card-wallet__mini:nth-child(n+2) .credit-card-wallet__bank {
+  right: 8px;
+  text-align: right;
+}
+
+.credit-card-wallet__mini .credit-card-wallet__network {
+  display: none;
+}
+
+.network-visa {
+  background: linear-gradient(145deg, #133f82, #1d5fbd 54%, #4ea6ff 100%);
+}
+
+.network-mastercard {
+  background: linear-gradient(145deg, #6c1313, #b31b1b 42%, #ef7f1a 100%);
+}
+
+.network-rupay {
+  background: linear-gradient(145deg, #184693, #1f69c9 50%, #11a17d 100%);
+}
+
+.network-amex {
+  background: linear-gradient(145deg, #006584, #0594c2 56%, #81dcff 100%);
+}
+
+.network-diners,
+.network-other {
+  background: linear-gradient(145deg, #1f2c44, #324768 54%, #6885b2 100%);
+}
+
+@media (max-width: 1100px) {
+  .panel-credit-card-summary {
+    min-height: 300px;
+  }
+
+  .credit-card-wallet__hero {
+    width: 80%;
+  }
+
+  .credit-card-wallet__mini {
+    width: 42px;
+    min-height: 154px;
+  }
+
+  .credit-card-wallet__mini:nth-child(2) {
+    right: 34px;
+  }
+}
+
+@media (max-width: 780px) {
+  .panel-credit-card-summary {
+    min-height: 300px;
+  }
+
+  .credit-card-wallet {
+    min-height: 208px;
+  }
+
+  .credit-card-wallet__hero {
+    width: 78%;
+    min-height: 170px;
+    padding: 14px 14px 12px;
+  }
+
+  .credit-card-wallet__stripe {
+    top: 54px;
+    height: 14px;
+  }
+
+  .credit-card-wallet__statement-block strong,
+  .credit-card-wallet__footer strong {
+    font-size: 1rem;
+  }
+
+  .credit-card-wallet__mini {
+    width: 36px;
+    min-height: 142px;
+    padding: 10px 4px;
+  }
+
+  .credit-card-wallet__mini:nth-child(1) {
+    left: 4%;
+  }
+
+  .credit-card-wallet__mini:nth-child(2) {
+    right: 8%;
+    top: 18px;
+    min-height: 202px;
+  }
+
+  .credit-card-wallet__mini:nth-child(3),
+  .credit-card-wallet__mini:nth-child(n+4) {
+    right: 3%;
+    top: 18px;
+    min-height: 202px;
   }
 }
 

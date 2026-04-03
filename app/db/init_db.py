@@ -36,6 +36,10 @@ async def init_indexes():
     await db.recurring_deposits.create_index([("is_active", 1), ("next_run", 1)])
     await db.recurring_deposits.create_index([("user_id", 1), ("is_active", 1), ("next_run", 1)])
 
+    # Credit-card EMI tracker
+    await db.credit_card_emis.create_index([("user_id", 1), ("account_id", 1), ("deleted_at", 1)])
+    await db.credit_card_emis.create_index([("user_id", 1), ("status", 1), ("next_due_date", 1)])
+
     # Notifications
     await db.notifications.create_index([("user_id", 1)])
     await db.notifications.create_index([("user_id", 1), ("is_read", 1)])

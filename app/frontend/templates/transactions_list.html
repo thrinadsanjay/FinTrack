@@ -32,6 +32,7 @@
     <button type="button" class="chip" data-quick-filter="last7">Last 7 days</button>
     <button type="button" class="chip" data-quick-filter="month">This month</button>
     <button type="button" class="chip" data-quick-filter="transfers">Transfers only</button>
+    <button type="button" class="chip" data-quick-filter="card-payments">Card Payments</button>
   </div>
   <div class="filter-right">
     <button class="filter-toggle" id="filterToggle" type="button" aria-expanded="false">
@@ -80,6 +81,7 @@
           <option value="credit" {% if filters.tx_type=="credit" %}selected{% endif %}>Income</option>
           <option value="debit" {% if filters.tx_type=="debit" %}selected{% endif %}>Expense</option>
           <option value="transfer" {% if filters.tx_type=="transfer" %}selected{% endif %}>Transfer</option>
+          <option value="card_payment" {% if filters.tx_type=="card_payment" %}selected{% endif %}>Card Payment</option>
         </select>
       </div>
 
@@ -195,7 +197,9 @@
 
           <!-- DESCRIPTION (MOBILE) -->
           <td data-label="Description" class="col-desc">
-            {% if tx.description %}
+            {% if tx.type == "transfer" and tx.source == "card_payment" %}
+              {% if tx.description %}{{ tx.description }}{% else %}Card Payment{% endif %}
+            {% elif tx.description %}
               {{ tx.description }}
             {% else %}
               —
@@ -213,8 +217,9 @@
 
           <!-- CATEGORY -->
           <td data-label="Category" class="col-category">
-            {{ tx.category.name if tx.category else "—" }}
-            <span class="subcat-inline">({{ tx.subcategory.name if tx.subcategory else "-" }})</span>
+            {% if tx.type == "transfer" and tx.source == "card_payment" %}Card Payment
+            <span class="subcat-inline">(Transfer)</span>{% else %}{{ tx.category.name if tx.category else "—" }}
+            <span class="subcat-inline">({{ tx.subcategory.name if tx.subcategory else "-" }})</span>{% endif %}
           </td>
           <td data-label="SubCategory" class="col-subcategory">{{ tx.subcategory.name if tx.subcategory else "-" }}</td>
 

@@ -47,6 +47,9 @@ def build_transactions_query(
     if tx_type:
         if tx_type == "transfer":
             query["type"] = {"$in": ["transfer_in", "transfer_out"]}
+        elif tx_type == "card_payment":
+            query["type"] = {"$in": ["transfer_in", "transfer_out"]}
+            query["source"] = "card_payment"
         else:
             query["type"] = tx_type
 

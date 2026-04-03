@@ -36,6 +36,12 @@ body.user-guest .app-content {
   background: rgba(7, 18, 36, 0.42);
   box-shadow: 0 40px 80px rgba(3, 10, 24, 0.35);
   backdrop-filter: blur(14px);
+  transition: transform 0.22s ease, box-shadow 0.22s ease;
+}
+
+.login-layout:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 46px 92px rgba(3, 10, 24, 0.4);
 }
 
 .login-brand {
@@ -230,6 +236,12 @@ body.user-guest .app-content {
   font-size: 0.92rem;
   font-weight: 700;
   cursor: pointer;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+
+.login-switcher__button:hover,
+.login-switcher__button:focus-visible {
+  transform: translateY(-1px);
 }
 
 .login-switcher__button.is-active {
@@ -322,6 +334,14 @@ body.user-guest .app-content {
   font-weight: 800;
   cursor: pointer;
   box-shadow: 0 16px 30px rgba(37, 84, 219, 0.22);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease;
+}
+
+.primary-button:hover,
+.primary-button:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 20px 34px rgba(37, 84, 219, 0.28);
+  filter: saturate(1.04);
 }
 
 .primary-button--secondary {

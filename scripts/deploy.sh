@@ -1,108 +1,114 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-DEPLOY_PATH="${DEPLOY_PATH:-${REPO_ROOT}}"
-DEPLOY_BRANCH="${DEPLOY_BRANCH:-Dev}"
-DEPLOY_BUMP_KIND="${DEPLOY_BUMP_KIND:-}"
-DEPLOY_COMMIT_MESSAGE="${DEPLOY_COMMIT_MESSAGE:-manual deployment}"
-DEPLOY_TRIGGER_ACTOR="${DEPLOY_TRIGGER_ACTOR:-unknown}"
-COMPOSE_FILE="${COMPOSE_FILE:-docker/compose.yml}"
-ENV_FILE="${ENV_FILE:-.env}"
-HEALTH_URL="${HEALTH_URL:-http://localhost/health}"
-HEALTH_ATTEMPTS="${HEALTH_ATTEMPTS:-15}"
+DEPLOY_DIR="${DEPLOY_DIR:-$(pwd)}"
+COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}"
+APP_SERVICE="${APP_SERVICE:-fintracker}"
+IMAGE_REPO="${IMAGE_REPO:?IMAGE_REPO is required}"
+IMAGE_TAG="${IMAGE_TAG:?IMAGE_TAG is required}"
+PROD_TAG="${PROD_TAG:-prod}"
+BACKUP_TAG="${BACKUP_TAG:-backup}"
+HEALTH_URL="${HEALTH_URL:-http://localhost:8000/health}"
+HEALTH_EXPECTED="${HEALTH_EXPECTED:-{\"Error\":200,\"status\":\"ok\"}}"
+HEALTH_ATTEMPTS="${HEALTH_ATTEMPTS:-3}"
 HEALTH_INTERVAL_SECONDS="${HEALTH_INTERVAL_SECONDS:-300}"
-STARTUP_WAIT_SECONDS="${STARTUP_WAIT_SECONDS:-45}"
-DEPLOY_LOG_FILE="${DEPLOY_LOG_FILE:-deployments.log}"
-ROLLBACK_STATE_FILE="${ROLLBACK_STATE_FILE:-.deploy_rollback_state}"
+STARTUP_WAIT_SECONDS="${STARTUP_WAIT_SECONDS:-15}"
+DEPLOY_STATUS_FILE="${DEPLOY_STATUS_FILE:-.deploy-status}"
 
 log() {
-  printf "[%s] %s\n" "$(date "+%Y-%m-%d %H:%M:%S %Z")" "$*" | tee -a "$DEPLOY_LOG_FILE"
-}
-
-read_env_value() {
-  local key="$1"
-  grep -E "^${key}=" "$ENV_FILE" 2>/dev/null | tail -n 1 | cut -d "=" -f2- || true
-}
-
-set_env_value() {
-  local key="$1"
-  local value="$2"
-  if grep -qE "^${key}=" "$ENV_FILE" 2>/dev/null; then
-    sed -i -E "s|^${key}=.*|${key}=${value}|" "$ENV_FILE"
-  else
-    printf "%s=%s\n" "$key" "$value" >> "$ENV_FILE"
-  fi
+  printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z')" "$*"
 }
 
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
-    log "Required command not found: $1"
-    exit 1
+    log "Missing required command: $1"
+    exit 2
   fi
 }
 
-require_command git
+record_status() {
+  printf '%s\n' "$1" > "$DEPLOY_STATUS_FILE"
+}
+
+health_check() {
+  attempt=1
+  while [ "$attempt" -le "$HEALTH_ATTEMPTS" ]; do
+    response="$(curl --silent --show-error --max-time 20 "$HEALTH_URL" || true)"
+    if [ "$response" = "$HEALTH_EXPECTED" ]; then
+      log "Health check passed on attempt ${attempt}/${HEALTH_ATTEMPTS}."
+      return 0
+    fi
+
+    log "Health check failed on attempt ${attempt}/${HEALTH_ATTEMPTS}. Response: ${response:-<empty>}"
+    if [ "$attempt" -lt "$HEALTH_ATTEMPTS" ]; then
+      sleep "$HEALTH_INTERVAL_SECONDS"
+    fi
+    attempt=$((attempt + 1))
+  done
+
+  return 1
+}
+
+restart_backend() {
+  docker compose -f "$COMPOSE_FILE" up -d --no-deps --force-recreate "$APP_SERVICE"
+}
+
+restore_backup() {
+  backup_ref="${IMAGE_REPO}:${BACKUP_TAG}"
+  if ! docker image inspect "$backup_ref" >/dev/null 2>&1; then
+    log "Backup image ${backup_ref} not found."
+    return 1
+  fi
+
+  log "Restoring backup image ${backup_ref}."
+  docker tag "$backup_ref" "${IMAGE_REPO}:${PROD_TAG}"
+  restart_backend
+  sleep "$STARTUP_WAIT_SECONDS"
+
+  if health_check; then
+    record_status rollback
+    log "Rollback completed successfully."
+    return 0
+  fi
+
+  record_status total_failure
+  log "Rollback health check failed."
+  return 1
+}
+
 require_command docker
 require_command curl
 
-cd "$DEPLOY_PATH"
-touch "$DEPLOY_LOG_FILE"
-touch "$ENV_FILE"
+cd "$DEPLOY_DIR"
+record_status deploying
 
-if [ -z "$DEPLOY_BUMP_KIND" ]; then
-  DEPLOY_BUMP_KIND="$($SCRIPT_DIR/version.sh infer-bump "$DEPLOY_COMMIT_MESSAGE")"
+current_container_id="$(docker compose -f "$COMPOSE_FILE" ps -q "$APP_SERVICE" 2>/dev/null || true)"
+if [ -n "$current_container_id" ]; then
+  current_image_id="$(docker inspect --format '{{.Image}}' "$current_container_id")"
+  docker tag "$current_image_id" "${IMAGE_REPO}:${BACKUP_TAG}"
+  log "Backed up current image to ${IMAGE_REPO}:${BACKUP_TAG}."
+else
+  log "No running ${APP_SERVICE} container found. Continuing without backup image tag."
 fi
 
-current_ref="$(git rev-parse HEAD)"
-current_version="$(read_env_value CURRENT_VERSION)"
-if [ -z "$current_version" ]; then
-  current_version="$(read_env_value FT_APP_VERSION)"
-fi
-if [ -z "$current_version" ]; then
-  current_version="v0.0.0"
-fi
+target_image="${IMAGE_REPO}:${IMAGE_TAG}"
+log "Pulling ${target_image}."
+docker pull "$target_image"
+docker tag "$target_image" "${IMAGE_REPO}:${PROD_TAG}"
 
-log "Starting deployment for branch ${DEPLOY_BRANCH}. Triggered by ${DEPLOY_TRIGGER_ACTOR}."
-log "Commit summary: ${DEPLOY_COMMIT_MESSAGE}"
-log "Current version: ${current_version}; bump kind: ${DEPLOY_BUMP_KIND}."
-
-git fetch origin "$DEPLOY_BRANCH" --tags --prune
-git checkout --detach "origin/${DEPLOY_BRANCH}"
-target_ref="$(git rev-parse HEAD)"
-target_version="$($SCRIPT_DIR/version.sh next --env-file "$ENV_FILE" --bump-kind "$DEPLOY_BUMP_KIND")"
-
-cat > "$ROLLBACK_STATE_FILE" <<EOF_STATE
-PREVIOUS_REF=${current_ref}
-PREVIOUS_VERSION=${current_version}
-TARGET_REF=${target_ref}
-TARGET_VERSION=${target_version}
-DEPLOYED_AT=$(date "+%Y-%m-%d %H:%M:%S %Z")
-EOF_STATE
-
-set_env_value PREVIOUS_VERSION "$current_version"
-set_env_value CURRENT_VERSION "$target_version"
-set_env_value FT_APP_VERSION "$target_version"
-
-log "Updated version markers: PREVIOUS_VERSION=${current_version}, CURRENT_VERSION=${target_version}."
-docker compose -f "$COMPOSE_FILE" pull || true
-docker compose -f "$COMPOSE_FILE" down --remove-orphans
-docker compose -f "$COMPOSE_FILE" up -d --build --remove-orphans
-
-log "Waiting ${STARTUP_WAIT_SECONDS}s for services to start before health checks."
+log "Restarting backend service ${APP_SERVICE} only."
+restart_backend
 sleep "$STARTUP_WAIT_SECONDS"
 
-if "$SCRIPT_DIR/health_check.sh" "$HEALTH_URL" "$HEALTH_ATTEMPTS" "$HEALTH_INTERVAL_SECONDS"; then
-  log "Deployment succeeded. Version ${target_version} is healthy on ${target_ref}."
+if health_check; then
+  record_status success
+  log "Deployment succeeded with ${target_image}."
   exit 0
 fi
 
-log "Deployment health check failed for version ${target_version}. Starting rollback."
-if "$SCRIPT_DIR/rollback.sh"; then
-  log "Rollback completed after failed deployment. Restored version ${current_version}."
-else
-  log "Rollback failed after deployment failure. Manual intervention is required."
+log "Deployment health check failed. Starting rollback."
+if restore_backup; then
+  exit 10
 fi
 
-exit 1
+exit 20

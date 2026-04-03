@@ -297,25 +297,92 @@
         <canvas id="incomeExpenseChart" height="160"></canvas>
       </div>
     </div>
-    <div class="panel panel-largest">
-      <div class="panel-header">
-        <h3>High-Value Transactions</h3>
-        <span class="pill">MTD</span>
+    <div class="panel panel-credit-card-summary">
+      {% set cc = summary.credit_card_summary %}
+      <div class="panel-header panel-header--credit-cards">
+        <div>
+          <h3>Credit Cards</h3>
+          <p>Statement balance and due date at a glance.</p>
+        </div>
+        <span class="pill">{{ cc.card_count if cc.card_count else 0 }} Cards</span>
       </div>
-      {% if summary.largest_transactions %}
-        <ul class="insight-list">
-          {% for tx in summary.largest_transactions %}
-            <li>
+      {% if cc.card_count %}
+        {% set primary_card = cc.cards[0] %}
+        <div class="credit-card-wallet" data-credit-card-wallet>
+          <article
+            class="credit-card-wallet__hero network-{{ primary_card.card_network }}"
+            id="creditCardHero"
+            role="button"
+            tabindex="0"
+            aria-label="Show next credit card"
+            data-card-id="{{ primary_card.id }}"
+            data-card-network="{{ primary_card.card_network }}"
+            data-card-network-label="{{ primary_card.card_network_label }}"
+            data-card-network-logo="{{ primary_card.card_network_logo or '' }}"
+            data-card-bank-name="{{ primary_card.bank_name }}"
+            data-card-number-hint="{{ primary_card.card_number_hint }}"
+            data-card-outstanding="{{ primary_card.outstanding }}"
+            data-card-statement-balance="{{ primary_card.statement_balance }}"
+            data-card-payment-due-label="{% if primary_card.payment_due_date %}{{ primary_card.payment_due_date | localtime(request) | dateformat }}{% else %}Not set{% endif %}">
+            <div class="credit-card-wallet__shine"></div>
+            <div class="credit-card-wallet__stripe" aria-hidden="true"></div>
+            <div class="credit-card-wallet__chip" aria-hidden="true"></div>
+            <div class="credit-card-wallet__topline">
+              <span class="credit-card-wallet__bank" data-cc-bank>{{ primary_card.bank_name }}</span>
+              <span class="credit-card-wallet__network credit-card-wallet__network--hero" data-cc-network>
+                {% if primary_card.card_network_logo %}
+                  <img src="{{ primary_card.card_network_logo }}" alt="{{ primary_card.card_network_label }}" data-cc-network-logo>
+                {% else %}
+                  <span data-cc-network-text>{{ primary_card.card_network_label }}</span>
+                {% endif %}
+              </span>
+            </div>
+            <div class="credit-card-wallet__number" data-cc-number>{{ primary_card.card_number_hint }}</div>
+            <div class="credit-card-wallet__statement-block">
+              <span>Bill Amount</span>
+              <strong data-cc-statement>₹ {{ primary_card.statement_balance | money }}</strong>
+            </div>
+            <div class="credit-card-wallet__footer">
               <div>
-                <span class="insight-title">{{ tx.description }}</span>
-                <span class="muted">{{ tx.account_name }} - {{ tx.created_at | localtime(request) | dateformat }}</span>
+                <span>Due Date</span>
+                <strong data-cc-due>{% if primary_card.payment_due_date %}{{ primary_card.payment_due_date | localtime(request) | dateformat }}{% else %}Not set{% endif %}</strong>
               </div>
-              <span class="insight-amount red">₹ {{ tx.amount | money }}</span>
-            </li>
-          {% endfor %}
-        </ul>
+              <div class="credit-card-wallet__totals">
+                <span>Outstanding</span>
+                <strong data-cc-outstanding>₹ {{ primary_card.outstanding | money }}</strong>
+              </div>
+            </div>
+          </article>
+          {% if cc.cards|length > 1 %}
+            <div class="credit-card-wallet__stack" id="creditCardStack">
+              {% for card in cc.cards[1:] %}
+                <button
+                  type="button"
+                  class="credit-card-wallet__mini network-{{ card.card_network }}"
+                  data-card-id="{{ card.id }}"
+                  data-card-network="{{ card.card_network }}"
+                  data-card-network-label="{{ card.card_network_label }}"
+                  data-card-network-logo="{{ card.card_network_logo or '' }}"
+                  data-card-bank-name="{{ card.bank_name }}"
+                  data-card-number-hint="{{ card.card_number_hint }}"
+                  data-card-outstanding="{{ card.outstanding }}"
+                  data-card-statement-balance="{{ card.statement_balance }}"
+                  data-card-payment-due-label="{% if card.payment_due_date %}{{ card.payment_due_date | localtime(request) | dateformat }}{% else %}Not set{% endif %}">
+                  <span class="credit-card-wallet__bank">{{ card.bank_name }}</span>
+                  <span class="credit-card-wallet__network">
+                    {% if card.card_network_logo %}
+                      <img src="{{ card.card_network_logo }}" alt="{{ card.card_network_label }}">
+                    {% else %}
+                      {{ card.card_network_label }}
+                    {% endif %}
+                  </span>
+                </button>
+              {% endfor %}
+            </div>
+          {% endif %}
+        </div>
       {% else %}
-        <p class="empty-state">No high-value transactions in MTD.</p>
+        <p class="empty-state">No credit cards added yet.</p>
       {% endif %}
     </div>
     <div class="panel panel-recent">
@@ -431,4 +498,5 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
 <script src="/static/js/dashboard_charts.js" defer></script>
+<script src="/static/js/dashboard_cards.js" defer></script>
 {% endblock %}

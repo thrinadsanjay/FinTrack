@@ -28,6 +28,7 @@ from app.helpers.dashboard_recurring import fetch_dashboard_recurring_overview
 from app.helpers.dashboard_time import start_of_today_utc, start_of_month_utc, start_of_day_utc
 from app.helpers.dashboard_upcoming import fetch_upcoming_bills
 from app.helpers.dashboard_notifications import persist_dashboard_notifications
+from app.helpers.money import round_money
 
 
 async def _fetch_recurring_overview(uid: ObjectId, account_map: dict):
@@ -36,6 +37,118 @@ async def _fetch_recurring_overview(uid: ObjectId, account_map: dict):
 
 async def _fetch_upcoming_bills(uid: ObjectId, account_map: dict):
     return await fetch_upcoming_bills(uid, account_map)
+
+
+async def _fetch_credit_card_summary(uid: ObjectId) -> dict:
+    cards = []
+    total_outstanding = 0.0
+    total_statement_balance = 0.0
+    next_due_date = None
+
+    cursor = db.accounts.find(
+        {"user_id": uid, "deleted_at": None, "type": "credit_card"},
+        {"name": 1, "bank_name": 1, "balance": 1, "credit_limit": 1, "statement_balance": 1, "payment_due_date": 1, "card_network": 1},
+    )
+    async for card in cursor:
+        balance = float(card.get("balance") or 0)
+        outstanding = round_money(abs(balance)) if balance < 0 else 0.0
+        statement_balance = round_money(float(card.get("statement_balance") or 0))
+        payment_due_date = card.get("payment_due_date")
+        if payment_due_date and payment_due_date.tzinfo is None:
+            payment_due_date = payment_due_date.replace(tzinfo=timezone.utc)
+        total_outstanding += outstanding
+        total_statement_balance += statement_balance
+        if payment_due_date and (next_due_date is None or payment_due_date < next_due_date):
+            next_due_date = payment_due_date
+        network = (card.get("card_network") or "visa").lower()
+        card_id = str(card["_id"])
+        digits = "".join(ch for ch in card_id if ch.isdigit())
+        number_hint = (digits[-4:] if len(digits) >= 4 else (digits + "4821")[-4:])
+        cards.append(
+            {
+                "id": card_id,
+                "name": card.get("name") or "Credit Card",
+                "bank_name": card.get("bank_name") or card.get("name") or "Bank",
+                "card_network": network,
+                "card_network_label": {
+                    "visa": "VISA",
+                    "mastercard": "MASTERCARD",
+                    "rupay": "RUPAY",
+                    "amex": "AMEX",
+                    "diners": "DINERS",
+                }.get(network, "CARD"),
+                "card_network_logo": {
+                    "visa": "/static/icons/visa.svg",
+                    "mastercard": "/static/icons/mastercard.svg",
+                    "rupay": "/static/icons/rupay.svg",
+                    "amex": "/static/icons/americanexpress.svg",
+                }.get(network),
+                "card_number_hint": f"•••• {number_hint}",
+                "outstanding": outstanding,
+                "statement_balance": statement_balance,
+                "payment_due_date": payment_due_date,
+                "credit_limit": card.get("credit_limit") or 0,
+            }
+        )
+
+    emi_count = 0
+    emi_monthly_total = 0.0
+    emi_next_due_date = None
+    payment_month_total = 0.0
+    payment_month_count = 0
+    month_start = start_of_month_utc()
+    emi_cursor = db.credit_card_emis.find(
+        {"user_id": uid, "deleted_at": None, "status": {"$ne": "closed"}},
+        {"monthly_amount": 1, "next_due_date": 1},
+    )
+    async for emi in emi_cursor:
+        emi_count += 1
+        emi_monthly_total += float(emi.get("monthly_amount") or 0)
+        next_due = emi.get("next_due_date")
+        if next_due and next_due.tzinfo is None:
+            next_due = next_due.replace(tzinfo=timezone.utc)
+        if next_due and (emi_next_due_date is None or next_due < emi_next_due_date):
+            emi_next_due_date = next_due
+
+    payments_cursor = db.transactions.aggregate(
+        [
+            {
+                "$match": {
+                    "user_id": uid,
+                    "deleted_at": None,
+                    "is_failed": {"$ne": True},
+                    "created_at": {"$gte": month_start},
+                    "type": "transfer_out",
+                    "source": "card_payment",
+                }
+            },
+            {"$group": {"_id": None, "total": {"$sum": "$amount"}, "count": {"$sum": 1}}},
+        ]
+    )
+    async for row in payments_cursor:
+        payment_month_total = float(row.get("total") or 0)
+        payment_month_count = int(row.get("count") or 0)
+
+    cards.sort(
+        key=lambda item: (
+            item["payment_due_date"] is None,
+            item["payment_due_date"] or datetime.max.replace(tzinfo=timezone.utc),
+            item["bank_name"].lower(),
+        )
+    )
+
+    return {
+        "cards": cards,
+        "card_count": len(cards),
+        "total_outstanding": round_money(total_outstanding),
+        "total_statement_balance": round_money(total_statement_balance),
+        "next_due_date": next_due_date,
+        "active_emi_count": emi_count,
+        "active_emi_monthly_total": round_money(emi_monthly_total),
+        "emi_next_due_date": emi_next_due_date,
+        "payment_month_total": round_money(payment_month_total),
+        "payment_month_count": payment_month_count,
+    }
 
 
 # ======================================================
@@ -69,6 +182,7 @@ async def get_dashboard_summary(user_id: str):
         await _fetch_upcoming_bills(uid, account_map)
     )
     recurring_overview = await _fetch_recurring_overview(uid, account_map)
+    credit_card_summary = await _fetch_credit_card_summary(uid)
 
     notifications = await _persist_notifications(
         uid=uid,
@@ -113,6 +227,7 @@ async def get_dashboard_summary(user_id: str):
         "upcoming_bills_7": upcoming_bills_7,
         "upcoming_bills_month": upcoming_bills_month,
         "recurring_overview": recurring_overview,
+        "credit_card_summary": credit_card_summary,
         "notifications": notifications,
         "account_alerts": account_alerts,
     }
@@ -224,6 +339,7 @@ async def get_recent_transactions(user_id: str, limit: int = 5):
                             "source": account_map.get(str(source_tx.get("account_id")), "Source"),
                             "target": account_map.get(str(target_tx.get("account_id")), "Target"),
                         },
+                        "source": (source_tx or tx).get("source"),
                     }
                 )
                 seen_transfers.add(key)
@@ -240,6 +356,7 @@ async def get_recent_transactions(user_id: str, limit: int = 5):
                         "source": account_name if tx.get("type") == "transfer_out" else "Unknown",
                         "target": account_name if tx.get("type") == "transfer_in" else "Unknown",
                     },
+                    "source": tx.get("source"),
                 }
             )
             seen_transfers.add(key)
