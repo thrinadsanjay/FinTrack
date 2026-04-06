@@ -118,7 +118,26 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ssh -i ~/.ssh/dev_key '${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_SSH_HOST }}' "cd ${{ env.DEPLOY_PATH }} && chmod +x scripts/deploy.sh && IMAGE_REPO='${{ needs.version_build_push.outputs.image_repo }}' IMAGE_TAG='dev' HEALTH_URL='${{ env.HEALTH_URL }}' HEALTH_EXPECTED='${{ env.HEALTH_EXPECTED }}' HEALTH_ATTEMPTS='1' HEALTH_INTERVAL_SECONDS='0' ./scripts/deploy.sh"
+
+          echo "DEBUG: IMAGE_REPO=${{ needs.version_build_push.outputs.image_repo }}"
+
+          ssh -i ~/.ssh/dev_key ${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_SSH_HOST }} << 'EOF'
+            set -euo pipefail
+
+            cd ~/fintracker
+            chmod +x scripts/deploy.sh
+
+            export IMAGE_REPO="${{ needs.version_build_push.outputs.image_repo }}"
+            export IMAGE_TAG="dev"
+            export HEALTH_URL="${{ env.HEALTH_URL }}"
+            export HEALTH_EXPECTED='${{ env.HEALTH_EXPECTED }}'
+            export HEALTH_ATTEMPTS="1"
+            export HEALTH_INTERVAL_SECONDS="0"
+
+            echo "REMOTE DEBUG: IMAGE_REPO=$IMAGE_REPO"
+
+            ./scripts/deploy.sh
+          EOF
 
       - name: Email DEV deployment failure
         if: failure()
