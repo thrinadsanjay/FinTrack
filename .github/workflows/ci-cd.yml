@@ -15,7 +15,7 @@ permissions:
 
 env:
   IMAGE_NAME: fintracker
-  HEALTH_URL: http://localhost:8000/health
+  HEALTH_URL: http://localhost:8008/health
   HEALTH_EXPECTED: '{"Error":200,"status":"ok"}'
   HEALTH_ATTEMPTS: '3'
   HEALTH_INTERVAL_SECONDS: '300'
