@@ -29,6 +29,7 @@ jobs:
       version_tag: ${{ steps.version.outputs.version_tag }}
       image_repo: ${{ steps.image.outputs.image_repo }}
       ghcr_repository: ${{ steps.image.outputs.ghcr_repository }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,7 +38,6 @@ jobs:
 
       - name: Calculate next minor version
         id: version
-        shell: bash
         run: |
           set -euo pipefail
           git fetch --tags --force
@@ -55,7 +55,6 @@ jobs:
           echo "version_tag=${new_tag}" >> "$GITHUB_OUTPUT"
 
       - name: Create and push git tag
-        shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
@@ -65,7 +64,6 @@ jobs:
 
       - name: Build image metadata
         id: image
-        shell: bash
         run: |
           set -euo pipefail
           repo_path="$(printf '%s' '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
@@ -93,35 +91,37 @@ jobs:
     name: Deploy to Dev/Test Server
     runs-on: ubuntu-latest
     needs: version_build_push
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Prepare SSH key for DEV
-        shell: bash
         run: |
           set -euo pipefail
           install -m 700 -d ~/.ssh
           printf '%s\n' '${{ secrets.DEV_SSH_KEY }}' > ~/.ssh/dev_key
           chmod 600 ~/.ssh/dev_key
-          ssh-keyscan -H '${{ secrets.DEV_SSH_HOST }}' >> ~/.ssh/known_hosts
+          ssh-keyscan -p ${{ secrets.DEV_SSH_PORT }} -H '${{ secrets.DEV_SSH_HOST }}' >> ~/.ssh/known_hosts
 
       - name: Copy deployment files to DEV
-        shell: bash
         run: |
           set -euo pipefail
-          ssh -i ~/.ssh/dev_key '${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_SSH_HOST }}' 'mkdir -p ~/fintracker/scripts'
-          scp -i ~/.ssh/dev_key docker-compose.yml '${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_SSH_HOST }}:${{ env.DEPLOY_PATH }}/docker-compose.yml'
-          scp -i ~/.ssh/dev_key scripts/deploy.sh '${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_SSH_HOST }}:${{ env.DEPLOY_PATH }}/scripts/deploy.sh'
+          ssh -p ${{ secrets.DEV_SSH_PORT }} -i ~/.ssh/dev_key '${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_SSH_HOST }}' 'mkdir -p ~/fintracker/scripts'
+
+          scp -P ${{ secrets.DEV_SSH_PORT }} -i ~/.ssh/dev_key docker-compose.yml \
+            '${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_SSH_HOST }}:${{ env.DEPLOY_PATH }}/docker-compose.yml'
+
+          scp -P ${{ secrets.DEV_SSH_PORT }} -i ~/.ssh/dev_key scripts/deploy.sh \
+            '${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_SSH_HOST }}:${{ env.DEPLOY_PATH }}/scripts/deploy.sh'
 
       - name: Deploy to DEV server
-        shell: bash
         run: |
           set -euo pipefail
 
           echo "DEBUG: IMAGE_REPO=${{ needs.version_build_push.outputs.image_repo }}"
 
-          ssh -i ~/.ssh/dev_key ${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_SSH_HOST }} << 'EOF'
+          ssh -p ${{ secrets.DEV_SSH_PORT }} -i ~/.ssh/dev_key ${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_SSH_HOST }} << 'EOF'
             set -euo pipefail
 
             cd ~/fintracker
@@ -153,9 +153,7 @@ jobs:
           body: |
             DEV deployment failed.
             Repository: ${{ github.repository }}
-            Branch: Development
             Tag: ${{ needs.version_build_push.outputs.version_tag }}
-            Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
   manual_approval:
     name: Manual Approval
@@ -166,8 +164,7 @@ jobs:
     environment:
       name: production
     steps:
-      - name: Wait for production approval
-        run: echo "Approved for production deployment."
+      - run: echo "Approved for production deployment."
 
   deploy_production:
     name: Deploy to Production with Rollback
@@ -175,106 +172,41 @@ jobs:
     needs:
       - version_build_push
       - manual_approval
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Prepare SSH key for PROD
-        shell: bash
         run: |
           set -euo pipefail
           install -m 700 -d ~/.ssh
           printf '%s\n' '${{ secrets.PROD_SSH_KEY }}' > ~/.ssh/prod_key
           chmod 600 ~/.ssh/prod_key
-          ssh-keyscan -H '${{ secrets.PROD_SSH_HOST }}' >> ~/.ssh/known_hosts
+          ssh-keyscan -p ${{ secrets.PROD_SSH_PORT }} -H '${{ secrets.PROD_SSH_HOST }}' >> ~/.ssh/known_hosts
 
       - name: Copy deployment files to PROD
-        shell: bash
         run: |
           set -euo pipefail
-          ssh -i ~/.ssh/prod_key '${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}' 'mkdir -p ~/fintracker/scripts'
-          scp -i ~/.ssh/prod_key docker-compose.yml '${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}:${{ env.DEPLOY_PATH }}/docker-compose.yml'
-          scp -i ~/.ssh/prod_key scripts/deploy.sh '${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}:${{ env.DEPLOY_PATH }}/scripts/deploy.sh'
+          ssh -p ${{ secrets.PROD_SSH_PORT }} -i ~/.ssh/prod_key '${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}' 'mkdir -p ~/fintracker/scripts'
+
+          scp -P ${{ secrets.PROD_SSH_PORT }} -i ~/.ssh/prod_key docker-compose.yml \
+            '${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}:${{ env.DEPLOY_PATH }}/docker-compose.yml'
+
+          scp -P ${{ secrets.PROD_SSH_PORT }} -i ~/.ssh/prod_key scripts/deploy.sh \
+            '${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}:${{ env.DEPLOY_PATH }}/scripts/deploy.sh'
 
       - name: Deploy to PROD server
         id: prod_deploy
         continue-on-error: true
-        shell: bash
         run: |
           set +e
-          ssh -i ~/.ssh/prod_key '${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}' "cd ${{ env.DEPLOY_PATH }} && chmod +x scripts/deploy.sh && IMAGE_REPO='${{ needs.version_build_push.outputs.image_repo }}' IMAGE_TAG='${{ needs.version_build_push.outputs.version_tag }}' HEALTH_URL='${{ env.HEALTH_URL }}' HEALTH_EXPECTED='${{ env.HEALTH_EXPECTED }}' HEALTH_ATTEMPTS='${{ env.HEALTH_ATTEMPTS }}' HEALTH_INTERVAL_SECONDS='${{ env.HEALTH_INTERVAL_SECONDS }}' ./scripts/deploy.sh"
-          status=$?
-          echo "exit_code=${status}" >> "$GITHUB_OUTPUT"
-          exit 0
-
-      - name: Read production deploy status
-        id: prod_status
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -euo pipefail
-          status="$(ssh -i ~/.ssh/prod_key '${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}' "cat ${{ env.DEPLOY_PATH }}/.deploy-status" 2>/dev/null || echo total_failure)"
-          echo "status=${status}" >> "$GITHUB_OUTPUT"
-          if [ "$status" = 'success' ]; then
-            exit 0
-          fi
-          exit 1
-
-      - name: Email production success
-        if: steps.prod_status.outputs.status == 'success'
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: ${{ secrets.SMTP_HOST }}
-          server_port: ${{ secrets.SMTP_PORT }}
-          username: ${{ secrets.SMTP_USER }}
-          password: ${{ secrets.SMTP_PASS }}
-          subject: FinTracker production deployment succeeded
-          to: ${{ secrets.ADMIN_EMAIL }}
-          from: ${{ secrets.SMTP_USER }}
-          body: |
-            Production deployment succeeded.
-            Repository: ${{ github.repository }}
-            Branch: Development
-            Tag: ${{ needs.version_build_push.outputs.version_tag }}
-            Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-
-      - name: Email production rollback
-        if: steps.prod_status.outputs.status == 'rollback'
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: ${{ secrets.SMTP_HOST }}
-          server_port: ${{ secrets.SMTP_PORT }}
-          username: ${{ secrets.SMTP_USER }}
-          password: ${{ secrets.SMTP_PASS }}
-          subject: FinTracker production deployment rolled back
-          to: ${{ secrets.ADMIN_EMAIL }}
-          from: ${{ secrets.SMTP_USER }}
-          body: |
-            Production deployment failed health checks and rollback succeeded.
-            Repository: ${{ github.repository }}
-            Branch: Development
-            Tag: ${{ needs.version_build_push.outputs.version_tag }}
-            Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-
-      - name: Email production total failure
-        if: steps.prod_status.outputs.status == 'total_failure'
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: ${{ secrets.SMTP_HOST }}
-          server_port: ${{ secrets.SMTP_PORT }}
-          username: ${{ secrets.SMTP_USER }}
-          password: ${{ secrets.SMTP_PASS }}
-          subject: FinTracker production deployment total failure
-          to: ${{ secrets.ADMIN_EMAIL }}
-          from: ${{ secrets.SMTP_USER }}
-          body: |
-            Production deployment failed and rollback did not recover the service.
-            Repository: ${{ github.repository }}
-            Branch: Development
-            Tag: ${{ needs.version_build_push.outputs.version_tag }}
-            Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-
-      - name: Fail job when production was not successful
-        if: steps.prod_status.outputs.status != 'success'
-        shell: bash
-        run: exit 1
+          ssh -p ${{ secrets.PROD_SSH_PORT }} -i ~/.ssh/prod_key '${{ secrets.PROD_SSH_USER }}@${{ secrets.PROD_SSH_HOST }}' \
+          "cd ${{ env.DEPLOY_PATH }} && chmod +x scripts/deploy.sh && \
+           IMAGE_REPO='${{ needs.version_build_push.outputs.image_repo }}' \
+           IMAGE_TAG='${{ needs.version_build_push.outputs.version_tag }}' \
+           HEALTH_URL='${{ env.HEALTH_URL }}' \
+           HEALTH_EXPECTED='${{ env.HEALTH_EXPECTED }}' \
+           HEALTH_ATTEMPTS='${{ env.HEALTH_ATTEMPTS }}' \
+           HEALTH_INTERVAL_SECONDS='${{ env.HEALTH_INTERVAL_SECONDS }}' \
+           ./scripts/deploy.sh"
