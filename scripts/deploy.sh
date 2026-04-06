@@ -31,7 +31,7 @@ record_status() {
 }
 
 health_check() {
-  attempt=1
+  attempt=5
   while [ "$attempt" -le "$HEALTH_ATTEMPTS" ]; do
     response="$(curl --silent --show-error --max-time 20 "$HEALTH_URL" || true)"
     if [ "$response" = "$HEALTH_EXPECTED" ]; then
