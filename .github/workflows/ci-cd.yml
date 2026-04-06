@@ -118,7 +118,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ssh -i ~/.ssh/dev_key '${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_SSH_HOST }}' "cd ${{ env.DEPLOY_PATH }} && chmod +x scripts/deploy.sh && IMAGE_REPO='${{ needs.version_build_push.outputs.image_repo }}' IMAGE_TAG='dev' HEALTH_URL='${{ env.HEALTH_URL }}' HEALTH_EXPECTED='${{ env.HEALTH_EXPECTED }}' HEALTH_ATTEMPTS='1' HEALTH_INTERVAL_SECONDS='0' ./scripts/deploy.sh"
+          ssh -i ~/.ssh/dev_key '${{ secrets.DEV_SSH_USER }}@${{ secrets.DEV_SSH_HOST }}' "cd ${{ env.DEPLOY_PATH }} && sudo chmod +x scripts/deploy.sh && IMAGE_REPO='${{ needs.version_build_push.outputs.image_repo }}' IMAGE_TAG='dev' HEALTH_URL='${{ env.HEALTH_URL }}' HEALTH_EXPECTED='${{ env.HEALTH_EXPECTED }}' HEALTH_ATTEMPTS='1' HEALTH_INTERVAL_SECONDS='0' sudo ./scripts/deploy.sh"
 
       - name: Email DEV deployment failure
         if: failure()
