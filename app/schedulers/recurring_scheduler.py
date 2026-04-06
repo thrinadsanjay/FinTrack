@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 TRANSACTIONS = "transactions"
 RECURRING = "recurring_deposits"
+ACCOUNTS = "accounts"
 RECURRING_JOB_ID = "recurring-transactions"
 
 

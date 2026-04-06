@@ -9,6 +9,10 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="/static/icons/favicon-16x16.png">
+  <!-- Inter font from Google Fonts for crisp modern typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..900;1,14..32,300..900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
 
   <link rel="manifest" href="/static/site.webmanifest">
@@ -71,11 +75,14 @@
   {% endif %}
   
   <div class="app-shell">
-    <div class="toast" id="toast" data-error="{{ error or '' }}">
+    <!-- Legacy toast (kept for backward compat with app_shell.js) -->
+    <div class="toast" id="toast" data-error="{{ error or '' }}" aria-live="polite" aria-atomic="true">
       <span class="toast-icon">!</span>
       <span class="toast-message"></span>
       <button type="button" class="toast-close" aria-label="Close">×</button>
     </div>
+    <!-- New stacked toast host (used by new JS helpers) -->
+    <div class="toast-stack" id="toastStack" aria-live="polite" aria-label="Notifications"></div>
     <main class="app-content">
       {% block content %}{% endblock %}
     </main>
@@ -85,6 +92,7 @@
   <script src="/static/js/phone_input.js?v={{ FT_APP_VERSION }}" defer></script>
   <script src="/static/js/navbar.js?v={{ FT_APP_VERSION }}" defer></script>
   <script src="/static/js/app_shell.js?v={{ FT_APP_VERSION }}" defer></script>
+  <script src="/static/js/toast.js?v={{ FT_APP_VERSION }}" defer></script>
   {% if current_user %}<script src="/static/js/app_biometric_lock.js?v={{ FT_APP_VERSION }}" defer></script>{% endif %}
 </body>
 </html>
