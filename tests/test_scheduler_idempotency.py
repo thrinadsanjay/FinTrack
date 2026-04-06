@@ -91,5 +91,52 @@ class TestSchedulerIdempotency(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(recurring.updated), 0)
 
 
+    async def test_due_transaction_is_inserted_and_rule_advanced(self):
+        now = datetime.now(timezone.utc)
+        scheduled_for = now - timedelta(minutes=1)
+        recurring_rule = {
+            "_id": "rid-2",
+            "user_id": "uid-1",
+            "account_id": "aid-1",
+            "type": "debit",
+            "mode": "online",
+            "amount": 100.0,
+            "description": "Rent",
+            "category": {"code": "expense", "name": "Expense"},
+            "subcategory": {"code": "rent", "name": "Rent"},
+            "frequency": "monthly",
+            "start_date": now,
+            "next_run": scheduled_for,
+            "is_active": True,
+        }
+
+        recurring = _Collection(find_items=[recurring_rule])
+        transactions = _Collection(find_one_result=None)
+        accounts = _Collection(find_one_result={"balance": 1000.0, "name": "Main"})
+        fake_db = _FakeDb(recurring, transactions, accounts)
+
+        with patch("app.schedulers.recurring_scheduler.db", fake_db), \
+             patch("app.schedulers.recurring_scheduler.calculate_next_run", return_value=datetime(2100, 1, 1, tzinfo=timezone.utc)):
+            await run_recurring_transactions()
+
+        self.assertEqual(len(transactions.inserted), 1)
+        inserted = transactions.inserted[0]
+        self.assertEqual(inserted["recurring_id"], "rid-2")
+        self.assertEqual(inserted["account_id"], "aid-1")
+        self.assertEqual(inserted["scheduled_for"], scheduled_for)
+        self.assertEqual(inserted["source"], "recurring")
+
+        self.assertEqual(len(accounts.updated), 2)
+        self.assertEqual(
+            accounts.updated[0],
+            ({"_id": "aid-1"}, {"$inc": {"balance": -100.0}}),
+        )
+
+        self.assertEqual(len(recurring.updated), 1)
+        update_query, update_doc = recurring.updated[0]
+        self.assertEqual(update_query, {"_id": "rid-2"})
+        self.assertEqual(update_doc["$set"]["last_run"], scheduled_for)
+        self.assertEqual(update_doc["$set"]["next_run"], datetime(2100, 1, 1, tzinfo=timezone.utc))
+
 if __name__ == "__main__":
     unittest.main()

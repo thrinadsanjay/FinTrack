@@ -1428,3 +1428,250 @@
     animation: none;
   }
 }
+
+/* ================================================================
+   ENHANCED BALANCE PANEL — Hero treatment
+   ================================================================ */
+.panel-total {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--color-primary) 18%, var(--color-surface)),
+    color-mix(in srgb, var(--color-primary) 5%, var(--color-surface))
+  );
+  border-color: color-mix(in srgb, var(--color-primary) 28%, var(--color-border));
+}
+
+.panel-total::before {
+  background: radial-gradient(circle at top right, rgba(255, 255, 255, 0.28), transparent 55%) !important;
+}
+
+.balance-amount {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+  letter-spacing: -0.025em;
+  color: var(--color-text);
+}
+
+.metric {
+  font-variant-numeric: tabular-nums;
+  transition: transform var(--transition-fast), background var(--transition-fast);
+}
+
+.metric:hover {
+  transform: translateY(-1px);
+}
+
+/* ================================================================
+   UPGRADED SAVINGS PANEL
+   ================================================================ */
+.panel-savings {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--color-success) 12%, var(--color-surface)),
+    color-mix(in srgb, var(--color-success) 4%, var(--color-surface))
+  );
+  border-color: color-mix(in srgb, var(--color-success) 22%, var(--color-border));
+}
+
+.savings-bar > span {
+  background: linear-gradient(90deg, var(--color-success), #22c55e, #4ade80);
+  transition: width 0.8s cubic-bezier(0.22, 0.61, 0.36, 1);
+  position: relative;
+}
+
+/* Glow effect on savings bar */
+.savings-bar > span::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: -1px;
+  bottom: -1px;
+  width: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 6px #22c55e;
+  opacity: 0.8;
+}
+
+/* ================================================================
+   ELEVATED RECURRING OVERVIEW PANEL
+   ================================================================ */
+.rt-summary-card {
+  transition: transform var(--transition-fast), border-color var(--transition-fast);
+}
+
+.rt-summary-card:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--color-primary) 35%, var(--color-border));
+}
+
+.rt-progress > span {
+  background: linear-gradient(90deg, var(--color-primary), var(--color-success));
+  transition: width 0.7s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.rt-item {
+  transition: transform var(--transition-fast), background var(--transition-fast);
+}
+
+.rt-item:hover {
+  transform: translateX(2px);
+  background: color-mix(in srgb, var(--color-surface-strong) 96%, transparent);
+}
+
+/* ================================================================
+   CHART LOADING PLACEHOLDER
+   ================================================================ */
+.chart-wrap {
+  position: relative;
+}
+
+.chart-wrap.is-loading::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--color-border) 72%, transparent) 25%,
+    color-mix(in srgb, var(--color-primary) 8%, var(--color-border)) 50%,
+    color-mix(in srgb, var(--color-border) 72%, transparent) 75%
+  );
+  background-size: 800px 100%;
+  animation: skeleton-wave 1.6s ease-in-out infinite;
+  z-index: 1;
+}
+
+@keyframes skeleton-wave {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+/* ================================================================
+   RECENT TRANSACTIONS – Enhanced Table
+   ================================================================ */
+.tx-table tbody tr {
+  transition: background var(--transition-fast);
+}
+
+.tx-table .tx-amount-credit {
+  color: var(--color-success);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.tx-table .tx-amount-debit {
+  color: var(--color-danger);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ================================================================
+   CREDIT CARD WALLET — Utilization bar improvement
+   ================================================================ */
+.credit-card-wallet__utilization {
+  position: absolute;
+  bottom: 6px;
+  left: 14px;
+  right: 14px;
+  z-index: 2;
+}
+
+.credit-card-wallet__util-track {
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.15);
+  overflow: hidden;
+}
+
+.credit-card-wallet__util-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.9));
+  transition: width 0.8s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.credit-card-wallet__util-fill.high-util {
+  background: linear-gradient(90deg, rgba(251, 113, 133, 0.8), rgba(239, 68, 68, 0.95));
+}
+
+/* ================================================================
+   PANEL ANIMATION — more refined staggered reveal
+   ================================================================ */
+.dashboard-header .panel:nth-child(1) { animation-delay: 0.04s; }
+.dashboard-header .panel:nth-child(2) { animation-delay: 0.08s; }
+.dashboard-header .panel:nth-child(3) { animation-delay: 0.12s; }
+.dashboard-header .panel:nth-child(4) { animation-delay: 0.16s; }
+
+.panel-grid .panel:nth-child(1) { animation-delay: 0.12s; }
+.panel-grid .panel:nth-child(2) { animation-delay: 0.16s; }
+.panel-grid .panel:nth-child(3) { animation-delay: 0.20s; }
+.panel-grid .panel:nth-child(4) { animation-delay: 0.24s; }
+
+/* ================================================================
+   DASHBOARD ACCOUNT LIST — enhanced hover
+   ================================================================ */
+.account-list li {
+  font-variant-numeric: tabular-nums;
+}
+
+.account-list li:hover .account-balance {
+  color: var(--color-primary);
+}
+
+/* ================================================================
+   PANEL HEADER — improved readability
+   ================================================================ */
+.panel-header h3 {
+  letter-spacing: -0.01em;
+}
+
+.pill {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ================================================================
+   CHART PANEL LABELS
+   ================================================================ */
+.panel-label-bar {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.panel-label-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--color-muted);
+}
+
+.panel-label-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ================================================================
+   DARK MODE OVERRIDES
+   ================================================================ */
+html[data-theme="dark"] .panel-total {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--color-primary) 22%, #0c1829),
+    color-mix(in srgb, var(--color-primary) 8%, #0c1829)
+  );
+}
+
+html[data-theme="dark"] .panel-savings {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--color-success) 16%, #0a1c1a),
+    color-mix(in srgb, var(--color-success) 5%, #0a1c1a)
+  );
+}
+
