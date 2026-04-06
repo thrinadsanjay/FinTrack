@@ -529,3 +529,278 @@ body.user-guest .app-content {
     gap: 8px;
   }
 }
+
+/* ================================================================
+   LOGIN PAGE ENTRY ANIMATION
+   ================================================================ */
+@keyframes login-brand-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes login-panel-enter {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.login-brand {
+  animation: login-brand-enter 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.login-panel {
+  animation: login-panel-enter 0.5s 0.08s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+@media (max-width: 920px) {
+  @keyframes login-brand-enter {
+    from { opacity: 0; transform: translateY(-12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes login-panel-enter {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}
+
+/* ================================================================
+   PASSKEY / WEBAUTHN BUTTON
+   ================================================================ */
+.passkey-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid rgba(195, 208, 231, 0.72);
+  border-radius: 16px;
+  background: linear-gradient(135deg, #f8fafe 0%, #f2f6ff 100%);
+  color: #16213a;
+  font-size: 0.94rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(16, 33, 65, 0.06);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+}
+
+.passkey-btn:hover,
+.passkey-btn:focus-visible {
+  transform: translateY(-1px);
+  border-color: rgba(41, 92, 234, 0.4);
+  box-shadow: 0 10px 22px rgba(37, 84, 219, 0.14);
+}
+
+.passkey-btn__icon {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(41, 92, 234, 0.12), rgba(41, 92, 234, 0.06));
+  color: #2563eb;
+  font-size: 0.9rem;
+}
+
+/* ================================================================
+   SUBMIT BUTTON LOADING STATE
+   ================================================================ */
+.primary-button.is-loading {
+  cursor: wait;
+  pointer-events: none;
+  position: relative;
+  color: transparent;
+}
+
+.primary-button.is-loading::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 20px;
+  height: 20px;
+  border: 2.5px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: login-btn-spin 0.65s linear infinite;
+}
+
+@keyframes login-btn-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ================================================================
+   INLINE FORM FIELD ERROR
+   ================================================================ */
+.field .field-error-msg {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #c43a3a;
+  margin-top: 2px;
+}
+
+.field input.has-error,
+.field select.has-error {
+  border-color: rgba(196, 58, 58, 0.6);
+  box-shadow: 0 0 0 3px rgba(196, 58, 58, 0.1);
+}
+
+/* ================================================================
+   LOGIN CARD SLIDE ANIMATION
+   ================================================================ */
+@keyframes card-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.login-card:not([hidden]) {
+  animation: card-slide-in 0.25s ease both;
+}
+
+/* ================================================================
+   DIVIDER FOR AUTH METHODS
+   ================================================================ */
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #8396b6;
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(195, 208, 231, 0.72);
+}
+
+/* ================================================================
+   SOCIAL LOGIN ROW
+   ================================================================ */
+.social-login-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.social-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  border: 1px solid rgba(195, 208, 231, 0.72);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fff 0%, #f8fafe 100%);
+  color: #16213a;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform 0.14s ease, box-shadow 0.14s ease;
+}
+
+.social-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(16, 33, 65, 0.1);
+}
+
+.social-btn img {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+
+/* ================================================================
+   DARK MODE OVERRIDES FOR LOGIN (when inside full dark-bg page)
+   ================================================================ */
+html[data-theme="dark"] .login-panel {
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.98) 0%, rgba(11, 19, 32, 0.96) 100%);
+}
+
+html[data-theme="dark"] .login-panel__header h1 {
+  color: #e5edf8;
+}
+
+html[data-theme="dark"] .login-panel__eyebrow,
+html[data-theme="dark"] .login-panel__copy {
+  color: #9ab0cd;
+}
+
+html[data-theme="dark"] .login-card {
+  background: rgba(15, 23, 42, 0.98);
+  border-color: rgba(91, 121, 160, 0.4);
+}
+
+html[data-theme="dark"] .field label {
+  color: #9ab0cd;
+}
+
+html[data-theme="dark"] .field input,
+html[data-theme="dark"] .field select,
+html[data-theme="dark"] .phone-input__number {
+  background: rgba(11, 19, 32, 0.9);
+  border-color: rgba(91, 121, 160, 0.45);
+  color: #e5edf8;
+}
+
+html[data-theme="dark"] .field input:focus,
+html[data-theme="dark"] .field select:focus {
+  border-color: rgba(96, 165, 250, 0.55);
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.14);
+}
+
+html[data-theme="dark"] .login-switcher {
+  background: rgba(11, 19, 32, 0.9);
+  border: 1px solid rgba(91, 121, 160, 0.4);
+}
+
+html[data-theme="dark"] .login-switcher__button {
+  color: #9ab0cd;
+}
+
+html[data-theme="dark"] .login-switcher__button.is-active {
+  background: rgba(15, 23, 42, 0.98);
+  color: #e5edf8;
+}
+
+html[data-theme="dark"] .passkey-btn,
+html[data-theme="dark"] .social-btn {
+  background: rgba(15, 23, 42, 0.9);
+  border-color: rgba(91, 121, 160, 0.4);
+  color: #e5edf8;
+}
+
+html[data-theme="dark"] .passkey-btn:hover,
+html[data-theme="dark"] .social-btn:hover {
+  border-color: rgba(96, 165, 250, 0.45);
+}
+

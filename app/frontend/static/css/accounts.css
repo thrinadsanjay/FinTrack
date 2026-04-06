@@ -956,3 +956,513 @@
     padding: 16px;
   }
 }
+
+/* ================================================================
+   FULL CREDIT CARD VISUAL COMPONENT
+   (Used in accounts workspace and bill view)
+   ================================================================ */
+
+/* Full-size physical card replica */
+.cc-card {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  aspect-ratio: 1.586;               /* ISO 7810 credit card ratio */
+  border-radius: 14px;
+  overflow: hidden;
+  color: #f8fbff;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow:
+    0 18px 40px rgba(15, 23, 42, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -10px 20px rgba(2, 6, 23, 0.14);
+  transition:
+    transform 0.28s cubic-bezier(0.22, 0.61, 0.36, 1),
+    box-shadow 0.28s ease,
+    filter 0.2s ease;
+  transform-style: preserve-3d;
+  perspective: 800px;
+  user-select: none;
+}
+
+.cc-card:hover {
+  transform: translateY(-4px) rotateX(2deg) rotateY(-1deg);
+  box-shadow:
+    0 28px 56px rgba(15, 23, 42, 0.36),
+    inset 0 1px 0 rgba(255, 255, 255, 0.26);
+  filter: brightness(1.04);
+}
+
+/* Network gradient backgrounds */
+.cc-card.network-visa {
+  background: linear-gradient(145deg, #133f82, #1d5fbd 54%, #4ea6ff 100%);
+}
+
+.cc-card.network-mastercard {
+  background: linear-gradient(145deg, #6c1313, #b31b1b 42%, #ef7f1a 100%);
+}
+
+.cc-card.network-rupay {
+  background: linear-gradient(145deg, #184693, #1f69c9 50%, #11a17d 100%);
+}
+
+.cc-card.network-amex {
+  background: linear-gradient(145deg, #006584, #0594c2 56%, #81dcff 100%);
+}
+
+.cc-card.network-diners,
+.cc-card.network-other {
+  background: linear-gradient(145deg, #1f2c44, #324768 54%, #6885b2 100%);
+}
+
+/* Card shine overlay */
+.cc-card__shine {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.22), transparent 30%, rgba(255, 255, 255, 0.06) 70%, rgba(255, 255, 255, 0.1)),
+    radial-gradient(circle at 15% 15%, rgba(255, 255, 255, 0.18), transparent 38%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Magnetic stripe (decorative, near top) */
+.cc-card__stripe {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 23%;
+  height: 13%;
+  background: linear-gradient(180deg, rgba(2, 6, 23, 0.9), rgba(15, 23, 42, 0.72));
+  z-index: 2;
+}
+
+/* EMV Chip */
+.cc-card__chip {
+  position: absolute;
+  top: 14%;
+  left: 6%;
+  width: 12%;
+  aspect-ratio: 1.2;
+  border-radius: 4px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(203, 213, 225, 0.82)),
+    linear-gradient(90deg,
+      rgba(15, 23, 42, 0.18) 0 32%,
+      transparent 32% 36%,
+      rgba(15, 23, 42, 0.14) 36% 68%,
+      transparent 68% 72%,
+      rgba(15, 23, 42, 0.14) 72% 100%
+    );
+  z-index: 3;
+}
+
+.cc-card__chip::before,
+.cc-card__chip::after {
+  content: "";
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  height: 1px;
+  background: rgba(15, 23, 42, 0.16);
+}
+
+.cc-card__chip::before { top: 33%; }
+.cc-card__chip::after { top: 65%; }
+
+/* NFC icon */
+.cc-card__nfc {
+  position: absolute;
+  top: 16%;
+  left: 20%;
+  z-index: 3;
+  font-size: 0.72rem;
+  color: rgba(248, 250, 252, 0.6);
+  opacity: 0.7;
+}
+
+/* Card content area */
+.cc-card__body {
+  position: absolute;
+  inset: 0;
+  padding: 6% 6% 5%;
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  gap: 4%;
+  z-index: 4;
+}
+
+/* Top row: bank name + network logo */
+.cc-card__topline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cc-card__bank {
+  font-size: clamp(0.72rem, 1.8vw, 0.92rem);
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  text-shadow: 0 1px 4px rgba(2, 6, 23, 0.3);
+}
+
+.cc-card__network {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.cc-card__network img {
+  height: clamp(16px, 2.5vw, 26px);
+  width: auto;
+  max-width: 60px;
+  object-fit: contain;
+  filter: drop-shadow(0 1px 3px rgba(2, 6, 23, 0.25));
+}
+
+.cc-card__network-text {
+  font-size: clamp(0.58rem, 1.4vw, 0.76rem);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(248, 250, 252, 0.9);
+  text-shadow: 0 1px 3px rgba(2, 6, 23, 0.3);
+}
+
+/* Card number */
+.cc-card__number {
+  align-self: end;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: clamp(0.6rem, 1.4vw, 0.76rem);
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  color: rgba(248, 250, 252, 0.88);
+  text-shadow: 0 1px 4px rgba(2, 6, 23, 0.3);
+}
+
+.cc-card__number-dots {
+  display: flex;
+  gap: 2px;
+  font-size: 1.1em;
+}
+
+/* Statement / bill amount */
+.cc-card__statement {
+  display: flex;
+  flex-direction: column;
+  gap: 2%;
+}
+
+.cc-card__statement-label {
+  font-size: clamp(0.52rem, 1.2vw, 0.64rem);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(226, 232, 240, 0.78);
+}
+
+.cc-card__statement-value {
+  font-size: clamp(0.88rem, 2.2vw, 1.2rem);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  text-shadow: 0 1px 4px rgba(2, 6, 23, 0.2);
+}
+
+/* Footer row: due date + outstanding */
+.cc-card__footer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cc-card__footer-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2%;
+}
+
+.cc-card__footer-item:last-child {
+  text-align: right;
+}
+
+.cc-card__footer-label {
+  font-size: clamp(0.5rem, 1.1vw, 0.6rem);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(226, 232, 240, 0.72);
+}
+
+.cc-card__footer-value {
+  font-size: clamp(0.7rem, 1.6vw, 0.86rem);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: rgba(248, 250, 252, 0.95);
+  text-shadow: 0 1px 3px rgba(2, 6, 23, 0.25);
+}
+
+/* ================================================================
+   CREDIT CARD UTILIZATION BAR
+   (displayed below or on the card)
+   ================================================================ */
+.cc-utilization {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.cc-utilization__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cc-utilization__label {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--color-muted);
+}
+
+.cc-utilization__pct {
+  font-size: 0.74rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.cc-utilization__pct.low { color: var(--color-success); }
+.cc-utilization__pct.medium { color: var(--color-warning); }
+.cc-utilization__pct.high { color: var(--color-danger); }
+
+.cc-utilization__bar {
+  height: 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-border) 80%, transparent);
+  overflow: hidden;
+}
+
+.cc-utilization__fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.8s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.cc-utilization__fill.low {
+  background: linear-gradient(90deg, var(--color-success), #22c55e);
+}
+
+.cc-utilization__fill.medium {
+  background: linear-gradient(90deg, var(--color-warning), #f59e0b);
+}
+
+.cc-utilization__fill.high {
+  background: linear-gradient(90deg, var(--color-warning), var(--color-danger));
+}
+
+.cc-utilization__detail {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  color: var(--color-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ================================================================
+   BILL STATEMENT TIMELINE
+   ================================================================ */
+.bill-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  position: relative;
+  padding-left: 20px;
+}
+
+.bill-timeline::before {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: linear-gradient(
+    180deg,
+    var(--color-primary),
+    color-mix(in srgb, var(--color-primary) 30%, var(--color-border))
+  );
+}
+
+.bill-timeline__item {
+  position: relative;
+  padding: 10px 0 10px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 60%, transparent);
+  transition: background var(--transition-fast);
+}
+
+.bill-timeline__item:last-child {
+  border-bottom: none;
+}
+
+.bill-timeline__item:hover {
+  background: color-mix(in srgb, var(--color-primary) 5%, transparent);
+  border-radius: 8px;
+}
+
+.bill-timeline__dot {
+  position: absolute;
+  left: -14px;
+  top: 14px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  border: 2px solid var(--color-surface-strong);
+  box-shadow: 0 0 0 2px var(--color-primary);
+}
+
+.bill-timeline__dot.paid {
+  background: var(--color-success);
+  box-shadow: 0 0 0 2px var(--color-success);
+}
+
+.bill-timeline__dot.overdue {
+  background: var(--color-danger);
+  box-shadow: 0 0 0 2px var(--color-danger);
+}
+
+.bill-timeline__date {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 3px;
+}
+
+.bill-timeline__amount {
+  font-size: 0.96rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
+
+.bill-timeline__meta {
+  font-size: 0.72rem;
+  color: var(--color-muted);
+  margin-top: 2px;
+}
+
+/* ================================================================
+   PAYMENT STATUS BADGE — animated
+   ================================================================ */
+.payment-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.payment-status.paid {
+  background: var(--color-success-light);
+  color: var(--color-success);
+}
+
+.payment-status.unpaid {
+  background: var(--color-danger-light);
+  color: var(--color-danger);
+}
+
+.payment-status.partial {
+  background: var(--color-warning-light);
+  color: var(--color-warning);
+}
+
+.payment-status.pending {
+  background: var(--color-info-light);
+  color: var(--color-info);
+}
+
+.payment-status__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.payment-status.paid .payment-status__dot {
+  animation: status-pulse-green 2s ease-in-out infinite;
+}
+
+.payment-status.unpaid .payment-status__dot {
+  animation: status-pulse-red 2s ease-in-out infinite;
+}
+
+@keyframes status-pulse-green {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-success) 45%, transparent); }
+  50% { box-shadow: 0 0 0 4px transparent; }
+}
+
+@keyframes status-pulse-red {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-danger) 45%, transparent); }
+  50% { box-shadow: 0 0 0 4px transparent; }
+}
+
+/* ================================================================
+   CREDIT CARD NAV ITEM — enhanced active state
+   ================================================================ */
+.credit-card-nav__item {
+  transition: transform var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.credit-card-nav__item:hover {
+  transform: translateX(3px);
+  border-color: color-mix(in srgb, var(--color-primary) 35%, transparent);
+}
+
+.credit-card-nav__item.is-active {
+  position: relative;
+  overflow: hidden;
+}
+
+.credit-card-nav__item.is-active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--color-primary);
+  border-radius: 0 2px 2px 0;
+}
+
+/* ================================================================
+   EMI BREAKDOWN — visual enhancement
+   ================================================================ */
+.credit-card-emi-block {
+  transition: transform var(--transition-fast);
+}
+
+.credit-card-emi-block:hover {
+  transform: translateY(-1px);
+}
+
+.credit-card-emi-table tbody tr {
+  transition: background var(--transition-fast);
+}
+
+.credit-card-emi-table tbody tr:hover td {
+  background: color-mix(in srgb, var(--color-primary) 6%, transparent);
+}
+
