@@ -33,6 +33,7 @@ record_status() {
 health_check() {
   attempt=5
   while [ "$attempt" -le "$HEALTH_ATTEMPTS" ]; do
+    log "Performing health check attempt ${attempt}/${HEALTH_ATTEMPTS}..."
     response="$(curl --silent --show-error --max-time 20 "$HEALTH_URL" || true)"
     if [ "$response" = "$HEALTH_EXPECTED" ]; then
       log "Health check passed on attempt ${attempt}/${HEALTH_ATTEMPTS}."
