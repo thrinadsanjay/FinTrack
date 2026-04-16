@@ -56,7 +56,7 @@ services:
       - "8000:8000"
     volumes:
       - app_logs:/fintracker/logs
-      - app_backups:/fintracker/backups
+      - ./backups:/fintracker/backups
     environment:
       FT_LOG_DIR: /fintracker/logs
       FT_BACKUP_DESTINATION: ${FT_BACKUP_DESTINATION:-/fintracker/backups}

@@ -24,7 +24,7 @@
   {% set local_open = true %}
 {% endif %}
 {% set phone_country = (query.get('country') or query.get('telegram_country') or auth_cfg.get('default_telegram_country') or 'IN')|upper %}
-{% set phone_local = query.get('phone_local') or query.get('phone') or query.get('mobile') or '' %}
+{% set phone_local = query.get('phone_local') or query.get('mobile_local') or '' %}
 <div class="login-page" data-login-page data-login-state="{{ login_state }}" data-login-error="{{ error_code }}">
   <section class="login-layout">
     <aside class="login-brand" aria-hidden="true">
@@ -60,10 +60,10 @@
       <div class="login-banner login-banner--error">SSO is enabled but Keycloak is not fully configured. Set Keycloak URL, realm, and client ID.</div>
       {% endif %}
 
-      {% if info_message %}
-      <div class="login-banner login-banner--success">{{ info_message }}</div>
-      {% elif error_code %}
+      {% if error_code %}
       <div class="login-banner login-banner--error">{{ info_message or query.get('msg') or 'Login failed. Please try again.' }}</div>
+      {% elif info_message %}
+      <div class="login-banner login-banner--success">{{ info_message }}</div>
       {% endif %}
 
       {% if local_enabled or telegram_enabled %}

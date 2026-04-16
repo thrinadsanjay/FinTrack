@@ -454,3 +454,127 @@ body {
     padding-bottom: 72px;
   }
 }
+
+/* ================================================================
+   NAVBAR ENHANCEMENTS — polished desktop nav links
+   ================================================================ */
+
+/* Smooth hover on desktop nav links */
+.nav-links a {
+  position: relative;
+  transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+
+/* Underline indicator on active + hover */
+.nav-links a.active {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* Notification count badge pop animation */
+.notif-count {
+  animation: badge-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes badge-pop {
+  from { transform: scale(0); }
+  to { transform: scale(1); }
+}
+
+/* Refined notification item */
+.notif-item {
+  transition: background 0.15s ease, border-color 0.15s ease;
+  border-left: 3px solid rgba(148, 163, 184, 0.3);
+}
+
+.notif-item.notif-info { border-left-color: #60a5fa; }
+.notif-item.notif-success { border-left-color: #4ade80; }
+.notif-item.notif-warning { border-left-color: #fbbf24; }
+.notif-item.notif-critical { border-left-color: #fb7185; }
+
+/* Profile avatar initial letter with gradient */
+.profile-btn .avatar {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: #fff;
+  font-weight: 800;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+}
+
+/* Smooth profile menu transition */
+.profile-menu {
+  transform-origin: top right;
+  transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.profile-menu.open {
+  transform: translateY(0) scale(1);
+}
+
+/* Profile menu link enhancements */
+.profile-link {
+  transition: background 0.15s ease, color 0.15s ease, padding-left 0.15s ease;
+}
+
+.profile-link:hover {
+  padding-left: 14px;
+}
+
+/* ================================================================
+   MOBILE BOTTOM NAV — polished active state
+   ================================================================ */
+@media (max-width: 768px) {
+  [data-mobile-nav] a {
+    transition: color 0.15s ease, transform 0.15s ease;
+  }
+
+  [data-mobile-nav] a:active {
+    transform: scale(0.92);
+  }
+
+  /* Active indicator top line */
+  [data-mobile-nav] a.active {
+    position: relative;
+  }
+
+  [data-mobile-nav] a.active::before {
+    content: "";
+    position: absolute;
+    top: -1px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 22px;
+    height: 3px;
+    background: #60a5fa;
+    border-radius: 0 0 3px 3px;
+  }
+
+  /* Add button pulse on active page */
+  [data-mobile-nav] .add-btn {
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+  }
+
+  [data-mobile-nav] .add-btn:hover {
+    transform: translateY(-2px) scale(1.05);
+    box-shadow: 0 12px 24px rgba(96, 165, 250, 0.35);
+  }
+}
+
+/* ================================================================
+   DROPDOWN OPEN ANIMATION
+   ================================================================ */
+@keyframes dropdown-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.notif-panel.open,
+.profile-menu.open {
+  animation: dropdown-enter 0.22s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+

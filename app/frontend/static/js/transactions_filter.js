@@ -19,10 +19,15 @@ document.addEventListener("DOMContentLoaded", () => {
   reset(categorySelect, "All");
   reset(subcategorySelect, "All");
 
+  function normalizeCategoryType(type) {
+    return type === "card_payment" ? "transfer" : type;
+  }
+
   async function loadCategories(type, selectedCategory) {
     if (!type) return;
 
-    const res = await fetch(`/api/categories?type=${type}`);
+    const categoryType = normalizeCategoryType(type);
+    const res = await fetch(`/api/categories?type=${categoryType}`);
     const data = await res.json();
 
     reset(categorySelect, "All");
@@ -41,8 +46,9 @@ document.addEventListener("DOMContentLoaded", () => {
   async function loadSubcategories(type, category, selectedSub) {
     if (!type || !category) return;
 
+    const categoryType = normalizeCategoryType(type);
     const res = await fetch(
-      `/api/categories/${category}/subcategories?type=${type}`
+      `/api/categories/${category}/subcategories?type=${categoryType}`
     );
     const data = await res.json();
 
@@ -127,6 +133,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (filter === "transfers") {
         params.set("tx_type", "transfer");
+      }
+
+      if (filter === "card-payments") {
+        params.set("tx_type", "card_payment");
       }
 
       applyQuery(params);

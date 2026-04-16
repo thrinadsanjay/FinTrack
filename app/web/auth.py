@@ -42,7 +42,13 @@ from app.services.passkeys import (
     verify_authentication,
 )
 from app.services.users import count_active_users_total, update_last_login, get_user_by_mobile_any
-from app.helpers.phone import normalize_phone_number
+from app.helpers.phone import (
+    country_code_from_iso,
+    normalize_country_code,
+    normalize_country_iso,
+    normalize_local_number,
+    normalize_phone_number,
+)
 from app.web.templates import templates
 
 router = APIRouter()
@@ -51,6 +57,7 @@ PASSKEY_REAUTH_SESSION_KEY = "passkey_reauth_pending"
 PASSKEY_CHALLENGE_TTL_SECONDS = 5 * 60
 
 TELEGRAM_LOGIN_OTP_TTL_MINUTES = 10
+TELEGRAM_LOGIN_OTP_MAX_ATTEMPTS = 3
 TELEGRAM_LOGIN_PHONE_REGEX = re.compile(r"^\+?[0-9]{8,15}$")
 TELEGRAM_LOGIN_OTP_REGEX = re.compile(r"^\d{6}$")
 
@@ -71,6 +78,56 @@ async def _sync_user_metrics_on_logout(user_id: str | None):
         set_total_users(await count_active_users_total())
     except Exception:
         pass
+
+
+def _telegram_phone_state(
+    *,
+    phone: str = "",
+    mobile: str = "",
+    country: str = "",
+    telegram_country: str = "",
+    country_code: str = "",
+    phone_local: str = "",
+    mobile_local: str = "",
+    default_country_iso: str = "IN",
+) -> tuple[str, str, str]:
+    country_iso = normalize_country_iso(country or telegram_country or default_country_iso)
+    dial_code = normalize_country_code(country_code or country_code_from_iso(country_iso))
+    local_value = normalize_local_number(phone_local or mobile_local)
+    normalized_phone = normalize_phone_number(
+        mobile=phone or mobile,
+        country_code=dial_code,
+        local_number=local_value,
+        default_country_iso=default_country_iso,
+    )
+    if not local_value and normalized_phone:
+        phone_digits = re.sub(r"[^0-9]", "", normalized_phone)
+        dial_digits = re.sub(r"[^0-9]", "", dial_code)
+        local_value = phone_digits[len(dial_digits):] if phone_digits.startswith(dial_digits) else phone_digits
+    return normalized_phone, country_iso, local_value
+
+
+def _login_redirect_with_phone(
+    *,
+    auth: str,
+    error: str | None = None,
+    msg: str | None = None,
+    phone: str = "",
+    country_iso: str = "IN",
+    phone_local: str = "",
+) -> RedirectResponse:
+    params: dict[str, str] = {"auth": auth}
+    if error:
+        params["error"] = error
+    if msg:
+        params["msg"] = msg
+    if country_iso:
+        params["telegram_country"] = country_iso
+    if phone_local:
+        params["phone_local"] = phone_local
+    if phone:
+        params["mobile"] = phone
+    return RedirectResponse(f"/login?{urllib.parse.urlencode(params)}", status_code=303)
 
 
 def _callback_uri_from_request(request: Request) -> str:
@@ -637,45 +694,76 @@ async def login_oauth(request: Request, idp: str | None = None):
 @router.post("/login/telegram/send-otp")
 async def login_telegram_send_otp(
     request: Request,
+    phone: str = Form(""),
     mobile: str = Form(""),
+    country: str = Form(""),
+    telegram_country: str = Form(""),
     country_code: str = Form(""),
+    phone_local: str = Form(""),
     mobile_local: str = Form(""),
     csrf_token: str = Form(...),
 ):
     verify_csrf_token(request, csrf_token)
     auth_state = await _auth_settings_state()
+    phone, selected_country, local_value = _telegram_phone_state(
+        phone=phone,
+        mobile=mobile,
+        country=country,
+        telegram_country=telegram_country,
+        country_code=country_code,
+        phone_local=phone_local,
+        mobile_local=mobile_local,
+        default_country_iso=auth_state.get("default_telegram_country") or "IN",
+    )
     if not auth_state.get("telegram_enabled"):
         msg = urllib.parse.quote_plus("Telegram login is disabled by admin.")
         return RedirectResponse(f"/login?auth=failed&error=telegram_disabled&msg={msg}", status_code=303)
 
-    auth_state = await _auth_settings_state()
-    phone = normalize_phone_number(
-        mobile=mobile,
-        country_code=country_code,
-        local_number=mobile_local,
-        default_country_iso=auth_state.get("default_telegram_country") or "IN",
-    )
     if not TELEGRAM_LOGIN_PHONE_REGEX.match(phone):
-        msg = urllib.parse.quote_plus("Enter a valid mobile number.")
-        return RedirectResponse(f"/login?auth=failed&error=telegram_mobile&mobile={urllib.parse.quote_plus(phone)}&msg={msg}", status_code=303)
+        return _login_redirect_with_phone(
+            auth="failed",
+            error="telegram_mobile",
+            msg="Enter a valid mobile number.",
+            phone=phone,
+            country_iso=selected_country,
+            phone_local=local_value,
+        )
 
     admin_settings = await get_admin_settings()
     telegram_cfg = (admin_settings or {}).get("telegram") or {}
     if not telegram_cfg.get("enabled"):
-        msg = urllib.parse.quote_plus("Telegram login is disabled by admin.")
-        return RedirectResponse(f"/login?auth=failed&error=telegram_disabled&mobile={urllib.parse.quote_plus(phone)}&msg={msg}", status_code=303)
+        return _login_redirect_with_phone(
+            auth="failed",
+            error="telegram_disabled",
+            msg="Telegram login is disabled by admin.",
+            phone=phone,
+            country_iso=selected_country,
+            phone_local=local_value,
+        )
 
     bot_token = str(telegram_cfg.get("bot_token") or "").strip()
     bot_username = str(telegram_cfg.get("bot_username") or "").strip()
     if not bot_token or not bot_username:
-        msg = urllib.parse.quote_plus("Telegram bot is not configured.")
-        return RedirectResponse(f"/login?auth=failed&error=telegram_config&mobile={urllib.parse.quote_plus(phone)}&msg={msg}", status_code=303)
+        return _login_redirect_with_phone(
+            auth="failed",
+            error="telegram_config",
+            msg="Telegram bot is not configured.",
+            phone=phone,
+            country_iso=selected_country,
+            phone_local=local_value,
+        )
 
     now = datetime.now(timezone.utc)
     user = await get_user_by_mobile_any(phone)
     if not user or not str(user.get("telegram_chat_id") or "").strip():
-        msg = urllib.parse.quote_plus("Number not registered.")
-        return RedirectResponse(f"/login?auth=failed&error=telegram_no_user&mobile={urllib.parse.quote_plus(phone)}&msg={msg}", status_code=303)
+        return _login_redirect_with_phone(
+            auth="failed",
+            error="telegram_no_user",
+            msg="Number not registered.",
+            phone=phone,
+            country_iso=selected_country,
+            phone_local=local_value,
+        )
 
     chat_id = str(user.get("telegram_chat_id") or "").strip()
     telegram_username = str(user.get("telegram_username") or "").strip()
@@ -690,8 +778,14 @@ async def login_telegram_send_otp(
     try:
         await _send_telegram_message(bot_token, chat_id, text_body)
     except Exception as exc:
-        msg = urllib.parse.quote_plus(f"Failed to send OTP to Telegram: {str(exc)}")
-        return RedirectResponse(f"/login?auth=failed&error=telegram_send&mobile={urllib.parse.quote_plus(phone)}&msg={msg}", status_code=303)
+        return _login_redirect_with_phone(
+            auth="failed",
+            error="telegram_send",
+            msg=f"Failed to send OTP to Telegram: {str(exc)}",
+            phone=phone,
+            country_iso=selected_country,
+            phone_local=local_value,
+        )
 
     await db.telegram_login_verifications.update_one(
         {"mobile": phone},
@@ -712,47 +806,74 @@ async def login_telegram_send_otp(
         upsert=True,
     )
 
-    return RedirectResponse(
-        f"/login?auth=telegram_otp_sent&mobile={urllib.parse.quote_plus(phone)}",
-        status_code=303,
+    return _login_redirect_with_phone(
+        auth="telegram_otp_sent",
+        phone=phone,
+        country_iso=selected_country,
+        phone_local=local_value,
     )
 
 
 @router.post("/login/telegram/verify-otp")
 async def login_telegram_verify_otp(
     request: Request,
+    phone: str = Form(""),
     mobile: str = Form(""),
+    country: str = Form(""),
+    telegram_country: str = Form(""),
     country_code: str = Form(""),
+    phone_local: str = Form(""),
     mobile_local: str = Form(""),
     otp: str = Form(...),
     csrf_token: str = Form(...),
 ):
     verify_csrf_token(request, csrf_token)
     auth_state = await _auth_settings_state()
+    phone, selected_country, local_value = _telegram_phone_state(
+        phone=phone,
+        mobile=mobile,
+        country=country,
+        telegram_country=telegram_country,
+        country_code=country_code,
+        phone_local=phone_local,
+        mobile_local=mobile_local,
+        default_country_iso=auth_state.get("default_telegram_country") or "IN",
+    )
     if not auth_state.get("telegram_enabled"):
         msg = urllib.parse.quote_plus("Telegram login is disabled by admin.")
         return RedirectResponse(f"/login?auth=failed&error=telegram_disabled&msg={msg}", status_code=303)
 
-    auth_state = await _auth_settings_state()
-    phone = normalize_phone_number(
-        mobile=mobile,
-        country_code=country_code,
-        local_number=mobile_local,
-        default_country_iso=auth_state.get("default_telegram_country") or "IN",
-    )
     code = str(otp or "").strip()
 
     if not TELEGRAM_LOGIN_PHONE_REGEX.match(phone):
-        msg = urllib.parse.quote_plus("Enter a valid mobile number.")
-        return RedirectResponse(f"/login?auth=failed&error=telegram_mobile&mobile={urllib.parse.quote_plus(phone)}&msg={msg}", status_code=303)
+        return _login_redirect_with_phone(
+            auth="failed",
+            error="telegram_mobile",
+            msg="Enter a valid mobile number.",
+            phone=phone,
+            country_iso=selected_country,
+            phone_local=local_value,
+        )
     if not TELEGRAM_LOGIN_OTP_REGEX.match(code):
-        msg = urllib.parse.quote_plus("OTP must be a 6-digit code.")
-        return RedirectResponse(f"/login?auth=failed&error=telegram_otp&mobile={urllib.parse.quote_plus(phone)}&msg={msg}", status_code=303)
+        return _login_redirect_with_phone(
+            auth="telegram_otp_sent",
+            error="telegram_otp",
+            msg="OTP must be a 6-digit code.",
+            phone=phone,
+            country_iso=selected_country,
+            phone_local=local_value,
+        )
 
     pending = await db.telegram_login_verifications.find_one({"mobile": phone})
     if not pending:
-        msg = urllib.parse.quote_plus("No OTP request found. Please send OTP first.")
-        return RedirectResponse(f"/login?auth=failed&error=telegram_otp_missing&mobile={urllib.parse.quote_plus(phone)}&msg={msg}", status_code=303)
+        return _login_redirect_with_phone(
+            auth="failed",
+            error="telegram_otp_missing",
+            msg="No OTP request found. Please send OTP first.",
+            phone=phone,
+            country_iso=selected_country,
+            phone_local=local_value,
+        )
 
     now = datetime.now(timezone.utc)
     expires_at = pending.get("expires_at")
@@ -763,23 +884,54 @@ async def login_telegram_verify_otp(
                 expires_at = expires_at.replace(tzinfo=timezone.utc)
         except Exception:
             expires_at = None
+    elif isinstance(expires_at, datetime) and expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
     if isinstance(expires_at, datetime) and expires_at < now:
         await db.telegram_login_verifications.delete_one({"_id": pending["_id"]})
-        msg = urllib.parse.quote_plus("OTP expired. Please request a new OTP.")
-        return RedirectResponse(f"/login?auth=failed&error=telegram_otp_expired&mobile={urllib.parse.quote_plus(phone)}&msg={msg}", status_code=303)
+        return _login_redirect_with_phone(
+            auth="failed",
+            error="telegram_otp_expired",
+            msg="OTP expired. Please request a new OTP.",
+            phone=phone,
+            country_iso=selected_country,
+            phone_local=local_value,
+        )
 
     if str(pending.get("otp") or "") != code:
+        attempts = int(pending.get("attempts") or 0) + 1
         await db.telegram_login_verifications.update_one(
             {"_id": pending["_id"]},
-            {"$inc": {"attempts": 1}, "$set": {"updated_at": now}},
+            {"$set": {"attempts": attempts, "updated_at": now}},
         )
-        msg = urllib.parse.quote_plus("Invalid OTP.")
-        return RedirectResponse(f"/login?auth=failed&error=telegram_otp_invalid&mobile={urllib.parse.quote_plus(phone)}&msg={msg}", status_code=303)
+        if attempts >= TELEGRAM_LOGIN_OTP_MAX_ATTEMPTS:
+            await db.telegram_login_verifications.delete_one({"_id": pending["_id"]})
+            return _login_redirect_with_phone(
+                auth="failed",
+                error="telegram_otp_locked",
+                msg="Invalid OTP 3 times. Please login again.",
+                phone=phone,
+                country_iso=selected_country,
+                phone_local="",
+            )
+        return _login_redirect_with_phone(
+            auth="telegram_otp_sent",
+            error="telegram_otp_invalid",
+            msg=f"Invalid OTP. {TELEGRAM_LOGIN_OTP_MAX_ATTEMPTS - attempts} attempt(s) left.",
+            phone=phone,
+            country_iso=selected_country,
+            phone_local=local_value,
+        )
 
     user = await get_user_by_mobile_any(phone)
     if not user:
-        msg = urllib.parse.quote_plus("No account found for this number. Link Telegram from profile first.")
-        return RedirectResponse(f"/login?auth=failed&error=telegram_no_user&mobile={urllib.parse.quote_plus(phone)}&msg={msg}", status_code=303)
+        return _login_redirect_with_phone(
+            auth="failed",
+            error="telegram_no_user",
+            msg="No account found for this number. Link Telegram from profile first.",
+            phone=phone,
+            country_iso=selected_country,
+            phone_local=local_value,
+        )
 
     if user.get("deleted_at") is not None or not user.get("is_active", True):
         request.session.clear()

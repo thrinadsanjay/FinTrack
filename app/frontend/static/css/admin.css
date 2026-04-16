@@ -2,34 +2,43 @@
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
   gap: 14px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .admin-sidebar {
   position: sticky;
   top: calc(var(--page-sticky-top) + 6px);
-  background: linear-gradient(170deg, color-mix(in srgb, var(--color-primary) 16%, var(--color-surface)), var(--color-surface));
+  /* Full height: sidebar stretches to match the content column */
+  height: calc(100dvh - var(--page-viewport-offset) - 12px);
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(170deg, color-mix(in srgb, var(--color-primary) 18%, var(--color-surface)), color-mix(in srgb, var(--color-surface-strong) 84%, transparent));
   border: 1px solid var(--color-border);
-  border-radius: 14px;
-  padding: 14px;
+  border-radius: 18px;
+  padding: 16px;
+  box-shadow: 0 18px 34px color-mix(in srgb, var(--color-shadow) 56%, transparent);
+  backdrop-filter: blur(10px);
+  overflow: hidden;
 }
 
 .admin-brand {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
+  flex-shrink: 0;
 }
 
 .admin-badge {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
   display: grid;
   place-items: center;
   font-weight: 800;
   color: #fff;
   background: linear-gradient(135deg, #0f766e, #0891b2);
+  box-shadow: 0 14px 26px rgba(8, 145, 178, 0.24);
 }
 
 .admin-brand h2 {
@@ -46,6 +55,11 @@
   display: grid;
   gap: 8px;
   align-content: start;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(121, 147, 179, 0.4) transparent;
 }
 
 .admin-nav > a,
@@ -53,12 +67,13 @@
   display: block;
   text-decoration: none;
   color: var(--color-text);
-  background: color-mix(in srgb, var(--color-surface) 86%, transparent);
+  background: color-mix(in srgb, var(--color-surface) 88%, transparent);
   border: 1px solid color-mix(in srgb, var(--color-border) 80%, transparent);
-  border-radius: 10px;
-  padding: 9px 10px;
+  border-radius: 12px;
+  padding: 10px 12px;
   font-size: 0.9rem;
-  font-weight: 600;
+  font-weight: 700;
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
 }
 
 .admin-nav > a:hover,
@@ -67,6 +82,8 @@
 .admin-nav-settings-group > a.active {
   border-color: color-mix(in srgb, var(--color-primary) 58%, transparent);
   background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  transform: translateX(2px);
+  box-shadow: 0 10px 18px color-mix(in srgb, var(--color-shadow) 34%, transparent);
 }
 
 .admin-nav-settings-group {
@@ -153,11 +170,12 @@
   position: sticky;
   top: var(--page-sticky-top);
   z-index: 25;
-  padding: 10px 12px;
+  padding: 14px 16px;
   border: 1px solid color-mix(in srgb, var(--color-border) 76%, transparent);
-  border-radius: 12px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--color-surface-strong) 72%, transparent), color-mix(in srgb, var(--color-surface) 40%, transparent));
-  backdrop-filter: blur(8px);
+  border-radius: 16px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-surface-strong) 78%, transparent), color-mix(in srgb, var(--color-surface) 48%, transparent));
+  backdrop-filter: blur(10px);
+  box-shadow: 0 14px 28px color-mix(in srgb, var(--color-shadow) 26%, transparent);
 }
 
 .admin-header h1 {
@@ -182,10 +200,11 @@
 .metric-card,
 .status-card,
 .admin-panel {
-  background: var(--color-surface);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-surface-strong) 90%, transparent), color-mix(in srgb, var(--color-surface) 88%, transparent));
   border: 1px solid var(--color-border);
-  border-radius: 12px;
-  padding: 12px;
+  border-radius: 16px;
+  padding: 14px;
+  box-shadow: 0 16px 30px color-mix(in srgb, var(--color-shadow) 34%, transparent);
 }
 
 .metric-card h3 {
@@ -326,12 +345,15 @@
 
 .overview-metric-card {
   display: grid;
-  gap: 4px;
+  gap: 6px;
+  min-height: 138px;
+  align-content: start;
 }
 
 .overview-metric-card span {
   color: var(--color-muted);
   font-size: 0.76rem;
+  line-height: 1.35;
 }
 
 .overview-card-link {
@@ -522,11 +544,12 @@
 
 .overview-trend-card {
   display: grid;
-  gap: 6px;
-  padding: 10px;
+  gap: 8px;
+  padding: 12px;
   border: 1px solid color-mix(in srgb, var(--color-border) 76%, transparent);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--color-surface-strong) 84%, transparent);
+  border-radius: 14px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-surface-strong) 90%, transparent), color-mix(in srgb, var(--color-surface) 84%, transparent));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .overview-trend-card span {
@@ -674,9 +697,10 @@
 
 .settings-category-card {
   border: 1px solid color-mix(in srgb, var(--color-border) 78%, transparent);
-  border-radius: 10px;
-  padding: 10px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--color-surface-strong) 84%, transparent), color-mix(in srgb, var(--color-surface) 95%, transparent));
+  border-radius: 14px;
+  padding: 12px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-surface-strong) 88%, transparent), color-mix(in srgb, var(--color-surface) 95%, transparent));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .settings-category-card h3 {
@@ -701,10 +725,10 @@
 
 .settings-group {
   border: 1px solid color-mix(in srgb, var(--color-border) 78%, transparent);
-  border-radius: 10px;
-  padding: 10px;
-  background: color-mix(in srgb, var(--color-surface) 97%, transparent);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+  border-radius: 14px;
+  padding: 12px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-surface) 98%, transparent), color-mix(in srgb, var(--color-surface-strong) 88%, transparent));
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, transform 0.18s ease;
 }
 
 .settings-group.is-editing {
@@ -717,6 +741,7 @@
   border-color: color-mix(in srgb, var(--color-primary) 62%, transparent);
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-primary) 18%, transparent);
   background: color-mix(in srgb, var(--color-primary) 6%, var(--color-surface));
+  transform: translateY(-1px);
 }
 
 .settings-group-head {
@@ -1182,6 +1207,9 @@
 
 .table-wrap {
   overflow: auto;
+  border: 1px solid color-mix(in srgb, var(--color-border) 78%, transparent);
+  border-radius: 14px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-surface-strong) 90%, transparent), color-mix(in srgb, var(--color-surface) 86%, transparent));
 }
 
 table {
@@ -1193,15 +1221,31 @@ table {
 th,
 td {
   text-align: left;
-  padding: 10px 8px;
+  padding: 11px 10px;
   border-bottom: 1px solid color-mix(in srgb, var(--color-border) 78%, transparent);
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   vertical-align: middle;
 }
 
 th {
   color: var(--color-muted);
-  font-weight: 700;
+  font-weight: 800;
+  font-size: 0.74rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  background: color-mix(in srgb, var(--color-surface-strong) 94%, transparent);
+}
+
+tbody tr {
+  transition: background 0.18s ease;
+}
+
+tbody tr:nth-child(even) {
+  background: color-mix(in srgb, var(--color-primary) 3%, transparent);
+}
+
+tbody tr:hover {
+  background: color-mix(in srgb, var(--color-primary) 7%, transparent);
 }
 
 .action-row {
@@ -1215,10 +1259,18 @@ th {
   background: color-mix(in srgb, var(--color-surface) 88%, transparent);
   color: var(--color-text);
   padding: 8px 12px;
-  border-radius: 10px;
-  font-size: 0.9rem;
+  border-radius: 12px;
+  font-size: 0.88rem;
   font-weight: 700;
   cursor: pointer;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+
+.btn-action:hover,
+.btn-action:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 22px color-mix(in srgb, var(--color-shadow) 30%, transparent);
+  border-color: color-mix(in srgb, var(--color-primary) 42%, transparent);
 }
 
 .btn-action.ok {
@@ -1286,9 +1338,10 @@ th {
 .support-users,
 .support-thread {
   border: 1px solid color-mix(in srgb, var(--color-border) 80%, transparent);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--color-surface) 98%, transparent);
+  border-radius: 16px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-surface) 98%, transparent), color-mix(in srgb, var(--color-surface-strong) 88%, transparent));
   min-height: 0;
+  box-shadow: 0 14px 28px color-mix(in srgb, var(--color-shadow) 28%, transparent);
 }
 
 .support-users {
@@ -1317,11 +1370,12 @@ th {
   text-align: left;
   border: 1px solid color-mix(in srgb, var(--color-border) 82%, transparent);
   background: color-mix(in srgb, var(--color-surface) 96%, transparent);
-  border-radius: 10px;
-  padding: 10px;
+  border-radius: 12px;
+  padding: 11px;
   display: grid;
-  gap: 2px;
+  gap: 3px;
   cursor: pointer;
+  transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
 }
 
 .support-user-btn strong {
@@ -1346,6 +1400,14 @@ th {
 .support-user-btn.active {
   border-color: color-mix(in srgb, var(--color-primary) 60%, transparent);
   background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  box-shadow: 0 12px 22px color-mix(in srgb, var(--color-shadow) 24%, transparent);
+}
+
+.support-user-btn:hover,
+.support-user-btn:focus-visible {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--color-primary) 42%, transparent);
+  box-shadow: 0 12px 22px color-mix(in srgb, var(--color-shadow) 18%, transparent);
 }
 
 .support-badge {
@@ -1365,8 +1427,9 @@ th {
 }
 
 .support-thread-head {
-  padding: 10px 12px;
+  padding: 12px 14px;
   border-bottom: 1px solid color-mix(in srgb, var(--color-border) 78%, transparent);
+  background: color-mix(in srgb, var(--color-surface-strong) 90%, transparent);
 }
 
 .support-thread-head h3 {
@@ -1391,9 +1454,10 @@ th {
 
 .support-message {
   max-width: min(72%, 700px);
-  border-radius: 10px;
+  border-radius: 14px;
   border: 1px solid color-mix(in srgb, var(--color-border) 78%, transparent);
-  padding: 8px 10px;
+  padding: 10px 12px;
+  box-shadow: 0 10px 20px color-mix(in srgb, var(--color-shadow) 18%, transparent);
 }
 
 .support-message strong {
@@ -1461,10 +1525,12 @@ th {
 @media (max-width: 980px) {
   .page-admin {
     grid-template-columns: 1fr;
+    gap: 12px;
   }
 
   .admin-sidebar {
     position: static;
+    padding: 14px;
   }
 
   .admin-settings-subnav {
@@ -1498,6 +1564,33 @@ th {
   .settings-grid.three,
   .overview-insight-grid {
     grid-template-columns: 1fr;
+  }
+
+  .admin-header,
+  .metric-card,
+  .status-card,
+  .admin-panel,
+  .settings-group,
+  .settings-category-card,
+  .support-users,
+  .support-thread {
+    padding: 11px;
+    border-radius: 14px;
+  }
+
+  .admin-nav > a,
+  .admin-nav-settings-group > a {
+    padding: 9px 10px;
+  }
+
+  .table-wrap {
+    border-radius: 12px;
+  }
+
+  th,
+  td {
+    padding: 10px 8px;
+    font-size: 0.84rem;
   }
 
   .panel-head {

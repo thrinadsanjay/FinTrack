@@ -37,6 +37,15 @@ async def transactions_page(request: Request):
 
     accounts = await get_accounts(user["user_id"])
     notifications = await get_user_notifications(user["user_id"])
+    tx_defaults = {
+        "tx_type": request.query_params.get("tx_type", ""),
+        "account_id": request.query_params.get("account_id", ""),
+        "target_account_id": request.query_params.get("target_account_id", ""),
+        "description": request.query_params.get("description", ""),
+        "mode": request.query_params.get("mode", ""),
+        "amount": request.query_params.get("amount", ""),
+        "credit_bill_id": request.query_params.get("credit_bill_id", ""),
+    }
 
     return templates.TemplateResponse(
         request=request,
@@ -47,6 +56,7 @@ async def transactions_page(request: Request):
             "accounts": accounts,
             "notifications": notifications,
             "active_page": "addtransaction",
+            "tx_defaults": tx_defaults,
         },
     )
 
@@ -63,6 +73,7 @@ async def add_transaction(
     amount: float = Form(...),
     description: str = Form(""),
     target_account_id: str | None = Form(None),
+    credit_bill_id: str | None = Form(None),
     is_recurring: bool = Form(False),
     frequency: str | None = Form(None),
     interval: int = Form(1),
@@ -77,7 +88,7 @@ async def add_transaction(
         if not frequency:
             raise ValidationError("Recurring frequency is required")
 
-    if tx_type == "transfer" and not target_account_id:
+    if tx_type in {"transfer", "card_payment"} and not target_account_id:
         raise ValidationError("Target account is required for transfers")
 
     try:
@@ -87,6 +98,8 @@ async def add_transaction(
             target_account_id=target_account_id,
             amount=amount,
             tx_type=tx_type,
+            transfer_kind="card_payment" if tx_type == "card_payment" else None,
+            credit_bill_id=credit_bill_id,
             mode=mode,
             category_code=category_code,
             subcategory_code=subcategory_code,
@@ -110,6 +123,7 @@ async def add_transaction(
                 "accounts": accounts,
                 "notifications": notifications,
                 "active_page": "addtransaction",
+                "tx_defaults": {},
                 "error": exc.detail,
             },
             status_code=exc.status_code,
@@ -125,6 +139,7 @@ async def add_transaction(
                 "accounts": accounts,
                 "notifications": notifications,
                 "active_page": "addtransaction",
+                "tx_defaults": {},
                 "error": "Unable to add transaction right now. Please retry.",
             },
             status_code=500,

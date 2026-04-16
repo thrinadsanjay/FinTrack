@@ -7,178 +7,586 @@
 {% set local_account_types = account_types %}
 <script src="/static/js/accounts.js" defer></script>
 <section class="page page-accounts">
-<div class="title-row">
-      <div>
-        <h1>Accounts</h1>
-      </div>
+  <div class="title-row">
+    <div>
+      <h1>Accounts</h1>
+    </div>
   </div>
-<div class="accounts-page">
-  <div class="accounts-grid">
-    <div class="card account-card">
-      <button type="button" class="account-toggle" id="accountToggle">
-        Add New Account
-        <span class="chev">▾</span>
-      </button>
-      <form method="post" action="/accounts/add" class="account-form account-form-collapsed" id="accountForm" data-inline-success-form data-inline-success-message="Account added">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
-        <div class="account-form-grid">
-          <div class="account-field">
-            <label>Bank Name</label>
-            <input type="text" name="bank_name" id="bank_name" required>
-          </div>
-          
-          <div class="account-field">
-            <label>Account Type</label>
-            <select name="acc_type" id="acc_type" required>
-              <option value="" hidden selected>Select Type</option>
-              {% for val, label in local_account_types %}
-                <option value="{{ val }}">{{ label }}</option>
-              {% endfor %}
-            </select>
+
+  <div class="accounts-page">
+    <div class="accounts-grid">
+      <div class="card account-card">
+        <button type="button" class="account-toggle" id="accountToggle">
+          Add New Account
+          <span class="chev">▾</span>
+        </button>
+
+        <form method="post" action="/accounts/add" class="account-form account-form-collapsed" id="accountForm" data-inline-success-form data-inline-success-message="Account added">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+
+          <div class="account-form-grid account-form-grid--primary">
+            <div class="account-field">
+              <label>Bank Name</label>
+              <input type="text" name="bank_name" id="bank_name" required>
+            </div>
+
+            <div class="account-field">
+              <label>Account Type</label>
+              <select name="acc_type" id="acc_type" required>
+                <option value="" hidden selected>Select Type</option>
+                {% for val, label in local_account_types %}
+                  <option value="{{ val }}">{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="account-field">
+              <label>Account Name</label>
+              <input type="text" name="name" id="account_name" placeholder="Unique Identifier">
+            </div>
           </div>
 
-          <div class="account-field">
-            <label>Account Name</label>
-            <input type="text" name="name" id="account_name" placeholder="Unique Identifier">
+          <div class="account-setup-row" id="accountSetupRow" hidden>
+            <div class="account-setup-summary" id="accountSetupSummary">
+              Select an account type to configure the required details.
+            </div>
+            <button type="button" class="account-secondary" id="accountSetupTrigger">Configure</button>
           </div>
 
-          <div class="account-field">
-            <label>Opening Balance</label>
-            <input type="number" step="0.01" name="balance" value="0" required>
+          <input type="hidden" name="balance" id="balance_hidden" value="0">
+
+          <div class="account-modal-backdrop is-hidden" id="accountModalBackdrop"></div>
+
+          <section class="account-modal is-hidden" id="balanceModal" aria-hidden="true">
+            <div class="account-modal__header">
+              <div>
+                <h3>Account Setup</h3>
+                <p>Set the opening balance for this account.</p>
+              </div>
+              <button type="button" class="account-modal__close" data-close-modal="balanceModal">×</button>
+            </div>
+            <div class="account-modal__body">
+              <div class="account-field">
+                <label>Opening Balance</label>
+                <input type="number" step="0.01" id="balance_input" value="0">
+              </div>
+            </div>
+            <div class="account-modal__actions">
+              <button type="button" class="account-secondary" data-close-modal="balanceModal">Cancel</button>
+              <button type="button" class="account-primary account-primary--inline" id="saveBalanceConfig">Save Details</button>
+            </div>
+          </section>
+
+          <section class="account-modal is-hidden" id="creditCardModal" aria-hidden="true">
+            <div class="account-modal__header">
+              <div>
+                <h3>Credit Card Setup</h3>
+                <p>Capture only the billing details you want to track now.</p>
+              </div>
+              <button type="button" class="account-modal__close" data-close-modal="creditCardModal">×</button>
+            </div>
+            <div class="account-modal__body account-modal__body--grid">
+              <div class="account-field">
+                <label>Card Type</label>
+                <select name="card_network" id="card_network">
+                  {% for val, label in card_networks %}
+                    <option value="{{ val }}" {% if val == 'visa' %}selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="account-field">
+                <label>Credit Limit</label>
+                <input type="number" step="0.01" name="credit_limit" id="credit_limit" placeholder="50000">
+              </div>
+              <div class="account-field">
+                <label>Statement Balance</label>
+                <input type="number" step="0.01" name="statement_balance" id="statement_balance" placeholder="0">
+              </div>
+              <div class="account-field">
+                <label>Billing Cycle Start Day</label>
+                <input type="number" min="1" max="31" step="1" name="billing_cycle_start_day" id="billing_cycle_start_day" placeholder="1">
+              </div>
+              <div class="account-field">
+                <label>Billing Cycle End Day</label>
+                <input type="number" min="1" max="31" step="1" name="billing_cycle_end_day" id="billing_cycle_end_day" placeholder="30">
+              </div>
+              <div class="account-field">
+                <label>Due Day</label>
+                <input type="number" min="1" max="31" step="1" name="due_day" id="due_day" placeholder="18">
+              </div>
+            </div>
+            <p class="account-inline-note">Use Pay Bill from Credit Card Management to open a prefilled card-payment flow.</p>
+            <div class="account-modal__actions">
+              <button type="button" class="account-secondary" data-close-modal="creditCardModal">Cancel</button>
+              <button type="button" class="account-primary account-primary--inline" id="saveCreditCardConfig">Save Details</button>
+            </div>
+          </section>
+
+          {% set alert_error = error %}
+          {% include "partials/form_alert.html" %}
+
+          <button type="submit" class="account-primary" data-inline-success-message="Account added">Add Account</button>
+        </form>
+      </div>
+
+      <div class="card account-card account-table-card">
+        <div class="account-card-head">
+          <div>
+            <h3 class="account-card-title">Your Accounts</h3>
+            <p>Only asset and cash accounts are listed here. Credit cards are managed separately below.</p>
           </div>
         </div>
-        
-        {% set alert_error = error %}
-        {% include "partials/form_alert.html" %}
+        <div class="account-table">
+          <table class="accounts-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Bank</th>
+                <th>Type</th>
+                <th>Balance</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody class="accounts-tbody">
+              {% for acc in regular_accounts %}
+              <tr class="account-row">
+                <form method="post" action="/accounts/edit" data-inline-success-form>
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                  <input type="hidden" name="account_id" value="{{ acc._id }}">
 
-        <button type="submit" class="account-primary" data-inline-success-message="Account added">Add Account</button>
-      </form>
-    </div>
+                  <td data-label="Name" class="col-name">
+                    <input name="name" value="{{ acc.name }}" readonly>
+                    <input type="hidden" name="bank_name" value="{{ acc.name }}">
+                  </td>
 
-    <div class="card account-card account-table-card">
-      <h3 class="account-card-title">Your Accounts</h3>
-      <div class="account-table">
-        <table class="accounts-table">
-  <thead>
-    <tr>
-      <th>Name</th>
-      <th>Bank</th>
-      <th>Type</th>
-      <th>Balance</th>
-      <!-- <th style="width: 20px;"></th> -->
-    </tr>
-  </thead>
+                  <td data-label="Bank" class="col-bank">
+                    <input value="{{ acc.bank_name }}" readonly>
+                    <input type="hidden" name="bank_name" value="{{ acc.bank_name }}">
+                  </td>
 
-  <tbody class="accounts-tbody">
-  {% for acc in accounts %}
-  
-  <tr class="account-row">
-    <form method="post" action="/accounts/edit" data-inline-success-form>
-      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                  <td data-label="Type" class="col-type">
+                    <select disabled>
+                      {% for val, label in account_types %}
+                        <option value="{{ val }}" {% if acc.type == val %}selected{% endif %}>{{ label }}</option>
+                      {% endfor %}
+                    </select>
+                    <input type="hidden" name="acc_type" value="{{ acc.type }}">
+                  </td>
 
-      <!-- Hidden -->
-      <input type="hidden" name="account_id" value="{{ acc._id }}">
+                  <td data-label="Balance" class="col-balance">
+                    <input type="number" step="0.01" name="balance" value="{{ acc.balance | money }}" data-original="{{ acc.balance | money }}" class="editable" disabled>
+                  </td>
 
-      <!-- Name -->
-      <td data-label="Name" class="col-name">
-        <input
-          name="name"
-          value="{{ acc.name }}"
-          readonly
-        >
-        <input type="hidden" name="bank_name" value="{{ acc.name }}">
-      </td>
+                  <td data-label="Meta" class="col-meta">
+                    <span class="meta-bank">{{ acc.bank_name }}</span>
+                    <span class="meta-type">{{ acc.type }}</span>
+                    <span class="meta-balance">₹ {{ acc.balance | money }}</span>
+                  </td>
 
-      <!-- Bank -->
-      <td data-label="Bank" class="col-bank">
-        <input value="{{ acc.bank_name }}" readonly>
-        <input type="hidden" name="bank_name" value="{{ acc.bank_name }}">
-      </td>
+                  <td class="action-btns col-actions" data-label="Actions">
+                    <button type="button" class="edit-btn icon-btn" title="Edit balance">
+                      <i class="fa-solid fa-pen"></i>
+                    </button>
+                    <button type="submit" class="save-btn icon-btn" data-inline-success-message="Account saved" title="Save changes" style="display:none">
+                      <i class="fa-solid fa-check"></i>
+                    </button>
+                    <button type="button" class="cancel-btn icon-btn" title="Cancel editing" style="display: none">
+                      <i class="fa-solid fa-ban"></i>
+                    </button>
+                    <button type="submit" formaction="/accounts/delete" class="delete-btn icon-btn" data-inline-success-message="Account deleted" title="Delete account" onclick="return confirm('Delete this account?')">
+                      <i class="fa-solid fa-trash"></i>
+                    </button>
+                  </td>
+                </form>
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="5">No non-credit-card accounts yet.</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
-      <!-- Type -->
-      <td data-label="Type" class="col-type">
-        <select disabled>
-          {% for val, label in account_types %}
-            <option value="{{ val }}" {% if acc.type == val %}selected{% endif %}>
-              {{ label }}
-            </option>
-          {% endfor %}
-        </select>
-        <input type="hidden" name="acc_type" value="{{ acc.type }}">
-      </td>
+      <div class="card account-card credit-card-workspace-card">
+        <div class="account-card-head credit-card-head">
+          <div>
+            <h3 class="account-card-title">Credit Card Management</h3>
+            <p>Pick a card on the left to manage billing, EMIs, and payments without scrolling through every panel.</p>
+          </div>
+          <span class="credit-card-admin-pill">Cards</span>
+        </div>
 
-      <!-- Balance -->
-      <td data-label="Balance" class="col-balance">
-        <input
-          type="number"
-          step="0.01"
-          name="balance"
-          value="{{ acc.balance | money }}"
-          data-original="{{ acc.balance | money }}"
-          class="editable"
-          disabled
-        >
-      </td>
+        {% if credit_cards %}
+        <div class="credit-card-workspace">
+          <aside class="credit-card-nav" aria-label="Credit cards">
+            <div class="credit-card-nav__list scroll-list">
+            {% for card in credit_cards %}
+              {% set outstanding = (-card.balance) if (card.balance or 0) < 0 else 0 %}
+              {% set emi_rows = credit_card_emis.get(card._id, []) %}
+              <button type="button" class="credit-card-nav__item{% if loop.first %} is-active{% endif %}" data-card-target="{{ card._id }}" data-card-name="{{ card.name }}" data-card-statement-balance="{{ card.statement_balance or 0 }}" data-card-outstanding="{{ outstanding }}">
+                <span class="credit-card-nav__top">
+                  <span class="credit-card-nav__name">{{ card.name }}</span>
+                  <span class="credit-card-nav__count">{{ emi_rows | length }} EMI{% if emi_rows|length != 1 %}s{% endif %}</span>
+                </span>
+                <span class="credit-card-nav__bottom">
+                  <span>{{ card.bank_name }}</span>
+                  <span>₹ {{ outstanding | money }}</span>
+                </span>
+              </button>
+            {% endfor %}
+            </div>
+          </aside>
 
-      <!-- MOBILE META ROW -->
-      <td data-label="Meta" class="col-meta">
-        <span class="meta-bank">{{ acc.bank_name }}</span>
-        <span class="meta-type">{{ acc.type }}</span>
-        <span class="meta-balance">₹ {{ acc.balance | money }}</span>
-      </td>
+          <div class="credit-card-stage">
+            {% for card in credit_cards %}
+              {% set card_id = card._id|string %}
+              {% set outstanding = (-card.balance) if (card.balance or 0) < 0 else 0 %}
+              {% set emi_rows = credit_card_emis.get(card._id, []) %}
+              {% set insights = credit_card_insights.get(card_id) or {} %}
+              {% set utilization = insights.get('utilization') or {} %}
+              {% set estimated_bill = insights.get('estimated_bill') or {} %}
+              {% set latest_bill = insights.get('latest_bill') or {} %}
+              {% set recent_bills = insights.get('recent_bills') or [] %}
+              <section class="credit-card-detail{% if loop.first %} is-active{% endif %}" data-card-panel="{{ card_id }}">
+                <div class="credit-card-detail__header">
+                  <div>
+                    <h4>{{ card.name }}</h4>
+                    <p>{{ card.bank_name }} · {{ (card.card_network or 'visa') | upper }}</p>
+                  </div>
+                  <div class="credit-card-detail__menu-wrap">
+                    <button type="button" class="credit-card-detail__menu-toggle" data-card-menu-toggle aria-expanded="false" aria-controls="cardMenu-{{ card_id }}">⋯</button>
+                    <div class="credit-card-detail__menu is-hidden" id="cardMenu-{{ card_id }}" data-card-menu>
+                      <button type="button" class="credit-card-detail__menu-item" data-card-section-toggle="edit">Edit card</button>
+                      {% if not latest_bill %}
+                      <form method="post" action="/accounts/credit-card/generate-bill" class="credit-card-detail__menu-form" data-inline-success-form data-inline-success-message="Bill generated">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                        <input type="hidden" name="account_id" value="{{ card._id }}">
+                        <button type="submit" class="credit-card-detail__menu-item">Generate bill</button>
+                      </form>
+                      {% endif %}
+                      <button type="button" class="credit-card-detail__menu-item js-open-pay-modal" data-card-id="{{ card_id }}" data-card-name="{{ card.name }}" data-card-statement-balance="{{ (latest_bill.get('outstanding_amount') if latest_bill else card.statement_balance) or 0 }}" data-card-minimum-due="{{ (latest_bill.get('minimum_due') if latest_bill else ((card.statement_balance or 0) * 0.1)) or 0 }}" data-card-outstanding="{{ outstanding }}" data-card-bill-id="{{ latest_bill.get('id') if latest_bill else '' }}">Pay bill</button>
+                      <button type="button" class="credit-card-detail__menu-item js-open-emi-modal" data-card-id="{{ card_id }}" data-card-name="{{ card.name }}">Add new EMI</button>
+                      <button type="button" class="credit-card-detail__menu-item is-disabled" disabled title="Disable flow not wired yet">Disable card</button>
+                      <form method="post" action="/accounts/delete" class="credit-card-detail__menu-form" data-inline-success-form data-inline-success-message="Card deleted">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                        <input type="hidden" name="account_id" value="{{ card._id }}">
+                        <button type="submit" class="credit-card-detail__menu-item is-danger" onclick="return confirm('Delete this credit card?')">Delete card</button>
+                      </form>
+                    </div>
+                  </div>
+                </div>
 
-      <!-- Actions -->
-      <td class="action-btns col-actions" data-label="Actions">
+                <div class="credit-card-metrics credit-card-metrics--detail">
+                  <div class="credit-card-metric">
+                    <span>Outstanding</span>
+                    <strong>₹ {{ outstanding | money }}</strong>
+                  </div>
+                  <div class="credit-card-metric">
+                    <span>Statement Balance</span>
+                    <strong>₹ {{ (card.statement_balance or 0) | money }}</strong>
+                  </div>
+                  <div class="credit-card-metric">
+                    <span>Billing Cycle</span>
+                    <strong>{{ card.billing_cycle_start_day or 1 }} - {{ card.billing_cycle_end_day or 30 }}</strong>
+                  </div>
+                  <div class="credit-card-metric">
+                    <span>Due Day</span>
+                    <strong>{{ card.due_day or 5 }}</strong>
+                  </div>
+                  <div class="credit-card-metric">
+                    <span>Minimum Due</span>
+                    <strong>₹ {{ ((card.statement_balance or 0) * 0.1) | money }}</strong>
+                  </div>
+                  <div class="credit-card-metric">
+                    <span>Number of EMIs</span>
+                    <strong>{{ emi_rows | length }}</strong>
+                  </div>
+                  <div class="credit-card-metric">
+                    <span>Estimated Bill</span>
+                    <strong>₹ {{ (estimated_bill.get('estimated_amount') or 0) | money }}</strong>
+                  </div>
+                  <div class="credit-card-metric">
+                    <span>Available Limit</span>
+                    <strong>₹ {{ (utilization.get('available_limit') or 0) | money }}</strong>
+                  </div>
+                  <div class="credit-card-metric">
+                    <span>Utilization</span>
+                    <strong>{{ utilization.get('utilization_percent') or 0 }}%</strong>
+                  </div>
+                  <div class="credit-card-metric">
+                    <span>Estimated Min Due</span>
+                    <strong>₹ {{ (estimated_bill.get('minimum_due') or 0) | money }}</strong>
+                  </div>
+                  <div class="credit-card-metric">
+                    <span>Latest Bill Status</span>
+                    <strong>{{ (latest_bill.get('payment_status') or 'not generated') | replace('_', ' ') | title }}</strong>
+                  </div>
+                </div>
 
-        <button 
-          type="button" 
-          class="edit-btn icon-btn"
-          title="Edit balance"
-          > <!-- To Remove Edit Option add | style="display:none" -->
-          <i class="fa-solid fa-pen"></i>
-        </button>
+                <div class="credit-card-bill-history-block">
+                  <div class="credit-card-section-head">
+                    <h5>Bill History</h5>
+                    <span>{{ recent_bills | length }} statement{% if recent_bills|length != 1 %}s{% endif %}</span>
+                  </div>
 
-        <button
-          type="submit"
-          class="save-btn icon-btn"
-          data-inline-success-message="Account saved"
-          title="Save changes"
-          style="display:none">
-          <i class="fa-solid fa-check"></i>
-        </button>
+                  {% if recent_bills %}
+                    <div class="credit-card-emi-table-wrap">
+                      <table class="credit-card-emi-table">
+                        <thead>
+                          <tr>
+                            <th>Cycle</th>
+                            <th>Statement</th>
+                            <th>Due Date</th>
+                            <th>Bill Amount</th>
+                            <th>Min Due</th>
+                            <th>Paid</th>
+                            <th>Outstanding</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {% for bill in recent_bills %}
+                            <tr>
+                              <td>{{ bill.cycle_key or 'Current' }}</td>
+                              <td>{% if bill.statement_date %}{{ bill.statement_date | localtime(request) | dateformat }}{% else %}Not set{% endif %}</td>
+                              <td>{% if bill.due_date %}{{ bill.due_date | localtime(request) | dateformat }}{% else %}Not set{% endif %}</td>
+                              <td>₹ {{ (bill.final_amount or 0) | money }}</td>
+                              <td>₹ {{ (bill.minimum_due or 0) | money }}</td>
+                              <td>₹ {{ (bill.paid_amount or 0) | money }}</td>
+                              <td>₹ {{ (bill.outstanding_amount or 0) | money }}</td>
+                              {% set bill_status = (bill.payment_status or 'unpaid') %}
+                              <td><span class="credit-card-bill-badge credit-card-bill-badge-{{ bill_status | replace('_', '-') }}">{{ bill_status | replace('_', ' ') | title }}</span></td>
+                            </tr>
+                          {% endfor %}
+                        </tbody>
+                      </table>
+                    </div>
+                  {% else %}
+                    <div class="credit-card-empty">
+                      <p>No bill snapshots generated for this card yet.</p>
+                      <form method="post" action="/accounts/credit-card/generate-bill" class="credit-card-empty__action" data-inline-success-form data-inline-success-message="Bill generated">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                        <input type="hidden" name="account_id" value="{{ card._id }}">
+                        <button type="submit" class="account-secondary">Generate Bill</button>
+                      </form>
+                    </div>
+                  {% endif %}
+                </div>
 
-        <button
-          type="button"
-          class="cancel-btn icon-btn"
-          title="Cancel editing"
-          style="display: none">
-          <i class="fa-solid fa-ban"></i>
-        </button>
+                <form method="post" action="/accounts/credit-card/update" class="credit-card-settings-form is-collapsed" data-card-section="edit" data-inline-success-form data-inline-success-message="Credit card settings saved" hidden>
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                  <input type="hidden" name="account_id" value="{{ card._id }}">
+                  <div class="credit-card-section-head">
+                    <h5>Billing Details</h5>
+                    <span>Define the cycle and due day used for billing</span>
+                  </div>
+                  <div class="credit-card-settings-grid">
+                    <div class="account-field">
+                      <label>Card Type</label>
+                      <select name="card_network">
+                        {% for val, label in card_networks %}
+                          <option value="{{ val }}" {% if (card.card_network or 'visa') == val %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                      </select>
+                    </div>
+                    <div class="account-field">
+                      <label>Credit Limit</label>
+                      <input type="number" step="0.01" name="credit_limit" value="{{ card.credit_limit or '' }}">
+                    </div>
+                    <div class="account-field">
+                      <label>Statement Balance</label>
+                      <input type="number" step="0.01" name="statement_balance" value="{{ card.statement_balance or '' }}">
+                    </div>
+                    <div class="account-field">
+                      <label>Billing Cycle Start Day</label>
+                      <input type="number" min="1" max="31" step="1" name="billing_cycle_start_day" value="{{ card.billing_cycle_start_day or 1 }}">
+                    </div>
+                    <div class="account-field">
+                      <label>Billing Cycle End Day</label>
+                      <input type="number" min="1" max="31" step="1" name="billing_cycle_end_day" value="{{ card.billing_cycle_end_day or 30 }}">
+                    </div>
+                    <div class="account-field">
+                      <label>Due Day</label>
+                      <input type="number" min="1" max="31" step="1" name="due_day" value="{{ card.due_day or 5 }}">
+                    </div>
+                  </div>
+                  <button type="submit" class="account-secondary">Save Card Details</button>
+                </form>
 
-        <button
-          type="submit"
-          formaction="/accounts/delete"
-          class="delete-btn icon-btn"
-          data-inline-success-message="Account deleted"
-          title="Delete account"
-          onclick="return confirm('Delete this account?')">
-          <i class="fa-solid fa-trash"></i>
-        </button>
-      </td>
+                <div class="credit-card-emi-block">
+                  <div class="credit-card-section-head">
+                    <h5>EMI Tracker</h5>
+                    <span>{{ emi_rows | length }} active item{% if emi_rows|length != 1 %}s{% endif %}</span>
+                  </div>
 
-    </form>
-  </tr>
-  {% else %}
-  <tr>
-    <td colspan="5">No accounts yet</td>
-  </tr>
-  {% endfor %}
-</tbody>
-
-        </table>
+                  {% if emi_rows %}
+                    <div class="credit-card-emi-table-wrap">
+                      <table class="credit-card-emi-table">
+                        <thead>
+                          <tr>
+                            <th>Sl no</th>
+                            <th>Amount</th>
+                            <th>EMI</th>
+                            <th>Total EMI's</th>
+                            <th>Pending EMI's</th>
+                            <th>ROI</th>
+                            <th>Balance amount</th>
+                            <th></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {% for emi in emi_rows %}
+                            {% set paid_installments = emi.total_installments - emi.remaining_installments %}
+                            {% set remaining_balance = emi.monthly_amount * emi.remaining_installments %}
+                            <tr>
+                              <td>
+                                <div class="credit-card-emi-cell-head">
+                                  <strong>{{ loop.index }}</strong>
+                                  <small>{{ emi.title }}</small>
+                                </div>
+                              </td>
+                              <td>₹ {{ emi.total_amount | money }}</td>
+                              <td>₹ {{ emi.monthly_amount | money }}</td>
+                              <td>{{ emi.total_installments }}</td>
+                              <td>{{ emi.remaining_installments }}</td>
+                              <td>{{ emi.interest_rate or 0 }}%</td>
+                              <td>₹ {{ remaining_balance | money }}</td>
+                              <td class="credit-card-emi-actions">
+                                <div class="credit-card-emi-row-menu-wrap">
+                                  <button type="button" class="credit-card-emi-row-menu-toggle" data-emi-menu-toggle aria-expanded="false">⋯</button>
+                                  <div class="credit-card-emi-row-menu is-hidden" data-emi-menu>
+                                    <button type="button" class="credit-card-detail__menu-item js-edit-emi-modal"
+                                      data-account-id="{{ card._id }}"
+                                      data-emi-id="{{ emi._id }}"
+                                      data-card-name="{{ card.name }}"
+                                      data-emi-title="{{ emi.title }}"
+                                      data-total-amount="{{ emi.total_amount }}"
+                                      data-monthly-amount="{{ emi.monthly_amount }}"
+                                      data-total-installments="{{ emi.total_installments }}"
+                                      data-remaining-installments="{{ emi.remaining_installments }}"
+                                      data-interest-rate="{{ emi.interest_rate or 0 }}"
+                                      data-next-due-date="{{ emi.next_due_date.strftime('%Y-%m-%d') if emi.next_due_date else '' }}">Edit EMI</button>
+                                    <form method="post" action="/accounts/credit-card/emi/delete" class="credit-card-detail__menu-form" data-inline-success-form data-inline-success-message="EMI removed">
+                                      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                                      <input type="hidden" name="emi_id" value="{{ emi._id }}">
+                                      <button type="submit" class="credit-card-detail__menu-item is-danger" onclick="return confirm('Delete this EMI?')">Delete EMI</button>
+                                    </form>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          {% endfor %}
+                        </tbody>
+                      </table>
+                    </div>
+                  {% else %}
+                    <p class="credit-card-empty">No EMIs added for this card yet.</p>
+                  {% endif %}
+                </div>
+              </section>
+            {% endfor %}
+          </div>
+        </div>
+        {% else %}
+          <div class="credit-card-empty-state">
+            <strong>No credit cards yet.</strong>
+            <span>Add a credit card from the account form above to unlock billing and EMI tracking here.</span>
+          </div>
+        {% endif %}
       </div>
     </div>
   </div>
-</div>
+
+  <div class="workspace-modal-backdrop is-hidden" id="workspaceModalBackdrop"></div>
+
+  <section class="workspace-modal is-hidden" id="emiModal" aria-hidden="true">
+    <div class="workspace-modal__header">
+      <div>
+        <h3 id="emiModalHeading">Add New EMI</h3>
+        <p id="emiModalTitle">Track a new EMI against the selected credit card.</p>
+      </div>
+      <button type="button" class="account-modal__close" data-close-workspace-modal="emiModal">×</button>
+    </div>
+    <form method="post" action="/accounts/credit-card/emi/add" class="workspace-modal__form" id="emiModalForm" data-inline-success-form data-inline-success-message="EMI added">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+      <input type="hidden" name="account_id" id="emi_account_id">
+      <input type="hidden" name="emi_id" id="emi_id">
+      <div class="credit-card-emi-grid credit-card-emi-grid--modal">
+        <div class="account-field account-field-span-2">
+          <label>EMI Title</label>
+          <input type="text" name="title" id="emi_title" placeholder="Laptop EMI" required>
+        </div>
+        <div class="account-field">
+          <label>Total Amount</label>
+          <input type="number" step="0.01" name="total_amount" required>
+        </div>
+        <div class="account-field">
+          <label>Monthly EMI</label>
+          <input type="number" step="0.01" name="monthly_amount" required>
+        </div>
+        <div class="account-field">
+          <label>Total Installments</label>
+          <input type="number" step="1" name="total_installments" id="emi_total_installments" required>
+        </div>
+        <div class="account-field">
+          <label>Remaining EMIs</label>
+          <input type="number" step="1" name="remaining_installments" id="emi_remaining_installments" required>
+        </div>
+        <div class="account-field">
+          <label>Rate of Interest (%)</label>
+          <input type="number" step="0.01" name="interest_rate" placeholder="0">
+        </div>
+        <div class="account-field">
+          <label>Next Due Date</label>
+          <input type="date" name="next_due_date">
+        </div>
+      </div>
+      <div class="workspace-modal__actions">
+        <button type="button" class="account-secondary" data-close-workspace-modal="emiModal">Cancel</button>
+        <button type="submit" class="account-primary account-primary--inline" id="emiModalSubmit">Add EMI</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="workspace-modal is-hidden" id="payBillModal" aria-hidden="true">
+    <div class="workspace-modal__header">
+      <div>
+        <h3>Pay Bill</h3>
+        <p id="payBillModalTitle">Choose how much you want to pay for this card.</p>
+      </div>
+      <button type="button" class="account-modal__close" data-close-workspace-modal="payBillModal">×</button>
+    </div>
+    <form method="get" action="/transactions" class="workspace-modal__form">
+      <input type="hidden" name="tx_type" value="card_payment">
+      <input type="hidden" name="description" value="Card Payment">
+      <input type="hidden" name="mode" value="online">
+      <input type="hidden" name="target_account_id" id="pay_bill_target_account_id">
+      <input type="hidden" name="credit_bill_id" id="pay_bill_credit_bill_id">
+
+      <div class="pay-bill-metrics">
+        <div><span>Outstanding</span><strong id="pay_bill_outstanding">₹ 0.00</strong></div>
+        <div><span>Minimum Due</span><strong id="pay_bill_minimum_due">₹ 0.00</strong></div>
+        <div><span>Full Bill</span><strong id="pay_bill_statement_balance">₹ 0.00</strong></div>
+      </div>
+
+      <div class="pay-bill-choices">
+        <button type="button" class="pay-choice" data-pay-choice="minimum">Pay Minimum</button>
+        <button type="button" class="pay-choice" data-pay-choice="full">Pay Full Bill</button>
+        <button type="button" class="pay-choice" data-pay-choice="partial">Partial</button>
+      </div>
+
+      <div class="account-field">
+        <label>Amount</label>
+        <input type="number" step="0.01" name="amount" id="pay_bill_amount" required>
+      </div>
+
+      <div class="workspace-modal__actions">
+        <button type="button" class="account-secondary" data-close-workspace-modal="payBillModal">Cancel</button>
+        <button type="submit" class="account-primary account-primary--inline">Continue to Payment</button>
+      </div>
+    </form>
+  </section>
 </section>
 {% endblock %}

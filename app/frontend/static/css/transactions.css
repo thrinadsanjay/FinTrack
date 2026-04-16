@@ -202,6 +202,54 @@
   display: none;
 }
 
+.card-payment-amounts {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--color-border) 86%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--color-surface-strong) 88%, transparent);
+}
+
+.card-payment-amounts.is-hidden {
+  display: none;
+}
+
+.card-payment-amounts__label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.card-payment-amounts__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.card-payment-chip {
+  border: 1px solid color-mix(in srgb, var(--color-primary) 28%, var(--color-border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-text);
+  padding: 8px 12px;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.card-payment-chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.card-payment-amounts__hint {
+  margin: 10px 0 0;
+  font-size: 0.84rem;
+  color: var(--color-muted);
+}
+
 .add-tx-btn {
   align-self: center;
   min-width: 220px;
@@ -1029,3 +1077,318 @@
     background: transparent;
   }
 }
+
+/* ================================================================
+   TRANSACTION DATE GROUP HEADERS
+   ================================================================ */
+.tx-date-group {
+  margin-top: 14px;
+}
+
+.tx-date-group:first-child {
+  margin-top: 0;
+}
+
+.tx-date-group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0 6px;
+  position: sticky;
+  top: var(--page-sticky-top);
+  z-index: 10;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-surface-strong) 82%, transparent),
+    transparent
+  );
+  backdrop-filter: blur(4px);
+}
+
+.tx-date-label {
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+
+.tx-date-line {
+  flex: 1;
+  height: 1px;
+  background: color-mix(in srgb, var(--color-border) 68%, transparent);
+}
+
+.tx-date-total {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--color-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ================================================================
+   TRANSACTION ROW — Enhanced hover and animations
+   ================================================================ */
+.tx-row {
+  animation: tx-row-enter 0.3s ease both;
+}
+
+@keyframes tx-row-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tx-row td {
+  transition: background var(--transition-fast);
+}
+
+.tx-row:hover td {
+  background: color-mix(in srgb, var(--color-primary) 6%, transparent);
+}
+
+/* Amount display with tabular nums */
+.amount-text {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+  letter-spacing: -0.01em;
+}
+
+/* ================================================================
+   TRANSACTION FILTER BAR — Enhanced chips
+   ================================================================ */
+.quick-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--color-chip-border);
+  background: var(--color-chip-bg);
+  color: var(--color-text);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
+  white-space: nowrap;
+}
+
+.filter-chip:hover {
+  background: color-mix(in srgb, var(--color-primary) 12%, var(--color-chip-bg));
+  border-color: color-mix(in srgb, var(--color-primary) 42%, var(--color-chip-border));
+  transform: translateY(-1px);
+}
+
+.filter-chip.active {
+  background: color-mix(in srgb, var(--color-primary) 16%, transparent);
+  border-color: color-mix(in srgb, var(--color-primary) 52%, transparent);
+  color: var(--color-primary);
+}
+
+.filter-chip.active.type-debit {
+  background: color-mix(in srgb, var(--color-danger) 14%, transparent);
+  border-color: color-mix(in srgb, var(--color-danger) 45%, transparent);
+  color: var(--color-danger);
+}
+
+.filter-chip.active.type-credit {
+  background: color-mix(in srgb, var(--color-success) 14%, transparent);
+  border-color: color-mix(in srgb, var(--color-success) 45%, transparent);
+  color: var(--color-success);
+}
+
+.filter-chip .chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.7;
+}
+
+/* ================================================================
+   MOBILE SWIPE ACTION ROW
+   ================================================================ */
+@media (max-width: 768px) {
+  .tx-swipe-row {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .tx-swipe-actions {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    gap: 1px;
+    transform: translateX(100%);
+    transition: transform 0.25s cubic-bezier(0.22, 0.61, 0.36, 1);
+    z-index: 2;
+  }
+
+  .tx-swipe-row.is-swiped .tx-swipe-actions {
+    transform: translateX(0);
+  }
+
+  .tx-swipe-action {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    width: 58px;
+    height: 100%;
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 700;
+    border: none;
+    cursor: pointer;
+  }
+
+  .tx-swipe-action i {
+    font-size: 1rem;
+  }
+
+  .tx-swipe-action.edit {
+    background: var(--color-primary);
+  }
+
+  .tx-swipe-action.delete {
+    background: var(--color-danger);
+    border-radius: 0 8px 8px 0;
+  }
+}
+
+/* ================================================================
+   ADD TRANSACTION — Enhanced form field focus
+   ================================================================ */
+.form-field:focus-within {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
+}
+
+.form-field.is-valid {
+  border-color: var(--color-success);
+}
+
+.form-field.is-invalid {
+  border-color: var(--color-danger);
+}
+
+/* ================================================================
+   TRANSACTION TYPE SELECTOR — pill buttons
+   ================================================================ */
+.tx-type-group {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tx-type-btn {
+  flex: 1;
+  min-width: 80px;
+  padding: 9px 12px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--color-border);
+  background: var(--color-chip-bg);
+  color: var(--color-muted);
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.tx-type-btn:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 42%, var(--color-border));
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+  transform: translateY(-1px);
+}
+
+.tx-type-btn.active-credit {
+  border-color: var(--color-success);
+  background: var(--color-success-light);
+  color: var(--color-success);
+}
+
+.tx-type-btn.active-debit {
+  border-color: var(--color-danger);
+  background: var(--color-danger-light);
+  color: var(--color-danger);
+}
+
+.tx-type-btn.active-transfer,
+.tx-type-btn.active-card_payment {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+/* ================================================================
+   MODAL — slide-in animation
+   ================================================================ */
+.modal:not(.hidden) .modal-content {
+  animation: modal-slide-in 0.28s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+@keyframes modal-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ================================================================
+   CATEGORY ICON CHIP
+   ================================================================ */
+.category-icon-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: var(--color-muted);
+  font-size: 0.76rem;
+  font-weight: 600;
+  border: 1px solid color-mix(in srgb, var(--color-border) 80%, transparent);
+}
+
+/* ================================================================
+   RECURRING STAT CARDS — elevated design
+   ================================================================ */
+.recurring-stat-card {
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.recurring-stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.recurring-stat-card strong {
+  font-variant-numeric: tabular-nums;
+}
+

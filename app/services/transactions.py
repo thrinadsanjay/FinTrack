@@ -140,7 +140,7 @@ UTC = timezone.utc
 #     # ======================================================
 #     # TRANSFER (UNCHANGED)
 #     # ======================================================
-#     if tx_type == "transfer":
+#     if effective_tx_type == "transfer":
 #         if not target_account_id:
 #             raise ValidationError("Target account required")
 
@@ -279,6 +279,8 @@ async def create_transaction(
     subcategory_code: str,
     description: str,
     target_account_id: str | None = None,
+    transfer_kind: str | None = None,
+    credit_bill_id: str | None = None,
     is_recurring: bool = False,
     frequency: str | None = None,
     interval: int = 1,
@@ -299,13 +301,15 @@ async def create_transaction(
 
     user_oid = ObjectId(user_id)
 
+    effective_tx_type = "transfer" if tx_type == "card_payment" else tx_type
+
     # -----------------------------
     # Validate category & subcategory
     # -----------------------------
     category, subcategory = await validate_category(
         category_code=category_code,
         subcategory_code=subcategory_code,
-        tx_type=tx_type,
+        tx_type=effective_tx_type,
     )
 
     source_account = await db.accounts.find_one(
@@ -316,7 +320,7 @@ async def create_transaction(
         raise NotFoundError("Account not found")
 
     target_account = None
-    if tx_type == "transfer":
+    if effective_tx_type == "transfer":
         if not target_account_id:
             raise ValidationError("Target account required")
         target_account = await db.accounts.find_one(
@@ -345,7 +349,7 @@ async def create_transaction(
             user_oid=user_oid,
             account_id=account_id,
             amount=amount,
-            tx_type=tx_type,
+            tx_type=effective_tx_type,
             mode=mode,
             description=description,
             category=category,
@@ -369,12 +373,12 @@ async def create_transaction(
             return None
 
     # Fail debit/transfer when funds are insufficient, but keep a retryable failed row.
-    if tx_type == "debit" and source_account.get("balance", 0) < amount:
+    if effective_tx_type == "debit" and source_account.get("balance", 0) < amount:
         failed_id = await _add_failed_transaction(
             user_oid=user_oid,
             account_id=account_id,
             amount=amount,
-            tx_type=tx_type,
+            tx_type=effective_tx_type,
             mode=mode,
             description=description,
             category=category,
@@ -395,7 +399,7 @@ async def create_transaction(
         )
         return failed_id
 
-    if tx_type == "transfer" and source_account.get("balance", 0) < amount:
+    if effective_tx_type == "transfer" and source_account.get("balance", 0) < amount:
         failed_id = await _add_failed_transaction(
             user_oid=user_oid,
             account_id=account_id,
@@ -425,7 +429,7 @@ async def create_transaction(
     # -----------------------------
     # Create transaction (now)
     # -----------------------------
-    if tx_type == "transfer":
+    if effective_tx_type == "transfer":
         tx_id = await _add_transfer_transaction(
             user_oid=user_oid,
             source_account_id=account_id,
@@ -435,14 +439,35 @@ async def create_transaction(
             description=description,
             category=category,
             subcategory=subcategory,
+            transfer_kind=transfer_kind,
             request=request,
         )
+        if tx_type == "card_payment" and credit_bill_id:
+            from app.services.credit_cards import record_bill_payment
+
+            await record_bill_payment(
+                user_id=user_id,
+                card_id=target_account_id,
+                bill_id=credit_bill_id,
+                payload=type(
+                    "CreditBillPaymentPayload",
+                    (),
+                    {
+                        "amount": amount,
+                        "payment_date": datetime.now(UTC).date(),
+                        "source_account_id": account_id,
+                        "payment_mode": mode,
+                        "reference_no": description or None,
+                    },
+                )(),
+                request=request,
+            )
     else:
         tx_id = await _add_single_transaction(
             user_oid=user_oid,
             account_id=account_id,
             amount=amount,
-            tx_type=tx_type,
+            tx_type=effective_tx_type,
             mode=mode,
             description=description,
             category=category,
@@ -454,7 +479,7 @@ async def create_transaction(
         user_id=user_oid,
         **tx_added_payload(
             tx_id=str(tx_id),
-            tx_type=tx_type,
+            tx_type=effective_tx_type,
             amount=amount,
         ),
     )
@@ -473,6 +498,7 @@ async def _add_single_transaction(
     description: str,
     category: dict,
     subcategory: dict,
+    transfer_kind: str | None = None,
     request=None,
 ):
     now = datetime.now(UTC)
@@ -560,6 +586,7 @@ async def _add_transfer_transaction(
     description: str,
     category: dict,
     subcategory: dict,
+    transfer_kind: str | None = None,
     request=None,
 ):
     if not target_account_id:
@@ -586,6 +613,7 @@ async def _add_transfer_transaction(
             category=category,
             subcategory=subcategory,
             created_at=now,
+            source=transfer_kind,
         )
     )
 
@@ -972,7 +1000,7 @@ async def retry_failed_recurring_transaction(
         success_tx = build_single_transaction_doc(
             user_id=failed_tx["user_id"],
             account_id=failed_tx["account_id"],
-            tx_type=tx_type,
+            tx_type=effective_tx_type,
             mode=failed_tx.get("mode", "online"),
             amount=amount,
             description=failed_tx.get("description", ""),
@@ -1043,7 +1071,7 @@ async def retry_failed_recurring_transaction(
         success_tx = build_single_transaction_doc(
             user_id=failed_tx["user_id"],
             account_id=failed_tx["account_id"],
-            tx_type=tx_type,
+            tx_type=effective_tx_type,
             mode=failed_tx.get("mode", "online"),
             amount=amount,
             description=failed_tx.get("description", ""),

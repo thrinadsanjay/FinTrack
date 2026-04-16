@@ -14,6 +14,7 @@
 <div class="card transaction-card form-scroll">
   <form method="post" action="/transactions/add" id="transaction-form" data-inline-success-form data-inline-success-message="Transaction saved">
     <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+    <input type="hidden" name="credit_bill_id" value="{{ tx_defaults.credit_bill_id if tx_defaults is defined else "" }}">
 
     {% set alert_error = error %}
     {% include "partials/form_alert.html" %}
@@ -25,7 +26,7 @@
       <div class="field-group">
         <div class="form-field field--idle">
           <label>Amount</label>
-          <input type="number" step="0.01" name="amount" required />
+          <input type="number" step="0.01" name="amount" id="amount" value="{{ tx_defaults.amount if tx_defaults is defined else "" }}" required />
         </div>
 
         <div class="form-field field--idle">
@@ -33,7 +34,7 @@
           <select name="account_id" id="account" required>
             <option value="" hidden></option>
             {% for acc in accounts %}
-            <option value="{{ acc._id }}">{{ acc.name }} (₹{{ acc.balance | money }})</option>
+            <option value="{{ acc._id }}" data-account-type="{{ acc.type }}" {% if tx_defaults is defined and tx_defaults.account_id == acc._id|string %}selected{% endif %}>{{ acc.name }} (₹{{ acc.balance | money }})</option>
             {% endfor %}
           </select>
         </div>
@@ -45,9 +46,10 @@
           <label>Type</label>
           <select name="tx_type" id="tx_type" required>
             <option value="" hidden></option>
-            <option value="debit">Expense</option>
-            <option value="credit">Income</option>
-            <option value="transfer">Self Transfer</option>
+            <option value="debit" {% if tx_defaults is defined and tx_defaults.tx_type == "debit" %}selected{% endif %}>Expense</option>
+            <option value="credit" {% if tx_defaults is defined and tx_defaults.tx_type == "credit" %}selected{% endif %}>Income</option>
+            <option value="transfer" {% if tx_defaults is defined and tx_defaults.tx_type == "transfer" %}selected{% endif %}>Self Transfer</option>
+            <option value="card_payment" {% if tx_defaults is defined and tx_defaults.tx_type == "card_payment" %}selected{% endif %}>Credit Card Payment</option>
           </select>
         </div>
 
@@ -55,10 +57,10 @@
           <label>Mode</label>
           <select name="mode" required>
             <option value="" hidden></option>
-            <option value="upi">UPI</option>
-            <option value="card">Card</option>
-            <option value="online">Online</option>
-            <option value="other">Other</option>
+            <option value="upi" {% if tx_defaults is defined and tx_defaults.mode == "upi" %}selected{% endif %}>UPI</option>
+            <option value="card" {% if tx_defaults is defined and tx_defaults.mode == "card" %}selected{% endif %}>Card</option>
+            <option value="online" {% if tx_defaults is defined and tx_defaults.mode == "online" %}selected{% endif %}>Online</option>
+            <option value="other" {% if tx_defaults is defined and tx_defaults.mode == "other" %}selected{% endif %}>Other</option>
           </select>
         </div>
       </div>
@@ -66,14 +68,24 @@
       <!-- Row 3 (Transfer only) -->
       <div class="field-group tohidden" id="target-account-wrapper">
         <div class="form-field field--idle col-span-2">
-          <label>Transfer To</label>
+          <label id="target-account-label">Transfer To</label>
           <select name="target_account_id" id="target_account">
             <option value="" hidden></option>
             {% for acc in accounts %}
-            <option value="{{ acc._id }}">{{ acc.name }}</option>
+            <option value="{{ acc._id }}" data-account-type="{{ acc.type }}" data-minimum-due="{{ acc.minimum_due or 0 }}" data-statement-balance="{{ acc.statement_balance or 0 }}" data-current-outstanding="{{ (-acc.balance) if (acc.balance or 0) < 0 else 0 }}" {% if tx_defaults is defined and tx_defaults.target_account_id == acc._id|string %}selected{% endif %}>{{ acc.name }}</option>
             {% endfor %}
           </select>
         </div>
+      </div>
+
+      <div class="card-payment-amounts is-hidden" id="card-payment-amounts">
+        <div class="card-payment-amounts__label">Quick amount</div>
+        <div class="card-payment-amounts__actions">
+          <button type="button" class="card-payment-chip" data-amount-source="minimum_due">Minimum due</button>
+          <button type="button" class="card-payment-chip" data-amount-source="statement_balance">Statement balance</button>
+          <button type="button" class="card-payment-chip" data-amount-source="other">Other</button>
+        </div>
+        <p class="card-payment-amounts__hint" id="card-payment-hint">Pick a card to load payment suggestions.</p>
       </div>
 
       <!-- Row 4 -->
@@ -97,7 +109,7 @@
       <div class="field-group">
         <div class="form-field field--idle col-span-2">
           <label>Description</label>
-          <input type="text" name="description" />
+          <input type="text" name="description" id="description" value="{{ tx_defaults.description if tx_defaults is defined else "" }}" />
         </div>
       </div>
 
