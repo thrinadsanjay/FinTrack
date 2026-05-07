@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field, model_validator
 from app.models.base import PyObjectId  # 👈 shared base
 
 
-AuthProvider = Literal["local", "keycloak"]
+AuthProvider = Literal["local", "google"]
 
 
 class UserInDB(BaseModel):
@@ -32,7 +32,7 @@ class UserInDB(BaseModel):
     # AUTH-SPECIFIC FIELDS
     # --------------------------------------------------
     password_hash: Optional[str] = None   # required for local users
-    keycloak_id: Optional[str] = None     # required for keycloak users
+    google_id: Optional[str] = None       # required for Google users
 
     # --------------------------------------------------
     # FLAGS
@@ -55,8 +55,8 @@ class UserInDB(BaseModel):
         if self.auth_provider == "local" and not self.password_hash:
             raise ValueError("Local users must have password_hash")
 
-        if self.auth_provider == "keycloak" and not self.keycloak_id:
-            raise ValueError("Keycloak users must have keycloak_id")
+        if self.auth_provider == "google" and not self.google_id:
+            raise ValueError("Google users must have google_id")
 
         return self
 

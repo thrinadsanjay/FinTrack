@@ -110,7 +110,7 @@
         </article>
         <article class="metric-card overview-metric-card">
           <h3>Auth Mix</h3>
-          <p>Local {{ stats.total_local }} / Keycloak {{ stats.total_keycloak }}</p>
+          <p>Local {{ stats.total_local }} / Google {{ stats.total_google }}</p>
           <span>Current identity provider split</span>
         </article>
         <article class="metric-card overview-metric-card">
@@ -597,14 +597,11 @@
               <label>Provider
                 <input type="text" name="auth_provider" value="{{ admin_settings.authentication.provider }}">
               </label>
-              <label>Keycloak URL
-                <input type="text" name="auth_keycloak_url" value="{{ admin_settings.authentication.keycloak_url }}">
-              </label>
-              <label>Realm
-                <input type="text" name="auth_realm" value="{{ admin_settings.authentication.realm }}">
-              </label>
-              <label>Client ID
+              <label>Google Client ID
                 <input type="text" name="auth_client_id" value="{{ admin_settings.authentication.client_id }}">
+              </label>
+              <label>Google Client Secret
+                <input type="password" name="auth_client_secret" value="" placeholder="{{ 'Configured' if admin_settings.authentication.client_secret else 'Not configured' }}">
               </label>
               <label class="toggle inline">
                 <input type="checkbox" name="auth_allow_local_login" {% if admin_settings.authentication.allow_local_login %}checked{% endif %}>

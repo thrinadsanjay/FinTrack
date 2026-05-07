@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}{{ FT_APP_NAME }} ¦ Transaction Inbox{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/transactions.css">
+{% endblock %}
+
+{% block content %}
+<section class="page page-transaction-inbox">
+  <script src="/static/js/transaction_inbox.js" defer></script>
+
+  <div class="title-row">
+    <div>
+      <h1>Transaction Inbox</h1>
+      <p class="page-subtitle">Catch up fast: import, review, and approve without bypassing transaction rules.</p>
+    </div>
+  </div>
+
+  <div class="inbox-summary-grid" id="inbox-summary">
+    <article class="card inbox-stat">
+      <span>Pending</span>
+      <strong data-summary-pending>0</strong>
+    </article>
+    <article class="card inbox-stat inbox-stat--attention">
+      <span>Needs Attention</span>
+      <strong data-summary-attention>0</strong>
+    </article>
+    <article class="card inbox-stat">
+      <span>From Statements</span>
+      <strong data-summary-statement>0</strong>
+    </article>
+    <article class="card inbox-stat">
+      <span>From SMS</span>
+      <strong data-summary-sms>0</strong>
+    </article>
+  </div>
+
+  <div class="card inbox-upload-card">
+    <div class="inbox-section-head">
+      <div>
+        <h2>Upload Bank Statement</h2>
+        <p>PDF, CSV, or XLSX. Only new rows enter the inbox.</p>
+      </div>
+    </div>
+    <form id="statement-upload-form" class="inbox-upload-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+      <div class="field-group">
+        <div class="form-field field--active">
+          <label>Account</label>
+          <select name="account_id" required>
+            <option value="" hidden></option>
+            {% for acc in accounts %}
+            <option value="{{ acc._id }}">{{ acc.name }} (₹{{ acc.balance | money }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-field field--active">
+          <label>Statement File</label>
+          <input type="file" name="statement_file" accept=".pdf,.csv,.xlsx" required>
+        </div>
+      </div>
+      <div class="inbox-upload-actions">
+        <button type="submit" class="add-tx-btn">Import To Inbox</button>
+        <div class="inbox-upload-result" id="upload-result" aria-live="polite"></div>
+      </div>
+    </form>
+  </div>
+
+  <div class="card table-card inbox-table-card">
+    <div class="inbox-toolbar">
+      <div class="inbox-toolbar-left">
+        <label class="inbox-filter-toggle">
+          <input type="checkbox" id="needs-attention-only">
+          <span>Needs Attention Only</span>
+        </label>
+      </div>
+      <div class="inbox-toolbar-right">
+        <button type="button" class="chip chip-action" id="approve-selected">Approve Selected</button>
+        <button type="button" class="chip chip-danger" id="discard-selected">Discard Selected</button>
+      </div>
+    </div>
+
+    <div class="table-scroll">
+      <table class="inbox-table">
+        <thead>
+          <tr>
+            <th><input type="checkbox" id="select-all-rows" aria-label="Select all inbox rows"></th>
+            <th>Date</th>
+            <th>Description</th>
+            <th>Amount</th>
+            <th>Type</th>
+            <th>Mode</th>
+            <th>Category</th>
+            <th>Account</th>
+            <th>Attention</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="inbox-rows">
+          <tr>
+            <td colspan="10" class="inbox-empty-cell">Loading inbox...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endblock %}

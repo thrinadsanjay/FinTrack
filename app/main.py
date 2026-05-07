@@ -40,6 +40,7 @@ from app.web.home import router as web_router
 from app.web.auth import router as web_auth_router
 from app.web.accounts import router as web_accounts_router
 from app.web.transactions import router as web_transactions_router
+from app.web.transaction_inbox import router as web_transaction_inbox_router
 from app.web.notifications import router as web_notifications_router
 from app.web.recurring import router as web_recurring_router
 from app.web.profile import router as web_profile_router
@@ -214,6 +215,7 @@ app.include_router(web_router)
 app.include_router(web_auth_router)
 app.include_router(web_accounts_router, prefix="/accounts")
 app.include_router(web_transactions_router, prefix="/transactions")
+app.include_router(web_transaction_inbox_router)
 app.include_router(web_notifications_router, prefix="/notifications")
 app.include_router(web_recurring_router, prefix="/recurring")
 app.include_router(web_profile_router)

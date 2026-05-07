@@ -3,13 +3,13 @@ Web auth routes.
 Handles UI, forms, sessions, redirects.
 Login API:
 - local     -> username/password form
-- keycloak  -> redirect to Keycloak OAuth2 with callback
+- google    -> redirect to Google OAuth2 with callback
 - passkey   -> WebAuthn login with platform biometric/PIN
 Password reset for local users.
 
 Logout user based on auth provider:
 - local     -> clear session and redirect to /login
-- keycloak  -> clear session and redirect to Keycloak logout URL
+- google    -> clear session and redirect to /login
 """
 
 import urllib.parse
@@ -151,7 +151,7 @@ def _session_user_payload(user: dict) -> dict:
         "username": user.get("username") or user.get("full_name") or "user",
         "is_admin": bool(user.get("is_admin", False)),
     }
-    if auth_provider == "keycloak":
+    if auth_provider == "google":
         payload["full_name"] = user.get("full_name")
         payload["email"] = user.get("email")
     return payload
@@ -164,22 +164,16 @@ async def _auth_settings_state() -> dict:
 
     auth_enabled = bool(auth_cfg.get("enabled", True))
     local_enabled = bool(auth_cfg.get("allow_local_login", True))
-    provider = str(auth_cfg.get("provider") or "keycloak").strip().lower() or "keycloak"
-    keycloak_url = str(auth_cfg.get("keycloak_url") or settings.FT_KEYCLOAK_URL or "").strip().rstrip("/")
-    realm = str(auth_cfg.get("realm") or settings.FT_KEYCLOAK_REALM or "").strip()
-    client_id = str(auth_cfg.get("client_id") or settings.FT_CLIENT_ID or "").strip()
-    oauth_configured = all([keycloak_url, realm, client_id])
+    provider = str(auth_cfg.get("provider") or "google").strip().lower() or "google"
+    client_id = str(auth_cfg.get("client_id") or settings.FT_GOOGLE_CLIENT_ID or "").strip()
+    client_secret = str(auth_cfg.get("client_secret") or settings.FT_GOOGLE_CLIENT_SECRET or "").strip()
+    oauth_configured = bool(client_id)
     oauth_enabled = bool(auth_enabled and oauth_configured)
     google_enabled = bool(oauth_enabled and auth_cfg.get("allow_google_login", True))
     telegram_login_enabled = bool(auth_cfg.get("allow_telegram_login", False))
     telegram_enabled = bool(auth_enabled and telegram_login_enabled and bool(telegram_cfg.get("enabled", False)))
 
-    if provider == "google":
-        sso_label = "Continue with Google"
-    elif provider == "keycloak":
-        sso_label = "Continue with Keycloak"
-    else:
-        sso_label = f"Continue with {provider.title()}"
+    sso_label = "Continue with Google"
 
     return {
         "auth_enabled": auth_enabled,
@@ -187,6 +181,8 @@ async def _auth_settings_state() -> dict:
         "oauth_enabled": oauth_enabled,
         "oauth_configured": oauth_configured,
         "provider": provider,
+        "client_id": client_id,
+        "client_secret": client_secret,
         "sso_label": sso_label,
         "google_enabled": google_enabled,
         "telegram_enabled": telegram_enabled,
@@ -291,6 +287,16 @@ async def login_page(request: Request):
 @router.get("/login/local")
 async def local_login_page_redirect():
     return RedirectResponse("/login?panel=local", status_code=303)
+
+
+@router.get("/forgot-password")
+async def forgot_password():
+    external_url = str(settings.FT_EXTERNAL_PASSWORD_RESET_URL or "").strip()
+    if external_url:
+        return RedirectResponse(external_url, status_code=303)
+
+    msg = urllib.parse.quote_plus("Password reset is managed by support. Contact support to reset your password.")
+    return RedirectResponse(f"/help-support?auth=forgot_password&msg={msg}", status_code=303)
 
 
 @router.post("/login/local")
@@ -672,19 +678,17 @@ async def login_oauth(request: Request, idp: str | None = None):
     request.session["oauth_callback_uri"] = callback_uri
 
     params = {
-        "client_id": settings.FT_CLIENT_ID,
+        "client_id": auth_state.get("client_id") or settings.FT_GOOGLE_CLIENT_ID,
         "response_type": "code",
         "scope": "openid profile email",
         "redirect_uri": callback_uri,
         "state": oauth_state,
+        "access_type": "online",
+        "prompt": "select_account",
     }
-    provider_hint = str(idp or "").strip().lower()
-    if provider_hint in {"google"}:
-        params["kc_idp_hint"] = provider_hint
 
     url = (
-        f"{settings.FT_KEYCLOAK_URL}/realms/{settings.FT_KEYCLOAK_REALM}"
-        "/protocol/openid-connect/auth?"
+        "https://accounts.google.com/o/oauth2/v2/auth?"
         + urllib.parse.urlencode(params)
     )
 
@@ -971,19 +975,18 @@ async def callback(request: Request, code: str, state: str | None = None):
         return RedirectResponse("/login?auth=failed&error=oauth_state", status_code=303)
     request.session.pop("oauth_state", None)
 
-    token_url = (
-        f"{settings.FT_KEYCLOAK_URL}/realms/{settings.FT_KEYCLOAK_REALM}/"
-        "protocol/openid-connect/token"
-    )
+    token_url = "https://oauth2.googleapis.com/token"
     callback_uri = request.session.pop("oauth_callback_uri", None) or _callback_uri_from_request(request)
+    client_id = str(auth_state.get("client_id") or settings.FT_GOOGLE_CLIENT_ID).strip()
+    client_secret = str(auth_state.get("client_secret") or settings.FT_GOOGLE_CLIENT_SECRET or "").strip()
 
     async with get_async_http_client() as client:
         resp = await client.post(
             token_url,
             data={
                 "grant_type": "authorization_code",
-                "client_id": settings.FT_CLIENT_ID,
-                **({"client_secret": settings.FT_CLIENT_SECRET} if settings.FT_CLIENT_SECRET else {}),
+                "client_id": client_id,
+                **({"client_secret": client_secret} if client_secret else {}),
                 "code": code,
                 "redirect_uri": callback_uri,
             },
@@ -998,6 +1001,7 @@ async def callback(request: Request, code: str, state: str | None = None):
         user = await authenticate_oauth_user(
             id_token=id_token,
             request=request,
+            audience=client_id,
         )
     except HTTPException as exc:
         if exc.status_code == 403:
@@ -1070,22 +1074,12 @@ async def logout(request: Request):
         request=request,
         user=user,
         meta={
-            "logout_type": "keycloak" if auth_provider == "keycloak" else "local",
+            "logout_type": "google" if auth_provider == "google" else "local",
         },
     )
 
     # ---- Clear session ----
     request.session.clear()
     await _sync_user_metrics_on_logout(user_id)
-
-    # ---- Redirect logic ----
-    if auth_provider == "keycloak":
-        logout_url = (
-            f"{settings.FT_KEYCLOAK_URL}/realms/{settings.FT_KEYCLOAK_REALM}"
-            "/protocol/openid-connect/logout"
-            f"?client_id={settings.FT_CLIENT_ID}"
-            f"&post_logout_redirect_uri={settings.FT_BASE_URL}/login"
-        )
-        return RedirectResponse(logout_url, status_code=302)
 
     return RedirectResponse("/login", status_code=302)

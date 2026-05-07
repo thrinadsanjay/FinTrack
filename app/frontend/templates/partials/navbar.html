@@ -16,6 +16,9 @@
       <a href="/transactions/list" class="{% if active_page == 'listtransactions' %}active{% endif %}">
         Transactions
       </a>
+      <a href="/transaction-inbox" class="{% if active_page == 'transactioninbox' %}active{% endif %}">
+        Inbox
+      </a>
       <a href="/recurring" class="{% if active_page == 'recurring' %}active{% endif %}">
         Recurring
       </a>
@@ -225,6 +228,11 @@
   <a href="/transactions/list" class="{% if active_page == 'listtransactions' %}active{% endif %}">
     <i class="fa fa-list"></i>
     <span>Transactions</span>
+  </a>
+
+  <a href="/transaction-inbox" class="{% if active_page == 'transactioninbox' %}active{% endif %}">
+    <i class="fa fa-inbox"></i>
+    <span>Inbox</span>
   </a>
 
   <a href="/recurring" class="{% if active_page == 'recurring' %}active{% endif %}">

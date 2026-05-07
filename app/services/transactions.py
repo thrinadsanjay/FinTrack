@@ -16,7 +16,7 @@ This module MUST NOT:
 """
 
 from bson import ObjectId
-from datetime import datetime, timezone, date
+from datetime import datetime, timezone, date, time
 from app.db.mongo import db
 from app.services.audit import audit_log
 from app.helpers.recurring_schedule import (
@@ -286,6 +286,7 @@ async def create_transaction(
     interval: int = 1,
     start_date: date | str | None = None,
     end_date: date | str | None = None,
+    transaction_date: date | datetime | str | None = None,
     request=None,
 ):
     """
@@ -298,6 +299,16 @@ async def create_transaction(
         raise ValidationError("Amount must be positive")
 
     amount = round_money(amount)
+    transaction_dt: datetime | None = None
+    if transaction_date is not None:
+        parsed_transaction_date = parse_date_value(transaction_date)
+        if not parsed_transaction_date:
+            raise ValidationError("Invalid transaction date")
+        transaction_dt = datetime.combine(
+            parsed_transaction_date,
+            time(hour=12),
+            tzinfo=UTC,
+        )
 
     user_oid = ObjectId(user_id)
 
@@ -385,6 +396,7 @@ async def create_transaction(
             subcategory=subcategory,
             source="manual",
             failure_reason="insufficient_funds",
+            created_at=transaction_dt,
             request=request,
         )
         await upsert_notification(
@@ -412,6 +424,7 @@ async def create_transaction(
             source="manual_transfer",
             failure_reason="insufficient_funds",
             target_account_id=target_account_id,
+            created_at=transaction_dt,
             request=request,
         )
         await upsert_notification(
@@ -439,6 +452,7 @@ async def create_transaction(
             description=description,
             category=category,
             subcategory=subcategory,
+            created_at=transaction_dt,
             transfer_kind=transfer_kind,
             request=request,
         )
@@ -472,6 +486,7 @@ async def create_transaction(
             description=description,
             category=category,
             subcategory=subcategory,
+            created_at=transaction_dt,
             request=request,
         )
 
@@ -498,10 +513,11 @@ async def _add_single_transaction(
     description: str,
     category: dict,
     subcategory: dict,
+    created_at: datetime | None = None,
     transfer_kind: str | None = None,
     request=None,
 ):
-    now = datetime.now(UTC)
+    now = created_at or datetime.now(UTC)
     account_oid = ObjectId(account_id)
 
     delta = delta_for_tx(tx_type, amount)
@@ -544,9 +560,10 @@ async def _add_failed_transaction(
     source: str,
     failure_reason: str,
     target_account_id: str | None = None,
+    created_at: datetime | None = None,
     request=None,
 ):
-    now = datetime.now(UTC)
+    now = created_at or datetime.now(UTC)
     tx_doc = build_failed_transaction_doc(
         user_id=user_oid,
         account_id=ObjectId(account_id),
@@ -586,6 +603,7 @@ async def _add_transfer_transaction(
     description: str,
     category: dict,
     subcategory: dict,
+    created_at: datetime | None = None,
     transfer_kind: str | None = None,
     request=None,
 ):
@@ -599,7 +617,7 @@ async def _add_transfer_transaction(
         raise ValidationError("Source and target cannot be same")
 
     transfer_id = ObjectId()
-    now = datetime.now(UTC)
+    now = created_at or datetime.now(UTC)
 
     await db.transactions.insert_many(
         build_transfer_transaction_docs(

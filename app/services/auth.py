@@ -14,7 +14,6 @@ Must NOT:
 
 from jose import JWTError
 from fastapi import HTTPException, Request
-from collections.abc import Iterable
 from app.core.security import verify_password
 from app.core.config import settings
 from app.services.users import (
@@ -30,7 +29,7 @@ from app.services.users import (
     link_oauth_identity_to_user,
 )
 from app.services.audit import audit_log
-from app.services.keycloak import keycloak_service
+from app.services.google_oauth import google_oauth_service
 
 
 def _csv_to_set(csv_value: str) -> set[str]:
@@ -38,34 +37,12 @@ def _csv_to_set(csv_value: str) -> set[str]:
 
 
 def _extract_admin_flag_from_claims(claims: dict) -> bool:
-    admin_roles = _csv_to_set(settings.FT_KEYCLOAK_ADMIN_ROLES)
-    admin_groups = _csv_to_set(settings.FT_KEYCLOAK_ADMIN_GROUPS)
-    if not admin_roles and not admin_groups:
+    admin_emails = {email.lower() for email in _csv_to_set(settings.FT_GOOGLE_ADMIN_EMAILS)}
+    if not admin_emails:
         return False
 
-    found_roles: set[str] = set()
-    realm_roles = ((claims.get("realm_access") or {}).get("roles") or [])
-    if isinstance(realm_roles, Iterable) and not isinstance(realm_roles, (str, bytes)):
-        found_roles.update(str(role).strip() for role in realm_roles if str(role).strip())
-
-    resource_access = claims.get("resource_access") or {}
-    if isinstance(resource_access, dict):
-        for _, access in resource_access.items():
-            roles = (access or {}).get("roles") or []
-            if isinstance(roles, Iterable) and not isinstance(roles, (str, bytes)):
-                found_roles.update(str(role).strip() for role in roles if str(role).strip())
-
-    found_groups: set[str] = set()
-    groups = claims.get("groups") or []
-    if isinstance(groups, Iterable) and not isinstance(groups, (str, bytes)):
-        for group in groups:
-            group_name = str(group).strip()
-            if not group_name:
-                continue
-            found_groups.add(group_name)
-            found_groups.add(group_name.split("/")[-1])
-
-    return bool((found_roles & admin_roles) or (found_groups & admin_groups))
+    email = str(claims.get("email") or "").strip().lower()
+    return bool(email and email in admin_emails)
 
 
 # ======================================================
@@ -125,9 +102,10 @@ async def authenticate_oauth_user(
     *,
     id_token: str,
     request: Request,
+    audience: str | None = None,
 ):
     try:
-        claims = keycloak_service.verify_id_token(id_token)
+        claims = google_oauth_service.verify_id_token(id_token, audience=audience)
     except JWTError as exc:
         await audit_log(
             action="OAUTH_TOKEN_VERIFY_FAILED",
@@ -142,7 +120,7 @@ async def authenticate_oauth_user(
 
     email = str(claims.get("email") or "").strip() or None
     username = claims.get("preferred_username") or email
-    identity_provider = claims.get("identity_provider") or claims.get("idp")
+    identity_provider = "google"
     full_name = (
         claims.get("name")
         or " ".join(
@@ -170,7 +148,7 @@ async def authenticate_oauth_user(
                 username=username,
                 full_name=full_name,
                 is_admin=claims_is_admin,
-                sync_admin_from_oauth=(str(user.get("auth_provider") or "") == "keycloak"),
+                sync_admin_from_oauth=(str(user.get("auth_provider") or "") == "google"),
             )
 
     if not user:
@@ -188,13 +166,13 @@ async def authenticate_oauth_user(
             await audit_log(
                 action="OAUTH_LOGIN_BLOCKED_DISABLED",
                 request=request,
-                user={"oauth_sub": oauth_sub, "auth_provider": "keycloak"},
+                user={"oauth_sub": oauth_sub, "auth_provider": "google"},
             )
             raise HTTPException(status_code=403, detail="Account disabled")
 
         is_admin = bool(user.get("is_admin"))
-        if str(user.get("auth_provider") or "") == "keycloak":
-            # Keycloak roles/groups are source-of-truth only for external-provider canonical accounts.
+        if str(user.get("auth_provider") or "") == "google":
+            # Configured Google admin emails are source-of-truth only for Google canonical accounts.
             is_admin = claims_is_admin
 
         await update_oauth_last_login(str(user["_id"]))
@@ -206,7 +184,8 @@ async def authenticate_oauth_user(
             username=username,
             full_name=full_name,
             is_admin=is_admin,
-            sync_admin_from_oauth=(str(user.get("auth_provider") or "") == "keycloak"),
+            sync_admin_from_oauth=(str(user.get("auth_provider") or "") == "google"),
+            auth_provider="google" if str(user.get("auth_provider") or "") != "local" else None,
         )
         await update_oauth_profile(
             user_id=str(user["_id"]),
@@ -214,7 +193,7 @@ async def authenticate_oauth_user(
             email=email,
             full_name=full_name,
             identity_provider=identity_provider,
-            is_admin=is_admin if str(user.get("auth_provider") or "") == "keycloak" else None,
+            is_admin=is_admin if str(user.get("auth_provider") or "") == "google" else None,
         )
 
     user = await get_user_by_id(str(user["_id"])) or user
@@ -242,7 +221,7 @@ async def authenticate_oauth_user(
         user={
             "user_id": str(user["_id"]),
             "username": user.get("full_name") or user.get("username"),
-            "auth_provider": user.get("auth_provider") or "keycloak",
+            "auth_provider": user.get("auth_provider") or "google",
         },
         meta={
             "email": email,

@@ -23,17 +23,14 @@ class TestProfilePasswordResetUrl(unittest.TestCase):
             settings.FT_EXTERNAL_PASSWORD_RESET_URL = original
         self.assertEqual(url, "https://myaccount.google.com/security")
 
-    def test_non_google_idp_falls_back_to_keycloak_account_page(self):
+    def test_non_google_idp_uses_google_account_page(self):
         original = settings.FT_EXTERNAL_PASSWORD_RESET_URL
         settings.FT_EXTERNAL_PASSWORD_RESET_URL = None
         try:
             url = _external_password_reset_url({"identity_provider": "github"})
         finally:
             settings.FT_EXTERNAL_PASSWORD_RESET_URL = original
-        self.assertEqual(
-            url,
-            f"{settings.FT_KEYCLOAK_URL.rstrip('/')}/realms/{settings.FT_KEYCLOAK_REALM}/account/#/security/signingin",
-        )
+        self.assertEqual(url, "https://myaccount.google.com/security")
 
 
 if __name__ == "__main__":

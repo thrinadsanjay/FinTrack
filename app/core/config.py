@@ -6,12 +6,9 @@ class Settings(BaseSettings):
     FT_MONGO_URI: str = "mongodb://localhost"
     FT_MONGO_DB_NAME: str = "fintracker"
     FT_ENV: str = "development"
-    FT_KEYCLOAK_URL: str = ""
-    FT_KEYCLOAK_REALM: str = ""
-    FT_CLIENT_ID: str = ""
-    FT_CLIENT_SECRET: str = ""
-    FT_KEYCLOAK_ADMIN_ROLES: str = "fintracker-admin,admin"
-    FT_KEYCLOAK_ADMIN_GROUPS: str = "/fintracker-admin,fintracker-admin"
+    FT_GOOGLE_CLIENT_ID: str = ""
+    FT_GOOGLE_CLIENT_SECRET: str = ""
+    FT_GOOGLE_ADMIN_EMAILS: str = ""
     FT_SESSION_SECRET: str = "change-me-before-production"
     FT_SESSION_MAX_AGE_SECONDS: int = 60 * 60 * 24 * 30
     FT_APP_NAME: str = "FinTracker"
@@ -53,7 +50,7 @@ class Settings(BaseSettings):
     FT_PUSH_FIREBASE_SERVICE_ACCOUNT_JSON: str = ""
 
     FT_AUTH_ENABLED: bool = True
-    FT_AUTH_PROVIDER: str = "keycloak"
+    FT_AUTH_PROVIDER: str = "google"
     FT_AUTH_ALLOW_LOCAL_LOGIN: bool = True
 
     FT_DB_ENABLED: bool = True

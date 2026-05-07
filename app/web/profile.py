@@ -42,13 +42,10 @@ def _external_password_reset_url(db_user: dict | None) -> str:
         return configured_url
 
     idp = ((db_user or {}).get("identity_provider") or "").strip().lower()
-    if idp in {"google", "google-oidc"}:
+    if idp in {"", "google", "google-oidc"}:
         return "https://myaccount.google.com/security"
 
-    return (
-        f"{settings.FT_KEYCLOAK_URL.rstrip('/')}/realms/"
-        f"{settings.FT_KEYCLOAK_REALM}/account/#/security/signingin"
-    )
+    return "https://myaccount.google.com/security"
 
 
 def _to_aware_utc(dt: datetime | None) -> datetime | None:
@@ -112,7 +109,7 @@ async def edit_profile_page(request: Request):
         "phone": (db_user or {}).get("phone") or "",
         "auth_provider": source,
         "auth_source_label": "External user" if is_external else "Local user",
-        "external_id": (db_user or {}).get("oauth_sub") or (db_user or {}).get("keycloak_id") or "",
+        "external_id": (db_user or {}).get("oauth_sub") or (db_user or {}).get("google_id") or "",
         "is_external": is_external,
         "identity_provider": (db_user or {}).get("identity_provider") or "",
         "password_reset_url": password_reset_url,

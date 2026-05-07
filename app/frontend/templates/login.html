@@ -57,7 +57,7 @@
       </header>
 
       {% if not oauth_enabled and auth_cfg.get('auth_enabled') and not oauth_configured and not local_enabled and not telegram_enabled %}
-      <div class="login-banner login-banner--error">SSO is enabled but Keycloak is not fully configured. Set Keycloak URL, realm, and client ID.</div>
+      <div class="login-banner login-banner--error">Google sign-in is enabled but no Google client ID is configured.</div>
       {% endif %}
 
       {% if error_code %}

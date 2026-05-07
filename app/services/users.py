@@ -89,8 +89,8 @@ async def create_oauth_user(
     user = {
         "oauth_sub": oauth_sub,
         "linked_oauth_subs": [oauth_sub],
-        "keycloak_id": oauth_sub,
-        "auth_provider": "keycloak",
+        "google_id": oauth_sub,
+        "auth_provider": "google",
         "username": username,
         "full_name": full_name,
         "identity_provider": identity_provider,
@@ -265,10 +265,11 @@ async def link_oauth_identity_to_user(
     full_name: str | None,
     is_admin: bool | None = None,
     sync_admin_from_oauth: bool = False,
+    auth_provider: str | None = None,
 ) -> None:
     update_set = {
         "oauth_sub": oauth_sub,
-        "keycloak_id": oauth_sub,
+        "google_id": oauth_sub,
         "updated_at": _now(),
     }
     if email:
@@ -279,6 +280,8 @@ async def link_oauth_identity_to_user(
         update_set["full_name"] = full_name
     if sync_admin_from_oauth and is_admin is not None:
         update_set["is_admin"] = bool(is_admin)
+    if auth_provider:
+        update_set["auth_provider"] = auth_provider
 
     update_op: dict = {
         "$set": update_set,

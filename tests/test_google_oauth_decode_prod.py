@@ -1,17 +1,18 @@
 import unittest
 
-from app.services import keycloak as keycloak_module
-from app.services.keycloak import KeycloakService
+from app.services import google_oauth as google_oauth_module
+from app.services.google_oauth import GoogleOAuthService
 
 
-class TestKeycloakDecodeProd(unittest.TestCase):
+class TestGoogleOAuthDecodeProd(unittest.TestCase):
     def test_decode_prod_passes_leeway_via_options(self):
-        service = KeycloakService()
+        service = GoogleOAuthService()
         service.is_prod = True
         service._get_jwks = lambda: {"keys": [{"kid": "kid-1"}]}
+        service.valid_issuers = {"https://accounts.google.com"}
 
-        original_get_header = keycloak_module.jwt.get_unverified_header
-        original_decode = keycloak_module.jwt.decode
+        original_get_header = google_oauth_module.jwt.get_unverified_header
+        original_decode = google_oauth_module.jwt.decode
 
         captured = {}
 
@@ -27,20 +28,20 @@ class TestKeycloakDecodeProd(unittest.TestCase):
             captured["issuer"] = issuer
             return {"sub": "abc"}
 
-        keycloak_module.jwt.get_unverified_header = fake_get_header
-        keycloak_module.jwt.decode = fake_decode
+        google_oauth_module.jwt.get_unverified_header = fake_get_header
+        google_oauth_module.jwt.decode = fake_decode
         try:
             claims = service._decode_prod("token-value")
         finally:
-            keycloak_module.jwt.get_unverified_header = original_get_header
-            keycloak_module.jwt.decode = original_decode
+            google_oauth_module.jwt.get_unverified_header = original_get_header
+            google_oauth_module.jwt.decode = original_decode
 
         self.assertEqual(claims, {"sub": "abc"})
         self.assertEqual(captured["token"], "token-value")
         self.assertEqual(captured["key"]["kid"], "kid-1")
         self.assertEqual(captured["algorithms"], ["RS256"])
         self.assertEqual(captured["audience"], service.audience)
-        self.assertEqual(captured["issuer"], service.issuer)
+        self.assertEqual(captured["issuer"], "https://accounts.google.com")
         self.assertEqual(captured["options"]["leeway"], 60)
 
 

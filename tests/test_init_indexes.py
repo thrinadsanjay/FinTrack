@@ -25,8 +25,25 @@ class _FakeDb:
         self.accounts = _FakeCollection()
         self.audit_logs = _FakeCollection()
         self.transactions = _FakeCollection()
+        self.transaction_inbox = _FakeCollection()
+        self.sms_buffer = _FakeCollection()
         self.notifications = _FakeCollection()
         self.recurring_deposits = _FakeCollection()
+        self.credit_card_emis = _FakeCollection()
+        self.credit_cards = _FakeCollection()
+        self.credit_card_transactions = _FakeCollection()
+        self.credit_card_bills = _FakeCollection()
+        self.credit_card_bill_items = _FakeCollection()
+        self.credit_card_payments = _FakeCollection()
+        self.credit_card_emi_schedule = _FakeCollection()
+        self.credit_alerts = _FakeCollection()
+        self.push_subscriptions = _FakeCollection()
+        self.chat_logs = _FakeCollection()
+        self.support_sessions = _FakeCollection()
+        self.telegram_otp_verifications = _FakeCollection()
+        self.telegram_register_intents = _FakeCollection()
+        self.telegram_tx_sessions = _FakeCollection()
+        self.backup_runs = _FakeCollection()
 
 
 class TestInitIndexes(unittest.IsolatedAsyncioTestCase):
@@ -39,6 +56,13 @@ class TestInitIndexes(unittest.IsolatedAsyncioTestCase):
         self.assertIn([("recurring_id", 1), ("scheduled_for", 1)], created_tx_specs)
         self.assertIn([("retry_of", 1)], created_tx_specs)
         self.assertIn([("is_failed", 1), ("retry_status", 1)], created_tx_specs)
+
+        created_inbox_specs = [spec for spec, _ in fake_db.transaction_inbox.created]
+        self.assertIn([("user_id", 1), ("fingerprint", 1)], created_inbox_specs)
+        self.assertIn([("user_id", 1), ("needs_attention", 1), ("status", 1)], created_inbox_specs)
+
+        created_sms_specs = [spec for spec, _ in fake_db.sms_buffer.created]
+        self.assertIn([("parsed", 1), ("created_at", 1)], created_sms_specs)
 
         created_recurring_specs = [spec for spec, _ in fake_db.recurring_deposits.created]
         self.assertIn([("is_active", 1), ("next_run", 1)], created_recurring_specs)

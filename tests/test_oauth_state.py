@@ -43,7 +43,7 @@ class TestOAuthState(unittest.IsolatedAsyncioTestCase):
         response = await callback(request, code="dummy-code", state="wrong-state")
         self.assertIsInstance(response, RedirectResponse)
         self.assertEqual(response.status_code, 303)
-        self.assertEqual(response.headers.get("location"), "/login?error=oauth_state")
+        self.assertEqual(response.headers.get("location"), "/login?auth=failed&error=oauth_state")
 
 
 if __name__ == "__main__":

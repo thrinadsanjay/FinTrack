@@ -5,7 +5,7 @@ It provides a server-rendered web app (Jinja2) plus JSON APIs for accounts, tran
 
 ## What This App Does
 
-- User authentication: local username/password and Keycloak OAuth2/OIDC
+- User authentication: local username/password and Google OAuth2/OIDC
 - Account management: savings, wallet, credit cards, and other account types
 - Transaction management: credit, debit, and self-transfer flows
 - Recurring workflows: scheduled recurring transaction materialization
@@ -35,7 +35,7 @@ Rule of thumb: UI/API layers delegate to `services`; business logic does not liv
 - MongoDB (Motor async driver)
 - Jinja2 templates
 - APScheduler (recurring jobs)
-- Keycloak OIDC integration
+- Google OAuth2/OIDC integration
 
 ## Repository Layout
 
@@ -64,7 +64,7 @@ FinTrack/
 
 Admin UI settings use environment variables as startup defaults. Values saved from the Admin UI are stored in MongoDB and override these defaults at runtime.
 
-Only the minimum runtime fields needed for a normal production setup should be treated as mandatory. All integration and optional service fields can be omitted without blocking app startup.
+Only the minimum runtime fields needed for a normal production setup should be treated as mandatory. Integration fields are required only when that integration is enabled.
 
 | Key | Possible value/type | Required/Optional | Description |
 |---|---|---|---|
@@ -76,13 +76,11 @@ Only the minimum runtime fields needed for a normal production setup should be t
 | `FT_APP_VERSION` | Version string, e.g. `1.0.0` | Optional | Version label shown in the UI. |
 | `FT_BASE_URL` | URL string, e.g. `https://fin.example.com` | Optional | Public base URL used for links and webhook defaults. |
 | `FT_EXTERNAL_PASSWORD_RESET_URL` | URL string | Optional | External password reset link shown to users when configured. |
-| `FT_KEYCLOAK_URL` | URL string | Optional | Keycloak base URL. Leave blank if not using Keycloak. |
-| `FT_KEYCLOAK_REALM` | String | Optional | Keycloak realm name. |
-| `FT_CLIENT_ID` | String | Optional | Keycloak OIDC client ID. |
-| `FT_KEYCLOAK_ADMIN_ROLES` | Comma-separated roles | Optional | Roles treated as app admins. |
-| `FT_KEYCLOAK_ADMIN_GROUPS` | Comma-separated groups | Optional | Groups treated as app admins. |
+| `FT_GOOGLE_CLIENT_ID` | String | Required when Google sign-in is enabled | Google OAuth client ID. |
+| `FT_GOOGLE_CLIENT_SECRET` | String | Required when Google sign-in is enabled | Google OAuth client secret for the authorization-code exchange. |
+| `FT_GOOGLE_ADMIN_EMAILS` | Comma-separated emails | Optional | Google account emails treated as app admins. |
 | `FT_AUTH_ENABLED` | `true` / `false` | Optional | Enables the authentication integration section defaults. |
-| `FT_AUTH_PROVIDER` | `keycloak`, `local`, or custom string | Optional | Default auth provider shown in admin settings. |
+| `FT_AUTH_PROVIDER` | `google`, `local`, or custom string | Optional | Default auth provider shown in admin settings. |
 | `FT_AUTH_ALLOW_LOCAL_LOGIN` | `true` / `false` | Optional | Controls whether local login is allowed by default. |
 | `FT_APP_LOGO_URL` | URL or static path string | Optional | Default logo URL shown in the admin application settings. |
 | `FT_SUPPORT_EMAIL` | Email string | Optional | Default support email. |
@@ -115,7 +113,7 @@ Only the minimum runtime fields needed for a normal production setup should be t
 | `FT_DB_ENABLED` | `true` / `false` | Optional | Default database settings panel enabled state. |
 | `FT_BACKUP_ENABLED` | `true` / `false` | Optional | Default backup automation enabled state. |
 | `FT_BACKUP_PROVIDER` | `filesystem` | Optional | Default backup provider. |
-| `FT_BACKUP_SCHEDULE_CRON` | Cron string, e.g. `0 2 * * *` | Optional | Default backup schedule. |
+| `FT_BACKUP_SCHEDULE_TIME` | `HH:MM`, e.g. `02:00` | Optional | Default backup schedule time. |
 | `FT_BACKUP_RETENTION_DAYS` | Integer/string, e.g. `7` | Optional | Default backup retention days. |
 | `FT_BACKUP_DESTINATION` | Filesystem path string | Optional | Default backup destination path. |
 | `FT_LOG_LEVEL` | `DEBUG`, `INFO`, `WARNING`, `ERROR` | Optional | Base log level. |
@@ -134,8 +132,6 @@ Only the minimum runtime fields needed for a normal production setup should be t
 | `FT_DEFAULT_ADMIN_PASSWORD` | String | Optional | Initial admin password on first boot. |
 | `FT_DEFAULT_ADMIN_EMAIL` | Email string | Optional | Initial admin email on first boot. |
 | `OPENAI_API_KEY` | API key string | Optional | Required only if AI chat features are used. |
-| `CURRENT_VERSION` | Version string | Optional | CI/CD-managed currently deployed version. |
-| `PREVIOUS_VERSION` | Version string | Optional | CI/CD-managed rollback version. |
 | `MONGO_INITDB_DATABASE` | String | Optional | Docker helper variable for Mongo initialization. |
 | `ME_CONFIG_MONGODB_SERVER` | Host string | Optional | Docker helper variable for Mongo Express. |
 | `ME_CONFIG_MONGODB_PORT` | Port string/integer | Optional | Docker helper variable for Mongo Express. |
@@ -148,6 +144,11 @@ Notes:
 - `.env.example` is the Git-safe template to commit to GitLab.
 - Admin UI settings are saved in MongoDB (`app_settings` collection). Environment variables only provide startup defaults/fallbacks.
 - Production should always override the default `FT_SESSION_SECRET` and use real database values.
+
+Minimum production values:
+- Always set `FT_MONGO_URI`, `FT_MONGO_DB_NAME`, and `FT_SESSION_SECRET`.
+- Set `FT_GOOGLE_CLIENT_ID` and `FT_GOOGLE_CLIENT_SECRET` when Google sign-in is enabled.
+- Set `FT_DEFAULT_ADMIN_PASSWORD` before first production startup.
 
 ## Production `.env` Template
 
@@ -503,7 +504,8 @@ Change these immediately in production.
 - Use a strong `FT_SESSION_SECRET` (at least 32 random bytes equivalent)
 - Set `FT_ENV=production`
 - Use HTTPS and set `FT_BASE_URL` to your public HTTPS URL
-- Configure Keycloak client redirect URI to `${FT_BASE_URL}/callback`
+- Configure the Google OAuth redirect URI to `${FT_BASE_URL}/callback`
+- Set `FT_GOOGLE_CLIENT_ID` and `FT_GOOGLE_CLIENT_SECRET` from the same Google OAuth client
 - Keep `.env` out of version control and manage secrets externally
 - Restrict MongoDB and Mongo Express exposure by network/firewall rules
 - Enable regular MongoDB backups and restore drills
@@ -514,7 +516,7 @@ Change these immediately in production.
 - App fails at startup with settings validation:
   missing one or more required `FT_*` env variables
 - OAuth login redirect issues:
-  mismatch between `FT_BASE_URL`, Keycloak client settings, and callback URI
+  mismatch between `FT_BASE_URL`, Google OAuth client settings, and callback URI
 - Session/logout issues in production:
   verify consistent external URL, HTTPS termination, and secret stability
 - Cannot connect to MongoDB:

@@ -23,3 +23,4 @@ openai==1.109.1
 webauthn==2.7.0
 pywebpush==2.1.1
 firebase-admin==7.1.0
+pypdf==6.1.1

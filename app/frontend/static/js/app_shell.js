@@ -305,7 +305,7 @@
 
 (function swipeNavigation() {
   const isMobile = () => window.matchMedia("(max-width: 768px)").matches;
-  const pages = ["/", "/transactions", "/transactions/list", "/recurring", "/accounts", "__profile__"];
+  const pages = ["/", "/transactions", "/transactions/list", "/transaction-inbox", "/recurring", "/accounts", "__profile__"];
   const appShell = document.querySelector(".app-shell");
 
   let startX = 0;

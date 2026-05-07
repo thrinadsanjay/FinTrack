@@ -107,7 +107,7 @@ async def admin_dashboard(request: Request):
     total_users = len(users_sorted)
     total_admins = sum(1 for u in users_sorted if u.get("is_admin"))
     total_local = sum(1 for u in users_sorted if u.get("auth_provider") == "local")
-    total_keycloak = sum(1 for u in users_sorted if u.get("auth_provider") == "keycloak")
+    total_google = sum(1 for u in users_sorted if u.get("auth_provider") == "google")
     active_users_24h = 0
     active_users_7d = 0
     for u in users_sorted:
@@ -204,7 +204,7 @@ async def admin_dashboard(request: Request):
         {
             "label": "Authentication",
             "enabled": bool(auth_cfg.get("enabled")),
-            "detail": str(auth_cfg.get("provider") or "keycloak").strip() or "keycloak",
+            "detail": str(auth_cfg.get("provider") or "google").strip() or "google",
         },
         {
             "label": "Local Login",
@@ -378,7 +378,7 @@ async def admin_dashboard(request: Request):
             "app_name": str(app_cfg.get("app_name") or settings.FT_APP_NAME),
             "support_email": str(app_cfg.get("support_email") or settings.FT_SUPPORT_EMAIL or "-").strip() or "-",
             "support_phone": str(app_cfg.get("support_phone") or settings.FT_SUPPORT_PHONE or "-").strip() or "-",
-            "auth_provider": str(auth_cfg.get("provider") or "keycloak").strip() or "keycloak",
+            "auth_provider": str(auth_cfg.get("provider") or "google").strip() or "google",
             "push_provider": "firebase",
             "backup_destination": str(backup_status_cfg.get("destination") or "-").strip() or "-",
         },
@@ -403,7 +403,7 @@ async def admin_dashboard(request: Request):
                 "total_users": total_users,
                 "total_admins": total_admins,
                 "total_local": total_local,
-                "total_keycloak": total_keycloak,
+                "total_google": total_google,
                 "total_accounts": total_accounts,
                 "total_transactions": total_transactions,
                 "active_users_24h": active_users_24h,
@@ -511,10 +511,9 @@ async def admin_save_settings(
     push_firebase_measurement_id: str = Form(""),
     push_firebase_service_account_json: str = Form(""),
     auth_enabled: str | None = Form(None),
-    auth_provider: str = Form("keycloak"),
-    auth_keycloak_url: str = Form(""),
-    auth_realm: str = Form(""),
+    auth_provider: str = Form("google"),
     auth_client_id: str = Form(""),
+    auth_client_secret: str = Form(""),
     auth_default_telegram_country: str = Form("IN"),
     auth_allow_local_login: str | None = Form(None),
     auth_allow_google_login: str | None = Form(None),
@@ -540,6 +539,7 @@ async def admin_save_settings(
     submitted_smtp_password = smtp_password.strip()
     submitted_telegram_token = telegram_bot_token.strip()
     submitted_firebase_service_account_json = push_firebase_service_account_json.strip()
+    submitted_auth_client_secret = auth_client_secret.strip()
 
     default_country = normalize_country_iso(application_default_country or current_application.get("default_country") or current_auth.get("default_telegram_country") or "IN")
     derived_timezone = timezone_from_country_iso(default_country)
@@ -593,9 +593,8 @@ async def admin_save_settings(
         "authentication": {
             "enabled": _bool_from_form(auth_enabled),
             "provider": auth_provider.strip(),
-            "keycloak_url": auth_keycloak_url.strip(),
-            "realm": auth_realm.strip(),
             "client_id": auth_client_id.strip(),
+            "client_secret": submitted_auth_client_secret or str(current_auth.get("client_secret") or "").strip(),
             "default_telegram_country": default_country,
             "allow_local_login": _bool_from_form(auth_allow_local_login),
             "allow_google_login": _bool_from_form(auth_allow_google_login),
@@ -1528,7 +1527,7 @@ async def admin_toggle_user_admin(
 
     update_doc = {"is_admin": next_admin, "updated_at": datetime.now(timezone.utc)}
     update_query = {"$set": update_doc}
-    if target.get("auth_provider") == "keycloak":
+    if target.get("auth_provider") == "google":
         # Explicitly clear any legacy persistent override.
         update_query["$unset"] = {"admin_override": ""}
 
