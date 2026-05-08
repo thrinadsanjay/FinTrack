@@ -60,11 +60,17 @@ DATE_FORMATS = (
     "%d %b %Y",
     "%d %B %Y",
     "%Y/%m/%d",
+    "%d-%b-%Y",
+    "%d-%B-%Y",
 )
 UNCLEAR_DESCRIPTION_WORDS = {
     "transaction", "debit", "credit", "withdrawal", "deposit", "payment", "transfer"
 }
 DATE_STYLE_IDS = {14, 15, 16, 17, 18, 19, 20, 21, 22, 27, 30, 36, 45, 46, 47, 50, 57}
+PDF_ROW_DATE_RE = re.compile(
+    r"^(?P<date>\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{1,2}[- ][A-Za-z]{3,9}[- ]\d{2,4})\s+(?P<body>.+)$"
+)
+PDF_AMOUNT_RE = re.compile(r"[+-]?\d[\d,]*\.?\d{0,2}")
 
 
 def _user_oid(user_id: str) -> ObjectId:
@@ -303,29 +309,111 @@ def _read_pdf_rows(content: bytes) -> list[dict[str, Any]]:
     reader = PdfReader(io.BytesIO(content))
     text = "\n".join(page.extract_text() or "" for page in reader.pages)
     rows: list[dict[str, Any]] = []
-    pattern = re.compile(
-        r"(?P<date>\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\s+"
-        r"(?P<description>.+?)\s+"
-        r"(?P<amount>[+-]?\d[\d,]*\.?\d{0,2})\s*"
-        r"(?P<kind>CR|DR)?$",
-        re.IGNORECASE,
-    )
-    for line in text.splitlines():
-        cleaned = _normalize_text(line)
+    pending_row: dict[str, Any] | None = None
+    for raw_line in text.splitlines():
+        cleaned = _normalize_text(raw_line)
         if not cleaned:
             continue
-        match = pattern.search(cleaned)
-        if not match:
+
+        match = PDF_ROW_DATE_RE.match(cleaned)
+        if match:
+            if pending_row:
+                rows.append(pending_row)
+                pending_row = None
+            parsed = _parse_pdf_statement_line(match.group("date"), match.group("body"))
+            if parsed:
+                pending_row = parsed
             continue
-        rows.append(
-            {
-                "date": match.group("date"),
-                "description": match.group("description"),
-                "amount": match.group("amount"),
-                "type": match.group("kind") or "",
-            }
-        )
+
+        # Some PDFs wrap long descriptions onto the next line; keep appending
+        # until we hit the next dated row.
+        if pending_row and not PDF_ROW_DATE_RE.match(cleaned):
+            pending_row["description"] = _normalize_text(
+                f"{pending_row.get('description', '')} {cleaned}"
+            )
+
+    if pending_row:
+        rows.append(pending_row)
+
     return rows
+
+
+def _parse_pdf_statement_line(statement_date: str, body: str) -> dict[str, Any] | None:
+    cleaned_body = _normalize_text(body)
+    if not cleaned_body:
+        return None
+
+    marker_match = re.search(r"\b(CR|DR)\b\s*$", cleaned_body, flags=re.IGNORECASE)
+    marker = marker_match.group(1).upper() if marker_match else ""
+    if marker_match:
+        cleaned_body = _normalize_text(cleaned_body[:marker_match.start()])
+
+    amount_matches = list(PDF_AMOUNT_RE.finditer(cleaned_body))
+    if not amount_matches:
+        return None
+
+    description = cleaned_body
+    debit = ""
+    credit = ""
+    amount_count = len(amount_matches)
+    amount_values = [_parse_amount(match.group(0)) for match in amount_matches]
+    amount_values = [value for value in amount_values if value is not None]
+
+    if marker:
+        last = amount_matches[-1]
+        description = _normalize_text(cleaned_body[:last.start()])
+        if marker == "DR":
+            debit = last.group(0)
+        else:
+            credit = last.group(0)
+    elif amount_count >= 3:
+        # Common PDF table pattern: description debit credit balance
+        debit_match = amount_matches[-3]
+        credit_match = amount_matches[-2]
+        description = _normalize_text(cleaned_body[:debit_match.start()])
+        if _parse_amount(debit_match.group(0)):
+            debit = debit_match.group(0)
+        if _parse_amount(credit_match.group(0)):
+            credit = credit_match.group(0)
+    elif amount_count >= 2:
+        # Another common pattern: description debit credit
+        debit_match = amount_matches[-2]
+        credit_match = amount_matches[-1]
+        description = _normalize_text(cleaned_body[:debit_match.start()])
+        debit_amount = _parse_amount(debit_match.group(0)) or 0
+        credit_amount = _parse_amount(credit_match.group(0)) or 0
+        if debit_amount > 0 and credit_amount == 0:
+            debit = debit_match.group(0)
+        elif credit_amount > 0 and debit_amount == 0:
+            credit = credit_match.group(0)
+        else:
+            # If both are present we keep both columns and let normalizer infer.
+            debit = debit_match.group(0)
+            credit = credit_match.group(0)
+    else:
+        only_amount = amount_matches[-1]
+        description = _normalize_text(cleaned_body[:only_amount.start()])
+        lowered = f" {description.lower()} "
+        if any(token in lowered for token in (" credited ", " credit ", " deposit ", " salary ")):
+            credit = only_amount.group(0)
+        elif any(token in lowered for token in (" debited ", " debit ", " withdrawal ", " spent ", " purchase ")):
+            debit = only_amount.group(0)
+        else:
+            # Leave as generic amount and let later validation drop rows with no type.
+            return {
+                "date": statement_date,
+                "description": description or cleaned_body,
+                "amount": only_amount.group(0),
+                "type": marker,
+            }
+
+    return {
+        "date": statement_date,
+        "description": description or cleaned_body,
+        "debit": debit,
+        "credit": credit,
+        "type": marker,
+    }
 
 
 async def parse_statement_file(upload: UploadFile) -> list[dict[str, Any]]:
@@ -365,6 +453,12 @@ def _infer_type(row: dict[str, Any], amount: float | None) -> tuple[str | None, 
     if raw_type in {"dr", "debit", "withdrawal"}:
         return ("debit", amount)
     if raw_type in {"cr", "credit", "deposit"}:
+        return ("credit", amount)
+
+    description = _normalize_text(_pick_value(row, DESCRIPTION_KEYS) or "").lower()
+    if any(token in description for token in (" debited ", " withdrawal ", " purchase ", " spent ")):
+        return ("debit", amount)
+    if any(token in description for token in (" credited ", " salary ", " refund ", " deposit ")):
         return ("credit", amount)
     return (None, amount)
 

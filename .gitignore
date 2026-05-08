@@ -255,3 +255,7 @@ db/init
 logs/
 *.log
 !.env.example
+
+
+cleanRestart.sh
+docker/backups/

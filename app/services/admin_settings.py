@@ -113,6 +113,38 @@ def _deep_merge(base: dict, patch: dict) -> dict:
     return merged
 
 
+def _coalesce_str(primary: object, fallback: object) -> str:
+    value = str(primary or "").strip()
+    if value:
+        return value
+    return str(fallback or "").strip()
+
+
+def _normalize_admin_settings(merged: dict, defaults: dict) -> dict:
+    normalized = deepcopy(merged)
+
+    default_auth = (defaults.get("authentication") or {}).copy()
+    auth_cfg = ((normalized.get("authentication") or {})).copy()
+    auth_cfg["provider"] = _coalesce_str(auth_cfg.get("provider"), default_auth.get("provider") or "google")
+    auth_cfg["client_id"] = _coalesce_str(auth_cfg.get("client_id"), default_auth.get("client_id"))
+    auth_cfg["client_secret"] = _coalesce_str(auth_cfg.get("client_secret"), default_auth.get("client_secret"))
+    if "allow_google_login" not in auth_cfg:
+        auth_cfg["allow_google_login"] = bool(default_auth.get("allow_google_login", True))
+    if "allow_local_login" not in auth_cfg:
+        auth_cfg["allow_local_login"] = bool(default_auth.get("allow_local_login", True))
+    if "enabled" not in auth_cfg:
+        auth_cfg["enabled"] = bool(default_auth.get("enabled", True))
+    normalized["authentication"] = auth_cfg
+
+    default_db = (defaults.get("database") or {}).copy()
+    db_cfg = ((normalized.get("database") or {})).copy()
+    db_cfg["mongo_uri"] = _coalesce_str(db_cfg.get("mongo_uri"), default_db.get("mongo_uri"))
+    db_cfg["mongo_db_name"] = _coalesce_str(db_cfg.get("mongo_db_name"), default_db.get("mongo_db_name"))
+    normalized["database"] = db_cfg
+
+    return normalized
+
+
 async def get_admin_settings_doc() -> dict | None:
     return await db.app_settings.find_one({"_id": SETTINGS_DOC_ID})
 
@@ -121,7 +153,8 @@ async def get_admin_settings() -> dict:
     defaults = default_admin_settings()
     doc = await get_admin_settings_doc()
     overrides = (doc or {}).get("values") or {}
-    return _deep_merge(defaults, overrides)
+    merged = _deep_merge(defaults, overrides)
+    return _normalize_admin_settings(merged, defaults)
 
 
 async def get_maintenance_state(force_refresh: bool = False) -> dict:

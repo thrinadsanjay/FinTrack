@@ -9,20 +9,22 @@ networks:
   ft-net:
     driver: bridge
 
-x-common: &common
-  env_file:
-    - ../.env
+x-shared: &shared
+  restart: unless-stopped
   networks:
     - ft-net
 
 services:
   mongodb:
-    <<: *common
+    <<: *shared
     image: mongo:7.0
     hostname: mongodb
-    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      MONGO_INITDB_DATABASE: ${MONGO_INITDB_DATABASE:-fintracker}
     ports:
-      - "27017:27017"
+      - "${FT_MONGO_PORT:-27017}:27017"
     volumes:
       - mongodb_data:/data/db
     healthcheck:
@@ -33,50 +35,50 @@ services:
       start_period: 20s
 
   mongo-express:
-    <<: *common
+    <<: *shared
     image: mongo-express:1.0.2
     hostname: mongo-express
-    restart: unless-stopped
-    profiles: ["tools"]
+    # profiles: ["tools"]
+    env_file:
+      - ../.env
+    environment:
+      ME_CONFIG_MONGODB_SERVER: ${ME_CONFIG_MONGODB_SERVER:-mongodb}
+      ME_CONFIG_MONGODB_PORT: ${ME_CONFIG_MONGODB_PORT:-27017}
+      ME_CONFIG_BASICAUTH_USERNAME: ${ME_CONFIG_BASICAUTH_USERNAME:-admin}
+      ME_CONFIG_BASICAUTH_PASSWORD: ${ME_CONFIG_BASICAUTH_PASSWORD:-change-me}
+      ME_CONFIG_OPTIONS_EDITORTHEME: ${ME_CONFIG_OPTIONS_EDITORTHEME:-ambiance}
     ports:
-      - "8081:8081"
+      - "${FT_MONGO_EXPRESS_PORT:-8081}:8081"
     depends_on:
       mongodb:
         condition: service_healthy
 
   backend:
-    <<: *common
+    <<: *shared
+    env_file:
+      - ../.env
     image: fin_tracker_backend:${FT_APP_VERSION:-1.0.0}
     build:
       context: ../
       dockerfile: Dockerfile
     hostname: ft_app
-    restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "${FT_BACKEND_PORT:-8000}:${PORT:-8000}"
     volumes:
       - app_logs:/fintracker/logs
-      - ./backups:/fintracker/backups
+      - app_backups:/fintracker/backups
+      #- "../app:/app/app:z"
     environment:
-      FT_LOG_DIR: /fintracker/logs
-      FT_BACKUP_DESTINATION: ${FT_BACKUP_DESTINATION:-/fintracker/backups}
+      PORT: ${PORT:-8000}
     depends_on:
       mongodb:
         condition: service_healthy
-    command:
-      - sh
-      - -c
-      - |
-        if [ "${FT_UVICORN_RELOAD:-false}" = "true" ]; then
-          exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-        fi
-        exec uvicorn app.main:app --host 0.0.0.0 --port 8000
     healthcheck:
       test:
         - CMD-SHELL
         - >-
           python -c "import sys, urllib.request;
-          response = urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5);
+          response = urllib.request.urlopen('http://127.0.0.1:${PORT:-8000}/health', timeout=5);
           sys.exit(0 if response.status == 200 else 1)"
       interval: 30s
       timeout: 10s

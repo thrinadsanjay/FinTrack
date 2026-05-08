@@ -592,8 +592,8 @@ async def admin_save_settings(
         },
         "authentication": {
             "enabled": _bool_from_form(auth_enabled),
-            "provider": auth_provider.strip(),
-            "client_id": auth_client_id.strip(),
+            "provider": auth_provider.strip() or str(current_auth.get("provider") or "google").strip() or "google",
+            "client_id": auth_client_id.strip() or str(current_auth.get("client_id") or "").strip(),
             "client_secret": submitted_auth_client_secret or str(current_auth.get("client_secret") or "").strip(),
             "default_telegram_country": default_country,
             "allow_local_login": _bool_from_form(auth_allow_local_login),

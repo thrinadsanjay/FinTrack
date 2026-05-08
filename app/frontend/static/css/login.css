@@ -18,6 +18,124 @@ body.user-guest .app-content {
   padding: 0 !important;
 }
 
+.page.page-auth,
+.page-auth {
+  min-height: min(78dvh, 760px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: clamp(28px, 6vw, 64px) 18px;
+}
+
+.page.page-auth > .login-bg--compact,
+.page-auth > .login-bg--compact {
+  width: min(440px, 100%);
+  flex: 0 1 440px;
+  margin-inline: auto;
+}
+
+.login-bg--compact {
+  width: 100%;
+  display: grid;
+  place-items: center;
+}
+
+.login-card--compact {
+  width: 100%;
+  max-width: 440px;
+  padding: 28px 26px 24px;
+  border-radius: 26px;
+}
+
+.login-card--compact .login-form {
+  gap: 12px;
+}
+
+.login-title {
+  margin: 0 0 8px;
+  color: #16213a;
+  font-size: clamp(1.6rem, 2.2vw, 2rem);
+  line-height: 1.05;
+}
+
+.login-subtitle {
+  margin: 0 0 18px;
+  color: #5f6d87;
+  font-size: 0.94rem;
+}
+
+.login-error {
+  margin: 0 0 16px;
+  color: #c43a3a;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.login-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.page-auth .form-group {
+  display: grid;
+  gap: 6px;
+}
+
+.page-auth .form-group label {
+  color: #4b5b78;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.page-auth .form-group input {
+  width: 100%;
+  min-height: 48px;
+  padding: 0.78rem 0.9rem;
+  border-radius: 16px;
+  border: 1px solid #d3ddef;
+  background: #fdfefe;
+  color: #15213a;
+  font-size: 0.94rem;
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.page-auth .form-group input:focus {
+  border-color: rgba(41, 92, 234, 0.52);
+  box-shadow: 0 0 0 4px rgba(41, 92, 234, 0.12);
+}
+
+.page-auth .btn-primary,
+.page-auth .btn-secondary {
+  min-height: 46px;
+}
+
+html[data-theme="dark"] .login-title {
+  color: #e5edf8;
+}
+
+html[data-theme="dark"] .login-subtitle {
+  color: #9ab0cd;
+}
+
+html[data-theme="dark"] .page-auth .form-group label {
+  color: #9ab0cd;
+}
+
+html[data-theme="dark"] .page-auth .form-group input {
+  background: rgba(11, 19, 32, 0.9);
+  border-color: rgba(91, 121, 160, 0.45);
+  color: #e5edf8;
+}
+
+html[data-theme="dark"] .page-auth .form-group input:focus {
+  border-color: rgba(96, 165, 250, 0.55);
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.14);
+}
+
 .login-page {
   min-height: 100dvh;
   display: grid;
@@ -426,6 +544,23 @@ body.user-guest .app-content {
 }
 
 @media (max-width: 640px) {
+  .page.page-auth,
+  .page-auth {
+    min-height: auto;
+    padding: 18px 12px 26px;
+  }
+
+  .login-card--compact {
+    width: min(100%, 420px);
+    padding: 20px 16px 18px;
+    border-radius: 20px;
+  }
+
+  .login-subtitle {
+    margin-bottom: 14px;
+    font-size: 0.88rem;
+  }
+
   .login-brand {
     min-height: 144px;
     padding: 10px 12px 8px;
