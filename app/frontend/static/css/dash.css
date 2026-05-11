@@ -29,6 +29,25 @@
   letter-spacing: -0.02em;
 }
 
+.dashx-header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.dashx-header-subtitle {
+  margin: 6px 0 0;
+  color: var(--color-muted);
+  font-size: 0.88rem;
+}
+
+.dashx-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .dashx-kpis {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -952,6 +971,16 @@
   .dashx-header {
     position: static;
     margin: 0;
+  }
+
+  .dashx-header-inner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .dashx-header-actions {
+    display: grid;
+    grid-template-columns: 1fr;
   }
 
   .dashx-kpis,

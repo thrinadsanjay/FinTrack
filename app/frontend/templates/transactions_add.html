@@ -6,9 +6,23 @@
 
 {% block content %}
 <section class="page page-add-transaction add-tx-page">
-<div class="title-row">
+<div class="list-header">
+  <div class="title-row">
+    <div>
       <h1>New Transaction</h1>
+      <p class="page-subtitle">Capture spending, income, transfers, and recurring entries quickly.</p>
     </div>
+  </div>
+  <div class="list-actions">
+    <a href="/transactions/list" class="page-action-btn page-action-btn-secondary">
+      <i class="fa fa-table-list"></i>
+      View Transactions
+    </a>
+  </div>
+</div>
+<div class="add-tx-intro card">
+  <p>Tip: choose transaction type first to reveal the right account and category flow.</p>
+</div>
 <div class="card transaction-card form-scroll">
   <form method="post" action="/transactions/add" id="transaction-form" data-inline-success-form data-inline-success-message="Transaction saved">
     <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">

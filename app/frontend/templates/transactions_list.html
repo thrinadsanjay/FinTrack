@@ -18,14 +18,31 @@
 
 <div class="list-header">
   <div class="title-row">
+    <div>
       <h1>Transactions</h1>
+      <p class="page-subtitle">Search, filter, and audit your full ledger in one place.
+        <span class="page-subtle-pill">
+          {{ transactions|length }} shown{% if active_filter_count %} · {{ active_filter_count }} filter{{ '' if active_filter_count == 1 else 's' }}{% endif %}
+        </span>
+      </p>
     </div>
+  </div>
+  <div class="list-actions">
+    <a href="/transactions" class="page-action-btn page-action-btn-primary">
+      <i class="fa fa-plus"></i>
+      New Transaction
+    </a>
+    <a href="/transaction-inbox" class="page-action-btn page-action-btn-secondary">
+      <i class="fa fa-inbox"></i>
+      Inbox
+    </a>
+  </div>
 </div>
 
 <!-- =========================
      FILTERS
 ========================= -->
-<div class="filter-bar">
+<div class="filter-bar filter-surface">
   <div class="filter-left">
     <button type="button" class="chip" data-quick-filter="last7">Last 7 days</button>
     <button type="button" class="chip" data-quick-filter="month">This month</button>

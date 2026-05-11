@@ -96,7 +96,26 @@ html[data-theme="dark"] body {
   gap: 12px;
 }
 
+.title-row-wide {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.title-row .page-subtitle {
+  margin: 4px 0 0;
+}
+
+.title-row-wide .list-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .title-row h1 {
+  font-family: "Manrope", "Inter", "Segoe UI", sans-serif;
   margin: 0;
   font-size: clamp(1.34rem, 2.2vw, 1.8rem);
   font-weight: 800;
@@ -176,11 +195,49 @@ html[data-theme="dark"] body {
 }
 
 .logo.head {
+  font-family: "Manrope", "Inter", "Segoe UI", sans-serif;
   font-size: 1.05rem;
   font-weight: 800;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: #f8fafc;
+}
+
+.logo-wrap {
+  display: grid;
+  align-items: start;
+  line-height: 1;
+  gap: 2px;
+}
+
+.logo-sub {
+  color: #9fc5ea;
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.mobile-quick-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 6px 10px;
+  text-decoration: none;
+  background: linear-gradient(135deg, #f97316, #ea580c);
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 800;
+  box-shadow: 0 8px 16px rgba(234, 88, 12, 0.35);
+}
+
+.mobile-quick-add i {
+  font-size: 0.74rem;
+}
+
+.mobile-quick-add:hover {
+  color: #ffffff;
 }
 
 .nav-links {
@@ -238,6 +295,21 @@ html[data-theme="dark"] body {
 
 /* Mobile nav redesign */
 @media (max-width: 768px) {
+  .logo-sub {
+    display: none;
+  }
+
+  .mobile-quick-add span {
+    display: none;
+  }
+
+  .mobile-quick-add {
+    width: 34px;
+    height: 34px;
+    justify-content: center;
+    padding: 0;
+  }
+
   [data-mobile-nav] {
     display: flex !important;
     position: fixed;
