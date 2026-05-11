@@ -33,7 +33,10 @@ async def init_indexes():
     await db.transaction_inbox.create_index([("user_id", 1), ("status", 1), ("date", -1)])
     await db.transaction_inbox.create_index([("user_id", 1), ("fingerprint", 1)], unique=True)
     await db.transaction_inbox.create_index([("user_id", 1), ("needs_attention", 1), ("status", 1)])
+    await db.transaction_inbox.create_index([("user_id", 1), ("status", 1), ("confidence", -1)])
     await db.sms_buffer.create_index([("parsed", 1), ("created_at", 1)])
+    await db.merchant_memory.create_index([("user_id", 1), ("merchant_keyword", 1), ("type", 1)], unique=True)
+    await db.merchant_memory.create_index([("user_id", 1), ("updated_at", -1)])
 
     # Recurring rules / scheduler
     await db.recurring_deposits.create_index([("user_id", 1)])

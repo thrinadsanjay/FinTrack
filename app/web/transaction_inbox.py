@@ -12,10 +12,15 @@ from app.core.errors import AppError
 from app.services.accounts import get_accounts
 from app.services.dashboard import get_user_notifications
 from app.services.transaction_inbox import (
+    approve_high_confidence_rows,
     approve_inbox_rows,
+    clear_pending_buffer,
+    clear_sms_buffer,
     discard_inbox_rows,
     import_statement_to_inbox,
+    ingest_sms_to_inbox,
     list_inbox_rows,
+    parse_sms_buffer_to_inbox,
     update_inbox_row,
 )
 from app.web.templates import templates
@@ -79,7 +84,26 @@ async def transaction_inbox_upload_statement(
             account_id=account_id,
             upload=statement_file,
         )
-        return JSONResponse(result)
+        # Return detailed pipeline report
+        return JSONResponse({
+            "success": result.get("stage3_inserted", 0) > 0,
+            "parsed": result.get("stage1_parsed", 0),
+            "normalized": result.get("stage2_normalized", 0),
+            "sample": result.get("stage2_sample", []),
+            "inserted": result.get("stage3_inserted", 0),
+            "duplicates": result.get("stage3_duplicates", 0),
+            "needs_attention": result.get("stage3_needs_attention", 0),
+            "statement_total": result.get("statement_total", 0),
+            "inbox_total": result.get("inbox_total", 0),
+            "stage1_errors": result.get("stage1_errors", [])[:5],
+            "stage2_errors": result.get("stage2_errors", [])[:5],
+            "stage3_errors": result.get("stage3_errors", [])[:5],
+            "detail": (
+                f"Parsed {result.get('stage1_parsed', 0)} rows, "
+                f"normalized {result.get('stage2_normalized', 0)}, "
+                f"inserted {result.get('stage3_inserted', 0)} to inbox"
+            )
+        })
     except AppError as exc:
         return _json_error(exc)
 
@@ -101,6 +125,7 @@ async def transaction_inbox_update_row(
             tx_type=payload.get("type"),
             mode=payload.get("mode"),
             category_code=payload.get("category_code"),
+            subcategory_code=payload.get("subcategory_code"),
             statement_date=payload.get("date"),
         )
         return JSONResponse({"row": row})
@@ -125,6 +150,23 @@ async def transaction_inbox_approve(request: Request):
         return _json_error(exc)
 
 
+@router.post("/transaction-inbox/approve-high-confidence")
+@login_required
+async def transaction_inbox_approve_high_confidence(request: Request):
+    payload = await request.json()
+    verify_csrf_token(request, payload.get("csrf_token"))
+    user = request.session.get("user")
+    try:
+        result = await approve_high_confidence_rows(
+            user_id=user["user_id"],
+            min_confidence=int(payload.get("min_confidence") or 70),
+            request=request,
+        )
+        return JSONResponse(result)
+    except AppError as exc:
+        return _json_error(exc)
+
+
 @router.post("/transaction-inbox/discard")
 @login_required
 async def transaction_inbox_discard(request: Request):
@@ -137,5 +179,67 @@ async def transaction_inbox_discard(request: Request):
             row_ids=[str(row_id) for row_id in (payload.get("row_ids") or [])],
         )
         return JSONResponse(result)
+    except AppError as exc:
+        return _json_error(exc)
+
+
+@router.post("/transaction-inbox/sms/ingest")
+@login_required
+async def transaction_inbox_sms_ingest(request: Request):
+    payload = await request.json()
+    verify_csrf_token(request, payload.get("csrf_token"))
+    user = request.session.get("user")
+    try:
+        result = await ingest_sms_to_inbox(
+            user_id=user["user_id"],
+            account_id=str(payload.get("account_id") or ""),
+            messages=list(payload.get("messages") or []),
+        )
+        return JSONResponse(result)
+    except AppError as exc:
+        return _json_error(exc)
+
+
+@router.post("/transaction-inbox/sms/sync-buffer")
+@login_required
+async def transaction_inbox_sms_sync_buffer(
+    request: Request,
+    account_id: str = Form(...),
+    csrf_token: str = Form(...),
+):
+    verify_csrf_token(request, csrf_token)
+    user = request.session.get("user")
+    try:
+        result = await parse_sms_buffer_to_inbox(
+            user_id=user["user_id"],
+            account_id=account_id,
+        )
+        return JSONResponse(result)
+    except AppError as exc:
+        return _json_error(exc)
+
+
+@router.post("/transaction-inbox/sms/clear-buffer")
+@login_required
+async def transaction_inbox_sms_clear_buffer(request: Request):
+    payload = await request.json()
+    verify_csrf_token(request, payload.get("csrf_token"))
+    user = request.session.get("user")
+    try:
+        result = await clear_sms_buffer(user_id=user["user_id"])
+        return JSONResponse(result)
+    except AppError as exc:
+        return _json_error(exc)
+
+
+@router.post("/transaction-inbox/buffer/clear")
+@login_required
+async def transaction_inbox_clear_pending_buffer(request: Request):
+    payload = await request.json()
+    verify_csrf_token(request, payload.get("csrf_token"))
+    user = request.session.get("user")
+    try:
+        result = await clear_pending_buffer(user_id=user["user_id"])
+        return JSONResponse({"cleared_count": result.get("cleared_count", 0)})
     except AppError as exc:
         return _json_error(exc)

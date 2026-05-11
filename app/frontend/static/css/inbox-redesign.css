@@ -1,0 +1,555 @@
+/* Transaction Inbox visual redesign. HTML/CSS-only layer; no behavior changes. */
+
+.page-transaction-inbox.inbox-shell {
+  --inbox-brand: #0b5d7a;
+  --inbox-brand-2: #0e7490;
+  --inbox-accent: #c2410c;
+  --inbox-ok: #0f766e;
+  --inbox-warn: #b45309;
+  --inbox-danger: #b91c1c;
+  --inbox-surface: rgba(255, 255, 255, 0.88);
+  --inbox-surface-strong: #ffffff;
+  --inbox-border: rgba(15, 23, 42, 0.12);
+  --inbox-ink: #0f172a;
+  --inbox-muted: #475569;
+  --inbox-shadow: 0 14px 36px rgba(15, 23, 42, 0.12);
+  --inbox-radius: 18px;
+  --inbox-radius-sm: 12px;
+
+  display: grid;
+  gap: 16px;
+}
+
+html[data-theme="dark"] .page-transaction-inbox.inbox-shell {
+  --inbox-surface: rgba(12, 20, 34, 0.86);
+  --inbox-surface-strong: rgba(15, 23, 42, 0.95);
+  --inbox-border: rgba(148, 163, 184, 0.24);
+  --inbox-ink: #e5edf9;
+  --inbox-muted: #9eb0cc;
+  --inbox-shadow: 0 16px 42px rgba(2, 6, 23, 0.42);
+}
+
+.page-transaction-inbox .card {
+  border-radius: var(--inbox-radius);
+  border: 1px solid var(--inbox-border);
+  box-shadow: var(--inbox-shadow);
+  background: var(--inbox-surface);
+}
+
+.page-transaction-inbox .inbox-hero {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  gap: 18px;
+  padding: 20px;
+  border: 1px solid color-mix(in srgb, var(--inbox-brand) 24%, var(--inbox-border));
+  background:
+    radial-gradient(circle at 88% -12%, rgba(14, 116, 144, 0.24), transparent 40%),
+    radial-gradient(circle at 4% 104%, rgba(194, 65, 12, 0.2), transparent 46%),
+    linear-gradient(125deg, color-mix(in srgb, var(--inbox-brand) 10%, var(--inbox-surface-strong)), var(--inbox-surface));
+}
+
+.page-transaction-inbox .inbox-eyebrow {
+  margin: 0 0 6px;
+  color: var(--inbox-brand-2);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.73rem;
+}
+
+.page-transaction-inbox .inbox-hero h1 {
+  margin: 0;
+  font-family: "Space Grotesk", "Inter", "Segoe UI", sans-serif;
+  font-size: clamp(1.5rem, 2.8vw, 2.05rem);
+  letter-spacing: -0.02em;
+  color: var(--inbox-ink);
+}
+
+.page-transaction-inbox .inbox-hero .subtitle {
+  margin: 8px 0 0;
+  max-width: 68ch;
+  color: var(--inbox-muted);
+}
+
+.page-transaction-inbox .inbox-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.page-transaction-inbox .inbox-stat {
+  border: 1px solid var(--inbox-border);
+  border-radius: var(--inbox-radius-sm);
+  background: color-mix(in srgb, var(--inbox-surface-strong) 86%, transparent);
+  padding: 12px;
+  display: grid;
+  gap: 4px;
+}
+
+.page-transaction-inbox .inbox-stat span {
+  color: var(--inbox-muted);
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+}
+
+.page-transaction-inbox .inbox-stat strong {
+  font-size: clamp(1.25rem, 2.3vw, 1.75rem);
+  font-weight: 800;
+  color: var(--inbox-ink);
+  line-height: 1;
+}
+
+.page-transaction-inbox .inbox-stat--pending {
+  border-color: color-mix(in srgb, var(--inbox-brand-2) 35%, var(--inbox-border));
+}
+
+.page-transaction-inbox .inbox-stat--attention {
+  border-color: color-mix(in srgb, #f59e0b 45%, var(--inbox-border));
+  background: linear-gradient(130deg, color-mix(in srgb, #f59e0b 12%, transparent), color-mix(in srgb, var(--inbox-surface-strong) 90%, transparent));
+}
+
+.page-transaction-inbox .inbox-stat--statement {
+  border-color: color-mix(in srgb, #0369a1 35%, var(--inbox-border));
+}
+
+.page-transaction-inbox .inbox-stat--sms {
+  border-color: color-mix(in srgb, #7c3aed 35%, var(--inbox-border));
+}
+
+.page-transaction-inbox .inbox-panels-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.page-transaction-inbox .inbox-section-head h2 {
+  margin: 0 0 6px;
+  font-family: "Space Grotesk", "Inter", "Segoe UI", sans-serif;
+  font-size: 1.12rem;
+  letter-spacing: -0.01em;
+}
+
+.page-transaction-inbox .inbox-section-head h2 i {
+  color: var(--inbox-brand-2);
+  margin-right: 6px;
+}
+
+.page-transaction-inbox .inbox-section-head p {
+  margin: 0;
+  color: var(--inbox-muted);
+  font-size: 0.9rem;
+}
+
+.page-transaction-inbox .inbox-recon-grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.page-transaction-inbox .inbox-recon-cell {
+  border-radius: var(--inbox-radius-sm);
+  border: 1px dashed color-mix(in srgb, var(--inbox-brand-2) 34%, var(--inbox-border));
+  padding: 12px;
+  background: color-mix(in srgb, var(--inbox-brand-2) 8%, var(--inbox-surface-strong));
+}
+
+.page-transaction-inbox .inbox-recon-cell span {
+  display: block;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--inbox-muted);
+  margin-bottom: 4px;
+}
+
+.page-transaction-inbox .inbox-recon-cell strong {
+  color: var(--inbox-ink);
+  font-size: 1.2rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.page-transaction-inbox .inbox-upload-form {
+  display: grid;
+  gap: 12px;
+}
+
+.page-transaction-inbox .field-group {
+  align-items: stretch;
+}
+
+.page-transaction-inbox .form-field {
+  min-height: 48px;
+  border-radius: 12px;
+}
+
+.page-transaction-inbox .inbox-upload-actions {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+}
+
+.page-transaction-inbox .inbox-primary-btn {
+  min-height: 42px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--inbox-brand) 55%, transparent);
+  background: linear-gradient(130deg, var(--inbox-brand), var(--inbox-brand-2));
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(14, 116, 144, 0.28);
+}
+
+.page-transaction-inbox .inbox-upload-result {
+  min-height: 38px;
+  border-radius: 12px;
+  padding: 10px 12px;
+  color: var(--inbox-muted);
+  background: color-mix(in srgb, var(--inbox-surface-strong) 72%, transparent);
+  border: 1px solid var(--inbox-border);
+  overflow-wrap: anywhere;
+}
+
+.page-transaction-inbox .result-success {
+  background: color-mix(in srgb, #10b981 14%, var(--inbox-surface-strong));
+  border-color: color-mix(in srgb, #10b981 44%, var(--inbox-border));
+  color: color-mix(in srgb, #065f46 86%, var(--inbox-ink));
+}
+
+.page-transaction-inbox .result-error {
+  background: color-mix(in srgb, #ef4444 12%, var(--inbox-surface-strong));
+  border-color: color-mix(in srgb, #ef4444 44%, var(--inbox-border));
+  color: color-mix(in srgb, #7f1d1d 86%, var(--inbox-ink));
+}
+
+.page-transaction-inbox .result-info {
+  background: color-mix(in srgb, #0ea5e9 12%, var(--inbox-surface-strong));
+  border-color: color-mix(in srgb, #0ea5e9 36%, var(--inbox-border));
+  color: color-mix(in srgb, #0c4a6e 86%, var(--inbox-ink));
+}
+
+.page-transaction-inbox .error-detail {
+  margin-top: 7px;
+  max-height: 108px;
+  overflow-y: auto;
+}
+
+.page-transaction-inbox .inbox-sms-controls {
+  flex-wrap: wrap;
+  align-content: center;
+}
+
+.page-transaction-inbox .inbox-table-card {
+  padding: 14px;
+}
+
+.page-transaction-inbox .inbox-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin: -4px -4px 10px;
+  padding: 10px;
+  border: 1px solid var(--inbox-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--inbox-surface-strong) 76%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.page-transaction-inbox .inbox-filter-toggle {
+  font-size: 0.9rem;
+  color: var(--inbox-ink);
+}
+
+.page-transaction-inbox .inbox-filter-toggle--button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.page-transaction-inbox .inbox-filter-toggle--button input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.page-transaction-inbox .inbox-filter-toggle__text {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--inbox-border);
+  background: color-mix(in srgb, var(--inbox-surface-strong) 90%, transparent);
+  color: var(--inbox-muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+  transition: all 0.18s ease;
+}
+
+.page-transaction-inbox .inbox-filter-toggle__state {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--inbox-border);
+  background: color-mix(in srgb, var(--inbox-ink) 6%, transparent);
+  color: var(--inbox-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  transition: all 0.18s ease;
+}
+
+.page-transaction-inbox .inbox-filter-toggle__state::before {
+  content: "OFF";
+}
+
+.page-transaction-inbox .inbox-filter-toggle--button input:checked + .inbox-filter-toggle__text {
+  border-color: color-mix(in srgb, #f59e0b 55%, var(--inbox-border));
+  background: color-mix(in srgb, #f59e0b 14%, transparent);
+  color: #b45309;
+}
+
+.page-transaction-inbox .inbox-filter-toggle--button input:checked + .inbox-filter-toggle__text + .inbox-filter-toggle__state {
+  border-color: color-mix(in srgb, #f59e0b 55%, var(--inbox-border));
+  background: color-mix(in srgb, #f59e0b 18%, transparent);
+  color: #b45309;
+}
+
+.page-transaction-inbox .inbox-filter-toggle--button input:checked + .inbox-filter-toggle__text + .inbox-filter-toggle__state::before {
+  content: "ON";
+}
+
+.page-transaction-inbox .inbox-filter-toggle--button input:focus-visible + .inbox-filter-toggle__text {
+  outline: 2px solid color-mix(in srgb, var(--inbox-brand-2) 55%, #0891b2);
+  outline-offset: 2px;
+}
+
+.page-transaction-inbox .chip {
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.page-transaction-inbox .chip-action {
+  background: color-mix(in srgb, var(--inbox-brand-2) 14%, transparent);
+  color: var(--inbox-brand-2);
+  border-color: color-mix(in srgb, var(--inbox-brand-2) 30%, transparent);
+}
+
+.page-transaction-inbox .chip-subtle {
+  background: color-mix(in srgb, var(--inbox-ink) 8%, transparent);
+  color: var(--inbox-ink);
+  border-color: var(--inbox-border);
+}
+
+.page-transaction-inbox .chip-danger {
+  background: color-mix(in srgb, #ef4444 14%, transparent);
+  color: #b91c1c;
+  border-color: color-mix(in srgb, #ef4444 32%, transparent);
+}
+
+.page-transaction-inbox .chip-danger--ghost {
+  background: transparent;
+}
+
+.page-transaction-inbox .table-scroll {
+  border: 1px solid var(--inbox-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--inbox-surface-strong) 90%, transparent);
+}
+
+.page-transaction-inbox .inbox-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.page-transaction-inbox .inbox-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--inbox-brand-2) 16%, var(--inbox-surface-strong)), color-mix(in srgb, var(--inbox-brand-2) 10%, var(--inbox-surface-strong)));
+  color: color-mix(in srgb, var(--inbox-ink) 78%, #334155);
+  font-size: 0.77rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.page-transaction-inbox .inbox-table td,
+.page-transaction-inbox .inbox-table th {
+  border-bottom: 1px solid var(--inbox-border);
+}
+
+.page-transaction-inbox .inbox-group-row td {
+  background: color-mix(in srgb, var(--inbox-brand-2) 11%, transparent);
+}
+
+.page-transaction-inbox .inbox-group-meta {
+  color: var(--inbox-muted);
+}
+
+.page-transaction-inbox .inbox-group-meta strong {
+  color: var(--inbox-ink);
+}
+
+.page-transaction-inbox .inbox-row--attention {
+  background: linear-gradient(90deg, color-mix(in srgb, #f59e0b 11%, transparent), transparent);
+}
+
+.page-transaction-inbox .inbox-row--attention td:first-child {
+  border-left: 3px solid color-mix(in srgb, #f59e0b 78%, #d97706);
+}
+
+.page-transaction-inbox .inbox-row td {
+  vertical-align: middle;
+}
+
+.page-transaction-inbox .inbox-table input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--inbox-brand-2);
+  cursor: pointer;
+}
+
+.page-transaction-inbox .inbox-table thead th:first-child,
+.page-transaction-inbox .inbox-table td:first-child {
+  width: 34px;
+  text-align: center;
+}
+
+.page-transaction-inbox .inbox-table input[type="date"],
+.page-transaction-inbox .inbox-table input[type="text"],
+.page-transaction-inbox .inbox-table input[type="number"],
+.page-transaction-inbox .inbox-table select {
+  min-height: 36px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--inbox-border) 92%, #cbd5e1);
+  background: color-mix(in srgb, var(--inbox-surface-strong) 94%, transparent);
+}
+
+.page-transaction-inbox .inbox-table input:focus,
+.page-transaction-inbox .inbox-table select:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--inbox-brand-2) 66%, #0891b2);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--inbox-brand-2) 16%, transparent);
+}
+
+.page-transaction-inbox .row-save-btn {
+  border: 1px solid color-mix(in srgb, var(--inbox-ok) 32%, transparent);
+  background: color-mix(in srgb, var(--inbox-ok) 14%, transparent);
+  color: var(--inbox-ok);
+  border-radius: 10px;
+  min-height: 34px;
+  min-width: 38px;
+  cursor: pointer;
+}
+
+.page-transaction-inbox .inbox-merchant {
+  display: inline-block;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.page-transaction-inbox .inbox-subcategory {
+  display: inline-block;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--inbox-muted);
+  font-size: 0.82rem;
+}
+
+.page-transaction-inbox .confidence-pill {
+  border-radius: 999px;
+  font-size: 0.72rem;
+  padding: 5px 8px;
+  font-weight: 700;
+}
+
+.page-transaction-inbox .confidence-high {
+  background: color-mix(in srgb, #10b981 20%, transparent);
+  color: #047857;
+}
+
+.page-transaction-inbox .confidence-medium {
+  background: color-mix(in srgb, #f59e0b 20%, transparent);
+  color: #b45309;
+}
+
+.page-transaction-inbox .confidence-low {
+  background: color-mix(in srgb, #ef4444 16%, transparent);
+  color: #b91c1c;
+}
+
+.page-transaction-inbox .inbox-empty-cell {
+  color: var(--inbox-muted);
+  font-size: 0.95rem;
+  padding: 36px 14px;
+}
+
+@media (max-width: 1080px) {
+  .page-transaction-inbox .inbox-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .page-transaction-inbox .inbox-panels-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 820px) {
+  .page-transaction-inbox .inbox-toolbar {
+    position: static;
+  }
+
+  .page-transaction-inbox .inbox-toolbar,
+  .page-transaction-inbox .inbox-toolbar-right,
+  .page-transaction-inbox .inbox-toolbar-left,
+  .page-transaction-inbox .inbox-upload-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .page-transaction-inbox .inbox-sms-controls {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .page-transaction-inbox .table-scroll {
+    overflow-x: auto;
+  }
+
+  .page-transaction-inbox .inbox-table {
+    min-width: 1080px;
+  }
+}
+
+@media (max-width: 560px) {
+  .page-transaction-inbox .inbox-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .page-transaction-inbox .inbox-hero {
+    padding: 14px;
+  }
+
+  .page-transaction-inbox .inbox-table-card {
+    padding: 10px;
+  }
+}

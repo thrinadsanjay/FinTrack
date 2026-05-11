@@ -3,90 +3,98 @@
 {% block extra_css %}
 <link rel="stylesheet" href="/static/css/dash.css">
 {% endblock %}
+
 {% block content %}
-<section class="page page-dashboard">
-<div class="title-row">
-  <h1>Dashboard</h1>
-</div>
-<section class="dashboard-container">
-  <section class="dashboard-header">
-    <div class="header-panels">
-      <div class="panel panel-compact panel-total">
-        <div class="panel-header">
-          <h3>Total Balance</h3>
-          <span class="pill">Consolidated</span>
-        </div>
-        <div class="balance-amount">₹ {{ summary.balance | money }}</div>
-        {% set today_net = (summary.today_income | default(0)) - (summary.today_expense | default(0)) %}
-        <div class="balance-sub">
-          <span class="metric green">Income (D): ₹ {{ summary.today_income | money }}</span>
-          <span class="metric red">Expense (D): ₹ {{ summary.today_expense | money }}</span>
-          <span class="metric {% if today_net < 0 %}red{% else %}green{% endif %}">
-            Net (D): ₹ {{ today_net | money }}
-          </span>
-          <span class="metric">Net (MTD): ₹ {{ summary.month_net | money }}</span>
-        </div>
+{% set today_net = (summary.today_income | default(0)) - (summary.today_expense | default(0)) %}
+{% set ro = summary.recurring_overview %}
+{% set cc = summary.credit_card_summary %}
+
+<section class="page page-dashboard dashx">
+  <div class="title-row dashx-header">
+    <h1>Dashboard</h1>
+  </div>
+
+  <section class="dashx-kpis">
+    <article class="dashx-kpi dashx-kpi-balance">
+      <div class="dashx-kpi-top">
+        <span class="dashx-kpi-label">Total Balance</span>
+        <span class="dashx-chip">Consolidated</span>
       </div>
-      <div class="panel panel-compact panel-mini panel-savings">
-        <div class="panel-header">
-          <h3>Savings Ratio</h3>
-          <span class="pill">MTD</span>
-        </div>
-        {% if summary.savings_rate is not none %}
-          {% set rate_value = summary.savings_rate | default(0) %}
-          {% set rate_progress = rate_value %}
-          {% if rate_progress < 0 %}{% set rate_progress = 0 %}{% endif %}
-          {% if rate_progress > 100 %}{% set rate_progress = 100 %}{% endif %}
-          <div class="savings-rate savings-top">
-            <span class="rate">{{ rate_value }}%</span>
-            <span class="savings-label">Income Retained</span>
+      <div class="dashx-kpi-value">₹ {{ summary.balance | money }}</div>
+      <div class="dashx-kpi-meta">
+        <span class="dashx-pill">Accounts: {{ summary.account_balances|length }}</span>
+      </div>
+    </article>
+
+    <article class="dashx-kpi">
+      <div class="dashx-kpi-top">
+        <span class="dashx-kpi-label">Today Net</span>
+        <span class="dashx-chip">Daily</span>
+      </div>
+      <div class="dashx-kpi-value {% if today_net < 0 %}is-negative{% else %}is-positive{% endif %}">
+        ₹ {{ today_net | money }}
+      </div>
+      <div class="dashx-kpi-split">
+        <span class="is-positive">In ₹ {{ summary.today_income | money }}</span>
+        <span class="is-negative">Out ₹ {{ summary.today_expense | money }}</span>
+      </div>
+    </article>
+
+    <article class="dashx-kpi">
+      <div class="dashx-kpi-top">
+        <span class="dashx-kpi-label">Month Net</span>
+        <span class="dashx-chip">MTD</span>
+      </div>
+      <div class="dashx-kpi-value {% if summary.month_net < 0 %}is-negative{% else %}is-positive{% endif %}">
+        ₹ {{ summary.month_net | money }}
+      </div>
+      <div class="dashx-kpi-split">
+        <span>Income ₹ {{ summary.month_income | money }}</span>
+        <span>Expense ₹ {{ summary.month_expense | money }}</span>
+      </div>
+    </article>
+
+    <article class="dashx-kpi">
+      <div class="dashx-kpi-top">
+        <span class="dashx-kpi-label">Savings Ratio</span>
+        <span class="dashx-chip">MTD</span>
+      </div>
+      {% if summary.savings_rate is not none %}
+        {% set rate_value = summary.savings_rate | default(0) %}
+        {% set rate_progress = rate_value %}
+        {% if rate_progress < 0 %}{% set rate_progress = 0 %}{% endif %}
+        {% if rate_progress > 100 %}{% set rate_progress = 100 %}{% endif %}
+        <div class="dashx-kpi-value">{{ rate_value }}%</div>
+        <div class="dashx-progress" aria-hidden="true"><span style="width: {{ rate_progress }}%"></span></div>
+        {% if summary.savings_rate_change is not none %}
+          <div class="dashx-kpi-trend {% if summary.savings_rate_change < 0 %}is-negative{% else %}is-positive{% endif %}">
+            {% if summary.savings_rate_change < 0 %}Down{% else %}Up{% endif %} {{ summary.savings_rate_change | abs }}% vs Prev M
           </div>
-          {% if summary.savings_rate_change is not none %}
-            <span class="trend {% if summary.savings_rate_change < 0 %}red{% else %}green{% endif %}">
-              {% if summary.savings_rate_change < 0 %}Down{% else %}Up{% endif %}
-              {{ summary.savings_rate_change | abs }}% vs Prev M
-            </span>
-          {% endif %}
-          <div class="savings-net {% if summary.month_net < 0 %}red{% else %}green{% endif %}">
-            {% if summary.month_net < 0 %}
-              MTD Deficit: ₹ {{ summary.month_net | abs | money }}
-            {% else %}
-              MTD Savings: ₹ {{ summary.month_net | money }}
-            {% endif %}
-          </div>
-          <div class="savings-bar" aria-hidden="true">
-            <span style="width: {{ rate_progress }}%"></span>
-          </div>
-          <div class="savings-breakdown">
-            <div class="savings-item income">
-              <span>Income</span>
-              <strong>₹ {{ summary.month_income | money }}</strong>
-            </div>
-            <div class="savings-item expense">
-              <span>Expense</span>
-              <strong>₹ {{ summary.month_expense | money }}</strong>
-            </div>
-          </div>
-        {% else %}
-          <p class="empty-state">No income recorded this month.</p>
         {% endif %}
-      </div>
-      <div class="panel panel-balance-accounts">
-        <div class="panel-header">
-          <h3>Account Balances</h3>
-          <span class="pill">Active</span>
-        </div>
+      {% else %}
+        <div class="dashx-kpi-empty">No income recorded this month.</div>
+      {% endif %}
+    </article>
+  </section>
+
+  <section class="dashx-main-grid">
+    <article class="dashx-card dashx-accounts-card">
+      <header class="dashx-card-header">
+        <h2>Cash Positions</h2>
+        <span class="dashx-chip">Accounts</span>
+      </header>
+      <div class="dashx-card-body">
         {% if summary.account_balances %}
-          <ul class="account-list scroll-list">
+          <ul class="dashx-account-list">
             {% for account in summary.account_balances %}
               <li>
                 <div>
-                  <span class="account-name">{{ account.name }}</span>
+                  <div class="dashx-account-name">{{ account.name }}</div>
                   {% if account.bank_name %}
-                    <span class="muted">({{ account.bank_name }})</span>
+                    <div class="dashx-account-sub">{{ account.bank_name }}</div>
                   {% endif %}
                 </div>
-                <span class="account-balance">₹ {{ account.balance | money }}</span>
+                <div class="dashx-account-amount">₹ {{ account.balance | money }}</div>
               </li>
             {% endfor %}
           </ul>
@@ -94,351 +102,351 @@
           <p class="empty-state">No accounts yet.</p>
         {% endif %}
       </div>
-      <div class="panel recurring-overview-panel">
-        <div class="panel-header">
-          <h3>Recurring Schedule</h3>
-          <span class="pill">MTD</span>
-        </div>
-        <div class="rt-dashboard">
-          {% set ro = summary.recurring_overview %}
-          <section class="rt-summary-grid">
-            <article class="rt-summary-card">
-              <span class="rt-summary-label">Total Scheduled</span>
-              <strong class="rt-summary-value">₹ {{ "%.2f"|format(ro.total_scheduled_amount | default(0)) }}</strong>
-              <small class="rt-summary-note">Current cycle outlook</small>
-            </article>
-            <article class="rt-summary-card">
-              <span class="rt-summary-label">Monthly Progress</span>
-              <strong class="rt-summary-value">₹ {{ "%.2f"|format(ro.paid_this_month_total | default(0)) }}</strong>
-              <div class="rt-progress" role="progressbar" aria-valuenow="{{ ro.paid_progress_percent | default(0) }}" aria-valuemin="0" aria-valuemax="100">
-                <span style="width: {{ ro.paid_progress_percent | default(0) }}%"></span>
-              </div>
-              <small class="rt-summary-note">Paid: ₹ {{ "%.2f"|format(ro.paid_this_month_total | default(0)) }} | Remaining: ₹ {{ "%.2f"|format(ro.remaining_amount | default(0)) }}</small>
-            </article>
-            <article class="rt-summary-card">
-              <span class="rt-summary-label">Upcoming This Month</span>
-              <strong class="rt-summary-value">{{ ro.upcoming_count | default(0) }} Payments</strong>
-              <small class="rt-summary-note">Next due: {{ ro.next_due_label | default("None") }}</small>
-            </article>
-          </section>
+    </article>
 
-          <section class="rt-day-grid" data-day-grid>
-            <section class="rt-block">
-              <h4>Today - ₹ {{ "%.2f"|format(ro.today_total | default(0)) }}</h4>
-              {% if ro.today %}
-                <ul class="rt-list">
-                  {% for item in ro.today %}
-                    <li class="rt-item freq-{{ (item.frequency or 'monthly') | lower }} {% if item.status == 'failed' %}is-failed{% endif %}">
-                      <div class="rt-row-top">
-                        <strong class="rt-name">{{ item.description }}</strong>
-                        <strong class="rt-amount">₹ {{ "%.2f"|format(item.amount | default(0)) }}</strong>
-                      </div>
-                      <div class="rt-row-bottom">
-                        <span class="rt-account">{{ item.account_name }}</span>
-                        <span class="rt-frequency">{{ (item.frequency or "scheduled") | lower }}</span>
-                      </div>
-                    </li>
-                  {% endfor %}
-                </ul>
-              {% else %}
-                <p class="empty-state">No recurring transactions today.</p>
-              {% endif %}
-            </section>
+    <article class="dashx-card dashx-recurring-card">
+      <header class="dashx-card-header">
+        <h2>Recurring Radar</h2>
+        <span class="dashx-chip">This Month</span>
+      </header>
 
-            <section class="rt-block">
-              <h4>Tomorrow - ₹ {{ "%.2f"|format(ro.tomorrow_total | default(0)) }}</h4>
-              {% if ro.tomorrow %}
-                <ul class="rt-list">
-                  {% for item in ro.tomorrow %}
-                    <li class="rt-item freq-{{ (item.frequency or 'monthly') | lower }} {% if item.status == 'critical' or item.status == 'risk' %}is-critical{% endif %}">
-                      <div class="rt-row-top">
-                        <strong class="rt-name">{{ item.description }}</strong>
-                        <strong class="rt-amount">₹ {{ "%.2f"|format(item.amount | default(0)) }}</strong>
-                      </div>
-                      <div class="rt-row-bottom">
-                        <span class="rt-account">{{ item.account_name }}</span>
-                        <span class="rt-frequency">{{ (item.frequency or "scheduled") | lower }}</span>
-                      </div>
-                    </li>
-                  {% endfor %}
-                </ul>
-              {% else %}
-                <p class="empty-state">No recurring transactions tomorrow.</p>
-              {% endif %}
-            </section>
-          </section>
-
-          <div class="rt-month-sections">
-            <section class="rt-collapsible" data-collapsible>
-              <button type="button" class="rt-collapse-toggle" data-toggle aria-expanded="false">
-                <span>Daily (Month Projection) - ₹ {{ "%.2f"|format(ro.daily_projected_total | default(0)) }}</span>
-                <span class="rt-toggle-icon" aria-hidden="true">▾</span>
-              </button>
-              <div class="rt-collapse-body" data-body hidden>
-                {% if ro.daily_items %}
-                  <ul class="rt-list rt-list-grid rt-list-3col">
-                    {% for item in ro.daily_items %}
-                      <li class="rt-item freq-daily {% if item.status == 'failed' %}is-failed{% elif item.status == 'critical' or item.status == 'risk' %}is-critical{% endif %}">
-                        <div class="rt-row-top">
-                          <strong class="rt-name">{{ item.description }}</strong>
-                          <strong class="rt-amount">₹ {{ "%.2f"|format(item.amount | default(0)) }}</strong>
-                        </div>
-                        <div class="rt-row-bottom">
-                          <span class="rt-account">{{ item.account_name }}</span>
-                          <span class="rt-frequency">daily</span>
-                        </div>
-                      </li>
-                    {% endfor %}
-                  </ul>
-                {% else %}
-                  <p class="empty-state">No daily recurring transactions.</p>
-                {% endif %}
-              </div>
-            </section>
-
-            <section class="rt-collapsible" data-collapsible>
-              <button type="button" class="rt-collapse-toggle" data-toggle aria-expanded="false">
-                <span>Upcoming (This Month) - ₹ {{ "%.2f"|format(ro.upcoming_total | default(0)) }}</span>
-                <span class="rt-toggle-icon" aria-hidden="true">▾</span>
-              </button>
-              <div class="rt-collapse-body" data-body hidden>
-                {% if ro.upcoming_groups %}
-                  {% for group in ro.upcoming_groups %}
-                    <div class="rt-date-group">
-                      <h5>{{ group.date_label }}</h5>
-                      <ul class="rt-list rt-list-grid">
-                        {% for item in group["items"] %}
-                          <li class="rt-item freq-{{ (item.frequency or 'monthly') | lower }} {% if item.status == 'critical' or item.status == 'risk' %}is-critical{% endif %}">
-                            <div class="rt-row-top">
-                              <strong class="rt-name">{{ item.description }}</strong>
-                              <strong class="rt-amount">₹ {{ "%.2f"|format(item.amount | default(0)) }}</strong>
-                            </div>
-                            <div class="rt-row-bottom">
-                              <span class="rt-account">{{ item.account_name }}</span>
-                              <span class="rt-frequency">{{ (item.frequency or "scheduled") | lower }}</span>
-                            </div>
-                          </li>
-                        {% endfor %}
-                      </ul>
-                    </div>
-                  {% endfor %}
-                {% else %}
-                  <p class="empty-state">No upcoming transactions this month.</p>
-                {% endif %}
-              </div>
-            </section>
-
-            <section class="rt-collapsible" data-collapsible>
-              <button type="button" class="rt-collapse-toggle" data-toggle aria-expanded="false">
-                <span>Processed This Month - ₹ {{ "%.2f"|format(ro.processed_total | default(0)) }}</span>
-                <span class="rt-toggle-icon" aria-hidden="true">▾</span>
-              </button>
-              <div class="rt-collapse-body" data-body hidden>
-                {% if ro.processed_groups %}
-                  {% for group in ro.processed_groups %}
-                    <div class="rt-date-group">
-                      <h5>{{ group.date_label }}</h5>
-                      <ul class="rt-list rt-list-grid">
-                        {% for item in group["items"] %}
-                          <li class="rt-item freq-{{ (item.frequency or 'monthly') | lower }} {% if item.status == 'failed' %}is-failed{% endif %}">
-                            <div class="rt-row-top">
-                              <strong class="rt-name">{{ item.description }}</strong>
-                              <strong class="rt-amount">₹ {{ "%.2f"|format(item.amount | default(0)) }}</strong>
-                            </div>
-                            <div class="rt-row-bottom">
-                              <span class="rt-account">{{ item.account_name }}</span>
-                              <span class="rt-frequency">{{ (item.frequency or "scheduled") | lower }}</span>
-                            </div>
-                          </li>
-                        {% endfor %}
-                      </ul>
-                    </div>
-                  {% endfor %}
-                {% else %}
-                  <p class="empty-state">No processed recurring transactions this month.</p>
-                {% endif %}
-              </div>
-            </section>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="panel-grid charts">
-    <div class="panel">
-      <div class="panel-header">
-        <h3>Spend by Category</h3>
-        <span class="pill">MTD</span>
-      </div>
-      {% if summary.top_spending_categories %}
-        <div class="chart-wrap chart-square">
-          <canvas id="spendingCategoryChart" height="160"></canvas>
-        </div>
-      {% else %}
-        <p class="empty-state">No spend data for MTD.</p>
-      {% endif %}
-    </div>
-    <div class="panel">
-      <div class="panel-header">
-        <h3>Daily Cash Flow</h3>
-        <span class="pill">{{ summary.cashflow_month_label }}</span>
-      </div>
-      <div class="chart-wrap chart-square">
-        <canvas id="cashflowChart" height="160"></canvas>
-      </div>
-    </div>
-    <div class="panel">
-      <div class="panel-header">
-        <h3>Monthly Income vs Expense</h3>
-        <span class="pill">Through {{ summary.monthly_till_label }}</span>
-      </div>
-      <div class="chart-wrap chart-square">
-        <canvas id="incomeExpenseChart" height="160"></canvas>
-      </div>
-    </div>
-    <div class="panel panel-credit-card-summary">
-      {% set cc = summary.credit_card_summary %}
-      <div class="panel-header panel-header--credit-cards">
-        <div>
-          <h3>Credit Cards</h3>
-          <p>Statement balance and due date at a glance.</p>
-        </div>
-        <span class="pill">{{ cc.card_count if cc.card_count else 0 }} Cards</span>
-      </div>
-      {% if cc.card_count %}
-        {% set primary_card = cc.cards[0] %}
-        <div class="credit-card-wallet" data-credit-card-wallet>
-          <article
-            class="credit-card-wallet__hero network-{{ primary_card.card_network }}"
-            id="creditCardHero"
-            role="button"
-            tabindex="0"
-            aria-label="Show next credit card"
-            data-card-id="{{ primary_card.id }}"
-            data-card-network="{{ primary_card.card_network }}"
-            data-card-network-label="{{ primary_card.card_network_label }}"
-            data-card-network-logo="{{ primary_card.card_network_logo or '' }}"
-            data-card-bank-name="{{ primary_card.bank_name }}"
-            data-card-number-hint="{{ primary_card.card_number_hint }}"
-            data-card-outstanding="{{ primary_card.outstanding }}"
-            data-card-statement-balance="{{ primary_card.statement_balance }}"
-            data-card-payment-due-label="{% if primary_card.payment_due_date %}{{ primary_card.payment_due_date | localtime(request) | dateformat }}{% else %}Not set{% endif %}">
-            <div class="credit-card-wallet__shine"></div>
-            <div class="credit-card-wallet__stripe" aria-hidden="true"></div>
-            <div class="credit-card-wallet__chip" aria-hidden="true"></div>
-            <div class="credit-card-wallet__topline">
-              <span class="credit-card-wallet__bank" data-cc-bank>{{ primary_card.bank_name }}</span>
-              <span class="credit-card-wallet__network credit-card-wallet__network--hero" data-cc-network>
-                {% if primary_card.card_network_logo %}
-                  <img src="{{ primary_card.card_network_logo }}" alt="{{ primary_card.card_network_label }}" data-cc-network-logo>
-                {% else %}
-                  <span data-cc-network-text>{{ primary_card.card_network_label }}</span>
-                {% endif %}
-              </span>
-            </div>
-            <div class="credit-card-wallet__number" data-cc-number>{{ primary_card.card_number_hint }}</div>
-            <div class="credit-card-wallet__statement-block">
-              <span>Bill Amount</span>
-              <strong data-cc-statement>₹ {{ primary_card.statement_balance | money }}</strong>
-            </div>
-            <div class="credit-card-wallet__footer">
-              <div>
-                <span>Due Date</span>
-                <strong data-cc-due>{% if primary_card.payment_due_date %}{{ primary_card.payment_due_date | localtime(request) | dateformat }}{% else %}Not set{% endif %}</strong>
-              </div>
-              <div class="credit-card-wallet__totals">
-                <span>Outstanding</span>
-                <strong data-cc-outstanding>₹ {{ primary_card.outstanding | money }}</strong>
-              </div>
-            </div>
+      <div class="dashx-card-body rt-dashboard">
+        <section class="rt-summary-grid">
+          <article class="rt-summary-card">
+            <span class="rt-summary-label">Scheduled</span>
+            <strong class="rt-summary-value">₹ {{ "%.2f"|format(ro.total_scheduled_amount | default(0)) }}</strong>
+            <small class="rt-summary-note">Cycle forecast</small>
           </article>
-          {% if cc.cards|length > 1 %}
-            <div class="credit-card-wallet__stack" id="creditCardStack">
-              {% for card in cc.cards[1:] %}
-                <button
-                  type="button"
-                  class="credit-card-wallet__mini network-{{ card.card_network }}"
-                  data-card-id="{{ card.id }}"
-                  data-card-network="{{ card.card_network }}"
-                  data-card-network-label="{{ card.card_network_label }}"
-                  data-card-network-logo="{{ card.card_network_logo or '' }}"
-                  data-card-bank-name="{{ card.bank_name }}"
-                  data-card-number-hint="{{ card.card_number_hint }}"
-                  data-card-outstanding="{{ card.outstanding }}"
-                  data-card-statement-balance="{{ card.statement_balance }}"
-                  data-card-payment-due-label="{% if card.payment_due_date %}{{ card.payment_due_date | localtime(request) | dateformat }}{% else %}Not set{% endif %}">
-                  <span class="credit-card-wallet__bank">{{ card.bank_name }}</span>
-                  <span class="credit-card-wallet__network">
-                    {% if card.card_network_logo %}
-                      <img src="{{ card.card_network_logo }}" alt="{{ card.card_network_label }}">
-                    {% else %}
-                      {{ card.card_network_label }}
-                    {% endif %}
-                  </span>
-                </button>
-              {% endfor %}
+          <article class="rt-summary-card">
+            <span class="rt-summary-label">Paid</span>
+            <strong class="rt-summary-value">₹ {{ "%.2f"|format(ro.paid_this_month_total | default(0)) }}</strong>
+            <div class="rt-progress" role="progressbar" aria-valuenow="{{ ro.paid_progress_percent | default(0) }}" aria-valuemin="0" aria-valuemax="100">
+              <span style="width: {{ ro.paid_progress_percent | default(0) }}%"></span>
             </div>
-          {% endif %}
+            <small class="rt-summary-note">Remaining ₹ {{ "%.2f"|format(ro.remaining_amount | default(0)) }}</small>
+          </article>
+          <article class="rt-summary-card">
+            <span class="rt-summary-label">Upcoming</span>
+            <strong class="rt-summary-value">{{ ro.upcoming_count | default(0) }} items</strong>
+            <small class="rt-summary-note">Next: {{ ro.next_due_label | default("None") }}</small>
+          </article>
+        </section>
+
+        <section class="rt-day-grid" data-day-grid>
+          <section class="rt-block">
+            <h4>Today · ₹ {{ "%.2f"|format(ro.today_total | default(0)) }}</h4>
+            {% if ro.today %}
+              <ul class="rt-list">
+                {% for item in ro.today %}
+                  <li class="rt-item freq-{{ (item.frequency or 'monthly') | lower }} {% if item.status == 'failed' %}is-failed{% endif %}">
+                    <div class="rt-row-top">
+                      <strong class="rt-name">{{ item.description }}</strong>
+                      <strong class="rt-amount">₹ {{ "%.2f"|format(item.amount | default(0)) }}</strong>
+                    </div>
+                    <div class="rt-row-bottom">
+                      <span class="rt-account">{{ item.account_name }}</span>
+                      <span class="rt-frequency">{{ (item.frequency or "scheduled") | lower }}</span>
+                    </div>
+                  </li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <p class="empty-state">No recurring transactions today.</p>
+            {% endif %}
+          </section>
+
+          <section class="rt-block">
+            <h4>Tomorrow · ₹ {{ "%.2f"|format(ro.tomorrow_total | default(0)) }}</h4>
+            {% if ro.tomorrow %}
+              <ul class="rt-list">
+                {% for item in ro.tomorrow %}
+                  <li class="rt-item freq-{{ (item.frequency or 'monthly') | lower }} {% if item.status == 'critical' or item.status == 'risk' %}is-critical{% endif %}">
+                    <div class="rt-row-top">
+                      <strong class="rt-name">{{ item.description }}</strong>
+                      <strong class="rt-amount">₹ {{ "%.2f"|format(item.amount | default(0)) }}</strong>
+                    </div>
+                    <div class="rt-row-bottom">
+                      <span class="rt-account">{{ item.account_name }}</span>
+                      <span class="rt-frequency">{{ (item.frequency or "scheduled") | lower }}</span>
+                    </div>
+                  </li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <p class="empty-state">No recurring transactions tomorrow.</p>
+            {% endif %}
+          </section>
+        </section>
+
+        <div class="rt-month-sections">
+          <section class="rt-collapsible" data-collapsible>
+            <button type="button" class="rt-collapse-toggle" data-toggle aria-expanded="false">
+              <span>Daily Projection · ₹ {{ "%.2f"|format(ro.daily_projected_total | default(0)) }}</span>
+              <span class="rt-toggle-icon" aria-hidden="true">▾</span>
+            </button>
+            <div class="rt-collapse-body" data-body hidden>
+              {% if ro.daily_items %}
+                <ul class="rt-list rt-list-grid rt-list-3col">
+                  {% for item in ro.daily_items %}
+                    <li class="rt-item freq-daily {% if item.status == 'failed' %}is-failed{% elif item.status == 'critical' or item.status == 'risk' %}is-critical{% endif %}">
+                      <div class="rt-row-top">
+                        <strong class="rt-name">{{ item.description }}</strong>
+                        <strong class="rt-amount">₹ {{ "%.2f"|format(item.amount | default(0)) }}</strong>
+                      </div>
+                      <div class="rt-row-bottom">
+                        <span class="rt-account">{{ item.account_name }}</span>
+                        <span class="rt-frequency">daily</span>
+                      </div>
+                    </li>
+                  {% endfor %}
+                </ul>
+              {% else %}
+                <p class="empty-state">No daily recurring transactions.</p>
+              {% endif %}
+            </div>
+          </section>
+
+          <section class="rt-collapsible" data-collapsible>
+            <button type="button" class="rt-collapse-toggle" data-toggle aria-expanded="false">
+              <span>Upcoming · ₹ {{ "%.2f"|format(ro.upcoming_total | default(0)) }}</span>
+              <span class="rt-toggle-icon" aria-hidden="true">▾</span>
+            </button>
+            <div class="rt-collapse-body" data-body hidden>
+              {% if ro.upcoming_groups %}
+                {% for group in ro.upcoming_groups %}
+                  <div class="rt-date-group">
+                    <h5>{{ group.date_label }}</h5>
+                    <ul class="rt-list rt-list-grid">
+                      {% for item in group["items"] %}
+                        <li class="rt-item freq-{{ (item.frequency or 'monthly') | lower }} {% if item.status == 'critical' or item.status == 'risk' %}is-critical{% endif %}">
+                          <div class="rt-row-top">
+                            <strong class="rt-name">{{ item.description }}</strong>
+                            <strong class="rt-amount">₹ {{ "%.2f"|format(item.amount | default(0)) }}</strong>
+                          </div>
+                          <div class="rt-row-bottom">
+                            <span class="rt-account">{{ item.account_name }}</span>
+                            <span class="rt-frequency">{{ (item.frequency or "scheduled") | lower }}</span>
+                          </div>
+                        </li>
+                      {% endfor %}
+                    </ul>
+                  </div>
+                {% endfor %}
+              {% else %}
+                <p class="empty-state">No upcoming transactions this month.</p>
+              {% endif %}
+            </div>
+          </section>
+
+          <section class="rt-collapsible" data-collapsible>
+            <button type="button" class="rt-collapse-toggle" data-toggle aria-expanded="false">
+              <span>Processed · ₹ {{ "%.2f"|format(ro.processed_total | default(0)) }}</span>
+              <span class="rt-toggle-icon" aria-hidden="true">▾</span>
+            </button>
+            <div class="rt-collapse-body" data-body hidden>
+              {% if ro.processed_groups %}
+                {% for group in ro.processed_groups %}
+                  <div class="rt-date-group">
+                    <h5>{{ group.date_label }}</h5>
+                    <ul class="rt-list rt-list-grid">
+                      {% for item in group["items"] %}
+                        <li class="rt-item freq-{{ (item.frequency or 'monthly') | lower }} {% if item.status == 'failed' %}is-failed{% endif %}">
+                          <div class="rt-row-top">
+                            <strong class="rt-name">{{ item.description }}</strong>
+                            <strong class="rt-amount">₹ {{ "%.2f"|format(item.amount | default(0)) }}</strong>
+                          </div>
+                          <div class="rt-row-bottom">
+                            <span class="rt-account">{{ item.account_name }}</span>
+                            <span class="rt-frequency">{{ (item.frequency or "scheduled") | lower }}</span>
+                          </div>
+                        </li>
+                      {% endfor %}
+                    </ul>
+                  </div>
+                {% endfor %}
+              {% else %}
+                <p class="empty-state">No processed recurring transactions this month.</p>
+              {% endif %}
+            </div>
+          </section>
         </div>
-      {% else %}
-        <p class="empty-state">No credit cards added yet.</p>
-      {% endif %}
-    </div>
-    <div class="panel panel-recent">
-      <div class="panel-header">
-        <h3>Recent Transactions</h3>
-        <span class="pill">Latest 5</span>
       </div>
-      <!-- <div class="table-scroll"> -->
-      <table class="tx-table">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Description</th>
-            <th>Type</th>
-            <th>Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for tx in transactions %}
-            <tr>
-            <td>{{ tx.created_at | localtime(request) | dateformat }}</td>
-              <td>
-                {% if tx.type == "transfer" %}
-                  {% if tx.transfer is defined and tx.transfer %}
-                    {{ tx.description }} — {{ tx.transfer.source | default("Unknown") }} → {{ tx.transfer.target | default("Unknown") }}
-                  {% else %}
-                    {{ tx.description }}
-                  {% endif %}
-                {% else %}
-                  {{ tx.description }}
-                {% endif %}
-              </td>
-              <td>
-                <span class="badge badge-{{ tx.type }}">{{ tx.type }}</span>
-              </td>
-              <td>
-                {% if tx.type == "debit" %}
-                  <span class="amount red">- ₹{{ tx.amount | money }}</span>
-                {% elif tx.type == "credit" %}
-                  <span class="amount green">+ ₹{{ tx.amount | money }}</span>
-                {% elif tx.type == "transfer" %}
-                  <span class="amount">₹{{ tx.amount | money }}</span>
-                {% endif %}
-              </td>
-            </tr>
-          {% else %}
-            <tr>
-              <td colspan="4" class="empty-state">No transactions.</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      <!-- </div> -->
-    </div>
+    </article>
   </section>
-</section>
+
+  <section class="dashx-analytics-grid">
+    <article class="dashx-card dashx-chart-card">
+      <header class="dashx-card-header">
+        <h2>Spend by Category</h2>
+        <span class="dashx-chip">MTD</span>
+      </header>
+      <div class="dashx-card-body">
+        {% if summary.top_spending_categories %}
+          <div class="dashx-chart-wrap"><canvas id="spendingCategoryChart" height="170"></canvas></div>
+        {% else %}
+          <p class="empty-state">No spend data for this month.</p>
+        {% endif %}
+      </div>
+    </article>
+
+    <article class="dashx-card dashx-chart-card">
+      <header class="dashx-card-header">
+        <h2>Daily Cash Flow</h2>
+        <span class="dashx-chip">{{ summary.cashflow_month_label }}</span>
+      </header>
+      <div class="dashx-card-body">
+        <div class="dashx-chart-wrap"><canvas id="cashflowChart" height="170"></canvas></div>
+      </div>
+    </article>
+
+    <article class="dashx-card dashx-chart-card">
+      <header class="dashx-card-header">
+        <h2>Monthly Income vs Expense</h2>
+        <span class="dashx-chip">Through {{ summary.monthly_till_label }}</span>
+      </header>
+      <div class="dashx-card-body">
+        <div class="dashx-chart-wrap"><canvas id="incomeExpenseChart" height="170"></canvas></div>
+      </div>
+    </article>
+
+    <article class="dashx-card dashx-credit-card">
+      <header class="dashx-card-header">
+        <h2>Credit Card Stack</h2>
+        <span class="dashx-chip">{{ cc.card_count if cc.card_count else 0 }} Cards</span>
+      </header>
+      <div class="dashx-card-body">
+        {% if cc.card_count %}
+          {% set primary_card = cc.cards[0] %}
+          <div class="credit-card-wallet" data-credit-card-wallet>
+            <article
+              class="credit-card-wallet__hero network-{{ primary_card.card_network }} card-palette-1"
+              id="creditCardHero"
+              role="button"
+              tabindex="0"
+              aria-label="Show next credit card"
+              data-card-id="{{ primary_card.id }}"
+              data-card-network="{{ primary_card.card_network }}"
+              data-card-network-label="{{ primary_card.card_network_label }}"
+              data-card-network-logo="{{ primary_card.card_network_logo or '' }}"
+              data-card-bank-name="{{ primary_card.bank_name }}"
+              data-card-number-hint="{{ primary_card.card_number_hint }}"
+              data-card-outstanding="{{ primary_card.outstanding }}"
+              data-card-statement-balance="{{ primary_card.statement_balance }}"
+              data-card-palette="1"
+              data-card-payment-due-label="{% if primary_card.payment_due_date %}{{ primary_card.payment_due_date | localtime(request) | dateformat }}{% else %}Not set{% endif %}">
+              <div class="credit-card-wallet__shine"></div>
+              <div class="credit-card-wallet__chip" aria-hidden="true"></div>
+              <div class="credit-card-wallet__topline">
+                <span class="credit-card-wallet__bank" data-cc-bank>{{ primary_card.bank_name }}</span>
+                <span class="credit-card-wallet__network" data-cc-network>
+                  {% if primary_card.card_network_logo %}
+                    <img src="{{ primary_card.card_network_logo }}" alt="{{ primary_card.card_network_label }}" data-cc-network-logo>
+                  {% else %}
+                    <span data-cc-network-text>{{ primary_card.card_network_label }}</span>
+                  {% endif %}
+                </span>
+              </div>
+              <div class="credit-card-wallet__number" data-cc-number>{{ primary_card.card_number_hint }}</div>
+              <div class="credit-card-wallet__values">
+                <div>
+                  <span>Statement</span>
+                  <strong data-cc-statement>₹ {{ primary_card.statement_balance | money }}</strong>
+                </div>
+                <div>
+                  <span>Outstanding</span>
+                  <strong data-cc-outstanding>₹ {{ primary_card.outstanding | money }}</strong>
+                </div>
+                <div>
+                  <span>Due</span>
+                  <strong data-cc-due>{% if primary_card.payment_due_date %}{{ primary_card.payment_due_date | localtime(request) | dateformat }}{% else %}Not set{% endif %}</strong>
+                </div>
+              </div>
+            </article>
+
+            {% if cc.cards|length > 1 %}
+              <div class="credit-card-wallet__stack" id="creditCardStack">
+                {% for card in cc.cards[1:] %}
+                  <button
+                    type="button"
+                    class="credit-card-wallet__mini network-{{ card.card_network }} card-palette-{{ ((loop.index + 1) % 6) + 1 }}"
+                    data-card-id="{{ card.id }}"
+                    data-card-network="{{ card.card_network }}"
+                    data-card-network-label="{{ card.card_network_label }}"
+                    data-card-network-logo="{{ card.card_network_logo or '' }}"
+                    data-card-bank-name="{{ card.bank_name }}"
+                    data-card-number-hint="{{ card.card_number_hint }}"
+                    data-card-outstanding="{{ card.outstanding }}"
+                    data-card-statement-balance="{{ card.statement_balance }}"
+                    data-card-palette="{{ ((loop.index + 1) % 6) + 1 }}"
+                    data-card-payment-due-label="{% if card.payment_due_date %}{{ card.payment_due_date | localtime(request) | dateformat }}{% else %}Not set{% endif %}">
+                    <span class="credit-card-wallet__bank">{{ card.bank_name }}</span>
+                    <span class="credit-card-wallet__network">
+                      {% if card.card_network_logo %}
+                        <img src="{{ card.card_network_logo }}" alt="{{ card.card_network_label }}">
+                      {% else %}
+                        {{ card.card_network_label }}
+                      {% endif %}
+                    </span>
+                  </button>
+                {% endfor %}
+              </div>
+            {% endif %}
+          </div>
+        {% else %}
+          <p class="empty-state">No credit cards added yet.</p>
+        {% endif %}
+      </div>
+    </article>
+
+    <article class="dashx-card dashx-recent-card">
+      <header class="dashx-card-header">
+        <h2>Recent Transactions</h2>
+        <span class="dashx-chip">Latest 5</span>
+      </header>
+      <div class="dashx-card-body">
+        <div class="table-scroll">
+          <table class="tx-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Description</th>
+                <th>Type</th>
+                <th>Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for tx in transactions %}
+                <tr>
+                  <td>{{ tx.created_at | localtime(request) | dateformat }}</td>
+                  <td>
+                    {% if tx.type == "transfer" and tx.transfer is defined and tx.transfer %}
+                      {{ tx.description }} — {{ tx.transfer.source | default("Unknown") }} → {{ tx.transfer.target | default("Unknown") }}
+                    {% else %}
+                      {{ tx.description }}
+                    {% endif %}
+                  </td>
+                  <td><span class="badge badge-{{ tx.type }}">{{ tx.type }}</span></td>
+                  <td>
+                    {% if tx.type == "debit" %}
+                      <span class="amount dashx-amount-negative">- ₹{{ tx.amount | money }}</span>
+                    {% elif tx.type == "credit" %}
+                      <span class="amount dashx-amount-positive">+ ₹{{ tx.amount | money }}</span>
+                    {% else %}
+                      <span class="amount">₹{{ tx.amount | money }}</span>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% else %}
+                <tr>
+                  <td colspan="4" class="empty-state">No transactions.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </article>
+  </section>
 </section>
 
 <div
@@ -458,6 +466,7 @@
   document.addEventListener("DOMContentLoaded", function () {
     const dashboard = document.querySelector(".rt-dashboard");
     if (!dashboard) return;
+
     const sections = dashboard.querySelectorAll("[data-collapsible]");
 
     function syncDaySections() {
@@ -493,6 +502,7 @@
         syncDaySections();
       });
     });
+
     syncDaySections();
   });
 </script>

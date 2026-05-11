@@ -20,6 +20,8 @@
   <link rel="stylesheet" href="/static/css/inline_action_feedback.css">
   <link rel="stylesheet" href="/static/css/phone_input.css">
   {% block extra_css %}{% endblock %}
+  <!-- UI Enhancement Layer — loaded last to cleanly override component styles -->
+  <link rel="stylesheet" href="/static/css/redesign.css?v={{ FT_APP_VERSION }}">
   <link rel="manifest" href="/static/manifest.json">
   <meta name="theme-color" content="#0f172a">
   <script>
