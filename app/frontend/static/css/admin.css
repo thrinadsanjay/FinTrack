@@ -276,6 +276,425 @@
   font-size: 0.82rem;
 }
 
+.ao-command,
+.ao-metric-strip,
+.ao-layout-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.ao-command {
+  grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.85fr);
+}
+
+.ao-panel {
+  border: 1px solid color-mix(in srgb, var(--color-border) 80%, transparent);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 86% 14%, color-mix(in srgb, var(--color-primary) 10%, transparent), transparent 35%),
+    linear-gradient(165deg, color-mix(in srgb, var(--color-surface-strong) 88%, #ffffff 12%), color-mix(in srgb, var(--color-surface) 94%, #ffffff 6%));
+  box-shadow: 0 18px 34px color-mix(in srgb, var(--color-shadow) 28%, transparent);
+  padding: 14px;
+  min-width: 0;
+}
+
+.ao-command-panel {
+  display: grid;
+  gap: 14px;
+  background:
+    radial-gradient(circle at 14% 18%, color-mix(in srgb, #0ea5e9 16%, transparent), transparent 36%),
+    radial-gradient(circle at 84% 82%, color-mix(in srgb, #22c55e 12%, transparent), transparent 34%),
+    linear-gradient(145deg, color-mix(in srgb, var(--color-surface-strong) 86%, #ffffff 14%), color-mix(in srgb, var(--color-surface) 92%, #ffffff 8%));
+}
+
+.ao-kicker {
+  display: inline-block;
+  margin-bottom: 6px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #0f766e;
+}
+
+.ao-command-copy h2 {
+  margin: 0;
+  font-size: clamp(1.24rem, 2vw, 1.62rem);
+}
+
+.ao-command-copy p {
+  margin-top: 6px;
+  color: var(--color-muted);
+  max-width: 64ch;
+}
+
+.ao-command-statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.ao-command-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ao-backup-signal {
+  display: grid;
+  gap: 10px;
+}
+
+.ao-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ao-section-head h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.ao-section-head span {
+  font-size: 0.78rem;
+  color: var(--color-muted);
+}
+
+.ao-highlight-value {
+  font-size: clamp(1.04rem, 1.8vw, 1.36rem);
+  text-transform: capitalize;
+}
+
+.ao-highlight-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ao-highlight-grid div {
+  border: 1px solid color-mix(in srgb, var(--color-border) 78%, transparent);
+  border-radius: 12px;
+  padding: 8px;
+  background: color-mix(in srgb, var(--color-surface-strong) 86%, transparent);
+}
+
+.ao-highlight-grid span {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--color-muted);
+}
+
+.ao-highlight-grid strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.86rem;
+}
+
+.ao-metric-strip {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.ao-metric-card {
+  border: 1px solid color-mix(in srgb, var(--color-border) 82%, transparent);
+  border-radius: 14px;
+  background: linear-gradient(170deg, color-mix(in srgb, var(--color-surface-strong) 90%, transparent), color-mix(in srgb, var(--color-surface) 90%, transparent));
+  box-shadow: 0 12px 24px color-mix(in srgb, var(--color-shadow) 20%, transparent);
+  padding: 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.ao-metric-card span {
+  font-size: 0.73rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-muted);
+  font-weight: 700;
+}
+
+.ao-metric-card strong {
+  font-size: clamp(1rem, 1.8vw, 1.4rem);
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.ao-metric-card small {
+  color: var(--color-muted);
+  font-size: 0.76rem;
+}
+
+.ao-metric-card.is-danger strong {
+  color: #b91c1c;
+}
+
+.ao-layout-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ao-service-tiles {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ao-service-tile {
+  border-radius: 11px;
+  border: 1px solid transparent;
+  text-decoration: none;
+  display: grid;
+  gap: 4px;
+  place-items: center;
+  text-align: center;
+  min-height: 56px;
+  padding: 8px;
+}
+
+.ao-service-tile strong {
+  font-size: 0.8rem;
+  color: inherit;
+}
+
+.ao-service-tile span {
+  font-size: 0.68rem;
+  color: inherit;
+}
+
+.ao-service-tile.is-enabled {
+  color: #166534;
+  background: #dcfce7;
+  border-color: #86efac;
+}
+
+.ao-service-tile.is-disabled {
+  color: #991b1b;
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+
+.ao-key-value-list {
+  margin-top: 10px;
+  display: grid;
+  gap: 5px;
+}
+
+.ao-key-value-list div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 74%, transparent);
+}
+
+.ao-key-value-list div:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.ao-key-value-list span {
+  color: var(--color-muted);
+  font-size: 0.78rem;
+}
+
+.ao-key-value-list strong {
+  text-align: right;
+  font-size: 0.82rem;
+}
+
+.ao-inline-error {
+  margin-top: 10px;
+  border-radius: 10px;
+  border: 1px solid #fca5a5;
+  background: #fee2e2;
+  color: #991b1b;
+  padding: 8px 10px;
+  font-size: 0.78rem;
+}
+
+.ao-alert-list,
+.ao-rows {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.ao-alert {
+  border: 1px solid color-mix(in srgb, var(--color-border) 76%, transparent);
+  border-radius: 12px;
+  padding: 10px;
+  display: grid;
+  gap: 3px;
+}
+
+.ao-alert strong {
+  font-size: 0.82rem;
+}
+
+.ao-alert span {
+  font-size: 0.78rem;
+  color: var(--color-muted);
+}
+
+.ao-alert-critical {
+  border-color: #fca5a5;
+  background: #fef2f2;
+}
+
+.ao-alert-warning {
+  border-color: #fdba74;
+  background: #fff7ed;
+}
+
+.ao-alert-info {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.ao-alert-ok {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+
+.ao-trend-grid {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ao-trend-card {
+  border: 1px solid color-mix(in srgb, var(--color-border) 78%, transparent);
+  border-radius: 12px;
+  padding: 10px;
+  background: color-mix(in srgb, var(--color-surface-strong) 86%, transparent);
+  display: grid;
+  gap: 8px;
+}
+
+.ao-trend-card span {
+  color: var(--color-muted);
+  font-size: 0.76rem;
+}
+
+.ao-sparkline {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  align-items: end;
+  gap: 4px;
+  min-height: 52px;
+}
+
+.ao-spark-bar {
+  display: block;
+  min-height: 10%;
+  border-radius: 999px 999px 4px 4px;
+  background: linear-gradient(180deg, #60a5fa, #1d4ed8);
+}
+
+.ao-spark-bar.is-danger {
+  background: linear-gradient(180deg, #fda4af, #e11d48);
+}
+
+.ao-spark-bar.is-ok {
+  background: linear-gradient(180deg, #86efac, #16a34a);
+}
+
+.ao-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 74%, transparent);
+}
+
+.ao-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.ao-row strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.82rem;
+}
+
+.ao-row span {
+  color: var(--color-muted);
+  font-size: 0.8rem;
+}
+
+.ao-row-meta {
+  display: grid;
+  gap: 6px;
+  text-align: right;
+  justify-items: end;
+}
+
+.ao-inline-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.ao-empty {
+  margin: 0;
+  border: 1px solid color-mix(in srgb, var(--color-border) 74%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-surface-strong) 84%, transparent);
+  color: var(--color-muted);
+  font-size: 0.8rem;
+  padding: 9px 10px;
+}
+
+@media (max-width: 1200px) {
+  .ao-command,
+  .ao-layout-grid,
+  .ao-trend-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ao-metric-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 980px) {
+  .ao-service-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .ao-panel,
+  .ao-metric-card {
+    border-radius: 14px;
+    padding: 11px;
+  }
+
+  .ao-metric-strip,
+  .ao-highlight-grid,
+  .ao-service-tiles {
+    grid-template-columns: 1fr;
+  }
+
+  .ao-key-value-list div,
+  .ao-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .ao-row-meta,
+  .ao-inline-pills {
+    justify-items: start;
+    justify-content: flex-start;
+    text-align: left;
+  }
+}
+
 .overview-hero-grid {
   grid-template-columns: minmax(0, 1.5fr) minmax(320px, 0.9fr);
 }

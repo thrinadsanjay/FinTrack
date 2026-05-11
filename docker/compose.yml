@@ -67,7 +67,7 @@ services:
     volumes:
       - app_logs:/fintracker/logs
       - app_backups:/fintracker/backups
-      #- "../app:/app/app:z"
+      - "../app:/app/app:z"
     environment:
       PORT: ${PORT:-8000}
     depends_on:

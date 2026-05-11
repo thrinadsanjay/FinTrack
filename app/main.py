@@ -252,15 +252,21 @@ async def on_startup():
 
     await configure_recurring_schedule(scheduler)
 
-    scheduler.add_job(
-        run_telegram_poll_once,
-        trigger="interval",
-        seconds=8,
-        id="telegram-polling",
-        replace_existing=True,
-        max_instances=1,
-        coalesce=True,
-    )
+    admin_settings = await get_admin_settings()
+    telegram_cfg = (admin_settings or {}).get("telegram") or {}
+    telegram_polling_scheduled = bool(telegram_cfg.get("enabled") and telegram_cfg.get("polling_enabled"))
+    if telegram_polling_scheduled:
+        scheduler.add_job(
+            run_telegram_poll_once,
+            trigger="interval",
+            seconds=8,
+            id="telegram-polling",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+        )
+    else:
+        logger.info("Telegram polling scheduler not started (telegram disabled or polling fallback disabled)")
 
     scheduler.add_job(
         run_notification_alert_sweep,
@@ -319,8 +325,9 @@ async def on_startup():
     await configure_backup_schedule(scheduler)
     scheduler.start()
     logger.info(
-        "⏱ Background schedulers started (recurring + telegram polling + notification sweep/%ss)",
+        "⏱ Background schedulers started (recurring + notification sweep/%ss, telegram polling=%s)",
         notification_alert_interval_seconds,
+        "on" if telegram_polling_scheduled else "off",
     )
 
 

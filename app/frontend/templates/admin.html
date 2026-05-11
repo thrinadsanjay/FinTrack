@@ -38,120 +38,103 @@
         <p>Monitor platform health, services, backup posture, and operational throughput.</p>
       </header>
 
-      <section class="admin-grid overview-hero-grid">
-        <article class="admin-panel overview-hero-card">
-          <div class="overview-hero-copy">
-            <span class="overview-kicker">Operations</span>
+      <section class="ao-command">
+        <article class="ao-panel ao-command-panel">
+          <div class="ao-command-copy">
+            <span class="ao-kicker">Admin Center Overview</span>
             <h2>{{ overview.configuration.app_name }}</h2>
-            <p>Overview of runtime health, backup posture, service toggles, and high-value admin controls.</p>
+            <p>Central command for service health, backup posture, user activity, and security signals.</p>
           </div>
-          <div class="overview-hero-statuses">
+          <div class="ao-command-statuses">
             <span class="status-pill {{ 'up' if stats.server_status == 'UP' else 'down' }}">Server {{ stats.server_status }}</span>
-            <span class="status-pill {{ 'up' if stats.db_status == 'UP' else 'down' }}">DB {{ stats.db_status }}</span>
+            <span class="status-pill {{ 'up' if stats.db_status == 'UP' else 'down' }}">Database {{ stats.db_status }}</span>
             <span class="status-pill {{ 'down' if admin_settings.application.maintenance_mode else 'up' }}">{{ 'Maintenance On' if admin_settings.application.maintenance_mode else 'Maintenance Off' }}</span>
+            <span class="status-pill {{ 'up' if overview.backup.config.enabled else 'down' }}">{{ 'Backup Enabled' if overview.backup.config.enabled else 'Backup Disabled' }}</span>
+          </div>
+          <div class="ao-command-actions">
+            <a class="btn-action" href="#settings" data-admin-nav="settings" data-settings-target="application">Application</a>
+            <a class="btn-action" href="#settings" data-admin-nav="settings" data-settings-target="backup">Backup Settings</a>
+            <a class="btn-action" href="#users" data-admin-nav="users">Users</a>
           </div>
         </article>
-        <article class="admin-panel overview-backup-highlight">
-          <div class="panel-head">
-            <h2>Last Backup</h2>
+
+        <article class="ao-panel ao-backup-signal">
+          <div class="ao-section-head">
+            <h3>Backup Signal</h3>
             <span>{{ overview.backup.last_run.provider or 'filesystem' }}</span>
           </div>
-          <div class="overview-highlight-value">{{ overview.backup.last_run.status or 'Never run' }}</div>
-          <div class="overview-highlight-meta">
-            <span>{{ overview.backup.last_run.completed_at | localtime(request) | datetimeformat if overview.backup.last_run.completed_at else 'No completed backup yet' }}</span>
-            <span>{{ ((overview.backup.last_run.archive_size_bytes or 0) / (1024 * 1024)) | round(2) }} MB{% if not overview.backup.last_run.archive_size_bytes %}-{% endif %}</span>
-          </div>
-          <div class="overview-highlight-pills">
-            <span class="status-pill {{ 'up' if overview.backup.config.enabled else 'down' }}">{{ 'Backup Enabled' if overview.backup.config.enabled else 'Backup Disabled' }}</span>
-            <span class="status-pill {{ 'up' if overview.backup.verified_local_count else 'down' }}">{{ overview.backup.verified_local_count }} verified</span>
-          </div>
-          <div class="overview-action-row">
-            <a class="btn-action" href="#settings" data-admin-nav="settings" data-settings-target="backup">Open backup settings</a>
+          <strong class="ao-highlight-value">{{ overview.backup.last_run.status or 'Never run' }}</strong>
+          <div class="ao-highlight-grid">
+            <div>
+              <span>Completed</span>
+              <strong>{{ overview.backup.last_run.completed_at | localtime(request) | datetimeformat if overview.backup.last_run.completed_at else 'No completed backup yet' }}</strong>
+            </div>
+            <div>
+              <span>Archive</span>
+              <strong>{{ ((overview.backup.last_run.archive_size_bytes or 0) / (1024 * 1024)) | round(2) }} MB{% if not overview.backup.last_run.archive_size_bytes %}-{% endif %}</strong>
+            </div>
+            <div>
+              <span>Verified</span>
+              <strong>{{ overview.backup.verified_local_count }}</strong>
+            </div>
+            <div>
+              <span>Local Files</span>
+              <strong>{{ overview.backup.local_count }}</strong>
+            </div>
           </div>
         </article>
       </section>
 
-      <section class="admin-grid overview-insight-grid">
-        <article class="metric-card overview-metric-card">
-          <h3>Total Users</h3>
-          <p>{{ stats.total_users }}</p>
-          <span>User records in the system</span>
-          <a class="overview-card-link" href="#users" data-admin-nav="users">Open users</a>
+      <section class="ao-metric-strip">
+        <article class="ao-metric-card">
+          <span>Total Users</span>
+          <strong>{{ stats.total_users }}</strong>
+          <small>Registered profiles</small>
         </article>
-        <article class="metric-card overview-metric-card">
-          <h3>Active Users (24h)</h3>
-          <p>{{ stats.active_users_24h }}</p>
-          <span>Signed in during the last day</span>
+        <article class="ao-metric-card">
+          <span>Users Active 24h</span>
+          <strong>{{ stats.active_users_24h }}</strong>
+          <small>Recent sign-ins</small>
         </article>
-        <article class="metric-card overview-metric-card">
-          <h3>Active Users (7d)</h3>
-          <p>{{ stats.active_users_7d }}</p>
-          <span>Signed in during the last week</span>
+        <article class="ao-metric-card">
+          <span>Users Active 7d</span>
+          <strong>{{ stats.active_users_7d }}</strong>
+          <small>Weekly engagement</small>
         </article>
-        <article class="metric-card overview-metric-card">
-          <h3>Total Accounts</h3>
-          <p>{{ stats.total_accounts }}</p>
-          <span>Non-deleted financial accounts</span>
+        <article class="ao-metric-card">
+          <span>Total Accounts</span>
+          <strong>{{ stats.total_accounts }}</strong>
+          <small>Financial ledgers</small>
         </article>
-        <article class="metric-card overview-metric-card">
-          <h3>Total Transactions</h3>
-          <p>{{ stats.total_transactions }}</p>
-          <span>Successful transaction rows</span>
+        <article class="ao-metric-card">
+          <span>Transactions</span>
+          <strong>{{ stats.total_transactions }}</strong>
+          <small>Successful entries</small>
         </article>
-        <article class="metric-card overview-metric-card">
-          <h3>Total Volume Processed</h3>
-          <p>₹ {{ "{:,.2f}".format(stats.total_volume_processed) }}</p>
-          <span>Across all non-failed transactions</span>
+        <article class="ao-metric-card">
+          <span>Processed Volume</span>
+          <strong>₹ {{ "{:,.2f}".format(stats.total_volume_processed) }}</strong>
+          <small>Valid transaction value</small>
         </article>
-        <article class="metric-card overview-metric-card danger">
-          <h3>Failed Transactions</h3>
-          <p>{{ stats.failed_transactions }}</p>
-          <span>Needs review if this trends upward</span>
+        <article class="ao-metric-card is-danger">
+          <span>Failed Transactions</span>
+          <strong>{{ stats.failed_transactions }}</strong>
+          <small>Watch this trend closely</small>
         </article>
-        <article class="metric-card overview-metric-card">
-          <h3>Auth Mix</h3>
-          <p>Local {{ stats.total_local }} / Google {{ stats.total_google }}</p>
-          <span>Current identity provider split</span>
-        </article>
-        <article class="metric-card overview-metric-card">
-          <h3>Services Enabled</h3>
-          <p>{{ overview.service_counts.enabled }}</p>
-          <span>{{ overview.service_counts.disabled }} disabled services</span>
-          <a class="overview-card-link" href="#settings" data-admin-nav="settings" data-settings-target="application">Open settings</a>
-        </article>
-        <article class="metric-card overview-metric-card">
-          <h3>Local Backups</h3>
-          <p>{{ overview.backup.local_count }}</p>
-          <span>{{ overview.backup.verified_local_count }} verified archives</span>
-          <a class="overview-card-link" href="#settings" data-admin-nav="settings" data-settings-target="backup">Manage backups</a>
+        <article class="ao-metric-card">
+          <span>Identity Mix</span>
+          <strong>L {{ stats.total_local }} / G {{ stats.total_google }}</strong>
+          <small>Local vs Google</small>
         </article>
       </section>
 
-      <section class="admin-grid overview-detail-grid overview-primary-grid">
-        <article class="admin-panel overview-panel overview-backup-panel">
-          <div class="panel-head">
-            <h2>Backup Snapshot</h2>
-            <span>{{ overview.backup.local_count }} local files</span>
+      <section class="ao-layout-grid">
+        <article class="ao-panel ao-service-matrix">
+          <div class="ao-section-head">
+            <h3>Service Matrix</h3>
+            <span>{{ overview.service_counts.enabled }} enabled · {{ overview.service_counts.disabled }} disabled</span>
           </div>
-          <div class="overview-detail-list">
-            <div><span>Last Backup Status</span><strong>{{ overview.backup.last_run.status or 'Never run' }}</strong></div>
-            <div><span>Last Backup Time</span><strong>{{ overview.backup.last_run.completed_at | localtime(request) | datetimeformat if overview.backup.last_run.completed_at else '-' }}</strong></div>
-            <div><span>Archive Size</span><strong>{{ ((overview.backup.last_run.archive_size_bytes or 0) / (1024 * 1024)) | round(2) }} MB{% if not overview.backup.last_run.archive_size_bytes %}-{% endif %}</strong></div>
-            <div><span>Next Scheduled Run</span><strong>{{ overview.backup.config.next_run | localtime(request) | datetimeformat if overview.backup.config.next_run else 'Not scheduled' }}</strong></div>
-            <div><span>Destination</span><strong>{{ overview.configuration.backup_destination }}</strong></div>
-            <div><span>Verified Local Backups</span><strong>{{ overview.backup.verified_local_count }}</strong></div>
-          </div>
-          {% if overview.backup.local_error %}
-            <div class="overview-inline-error">{{ overview.backup.local_error }}</div>
-          {% endif %}
-        </article>
-
-        <article class="admin-panel overview-panel">
-          <div class="panel-head">
-            <h2>Services</h2>
-            <span>{{ overview.service_counts.enabled }} enabled • {{ overview.service_counts.disabled }} disabled</span>
-          </div>
-          <div class="overview-service-grid">
+          <div class="ao-service-tiles">
             {% for item in overview.services %}
               {% set service_target = 'application' %}
               {% if item.label == 'SMTP' %}
@@ -167,21 +150,38 @@
               {% elif item.label == 'Backups' %}
                 {% set service_target = 'backup' %}
               {% endif %}
-              <a class="overview-service-tile {{ 'is-enabled' if item.enabled else 'is-disabled' }}" href="#settings" data-admin-nav="settings" data-settings-target="{{ service_target }}" title="{{ item.detail }}">
-                {{ item.label }}
+              <a class="ao-service-tile {{ 'is-enabled' if item.enabled else 'is-disabled' }}" href="#settings" data-admin-nav="settings" data-settings-target="{{ service_target }}" title="{{ item.detail }}">
+                <strong>{{ item.label }}</strong>
+                <span>{{ 'Enabled' if item.enabled else 'Disabled' }}</span>
               </a>
             {% endfor %}
           </div>
         </article>
-      </section>
 
-      <section class="admin-grid overview-detail-grid overview-secondary-grid">
-        <article class="admin-panel overview-panel">
-          <div class="panel-head">
-            <h2>Configuration</h2>
+        <article class="ao-panel ao-backup-board">
+          <div class="ao-section-head">
+            <h3>Backup Board</h3>
+            <span>{{ overview.backup.local_count }} local files</span>
+          </div>
+          <div class="ao-key-value-list">
+            <div><span>Status</span><strong>{{ overview.backup.last_run.status or 'Never run' }}</strong></div>
+            <div><span>Last Run</span><strong>{{ overview.backup.last_run.completed_at | localtime(request) | datetimeformat if overview.backup.last_run.completed_at else '-' }}</strong></div>
+            <div><span>Next Run</span><strong>{{ overview.backup.config.next_run | localtime(request) | datetimeformat if overview.backup.config.next_run else 'Not scheduled' }}</strong></div>
+            <div><span>Destination</span><strong>{{ overview.configuration.backup_destination }}</strong></div>
+            <div><span>Retention</span><strong>{{ overview.backup.config.retention_days or '-' }} days</strong></div>
+            <div><span>Checksum Stored</span><strong>{{ 'Yes' if overview.backup.last_run.archive_sha256 else 'No' }}</strong></div>
+          </div>
+          {% if overview.backup.local_error %}
+            <div class="ao-inline-error">{{ overview.backup.local_error }}</div>
+          {% endif %}
+        </article>
+
+        <article class="ao-panel ao-config-board">
+          <div class="ao-section-head">
+            <h3>Configuration Lens</h3>
             <span>Current defaults</span>
           </div>
-          <div class="overview-detail-list compact">
+          <div class="ao-key-value-list">
             <div><span>Support Email</span><strong>{{ overview.configuration.support_email }}</strong></div>
             <div><span>Support Phone</span><strong>{{ overview.configuration.support_phone }}</strong></div>
             <div><span>Auth Provider</span><strong>{{ overview.configuration.auth_provider }}</strong></div>
@@ -191,29 +191,14 @@
           </div>
         </article>
 
-        <article class="admin-panel overview-panel">
-          <div class="panel-head">
-            <h2>Last Backup Details</h2>
-            <span>{{ overview.backup.last_run.provider or 'filesystem' }}</span>
-          </div>
-          <div class="overview-detail-list compact">
-            <div><span>Collections</span><strong>{{ overview.backup.last_run.collections or 0 }}</strong></div>
-            <div><span>Documents</span><strong>{{ overview.backup.last_run.documents or 0 }}</strong></div>
-            <div><span>Uploads Included</span><strong>{{ 'Yes' if overview.backup.last_run.includes_uploads else 'No' }}</strong></div>
-            <div><span>Retention</span><strong>{{ overview.backup.config.retention_days or '-' }} days</strong></div>
-            <div><span>Schedule</span><strong>{{ overview.backup.config.schedule_display or 'Manual only' }}</strong></div>
-            <div><span>Checksum Stored</span><strong>{{ 'Yes' if overview.backup.last_run.archive_sha256 else 'No' }}</strong></div>
-          </div>
-        </article>
-
-        <article class="admin-panel overview-panel">
-          <div class="panel-head">
-            <h2>Action Required</h2>
+        <article class="ao-panel ao-alert-board">
+          <div class="ao-section-head">
+            <h3>Action Queue</h3>
             <span>{{ overview.alerts | length }} items</span>
           </div>
-          <div class="overview-alert-list">
+          <div class="ao-alert-list">
             {% for item in overview.alerts %}
-              <div class="overview-alert overview-alert-{{ item.level }}">
+              <div class="ao-alert ao-alert-{{ item.level }}">
                 <strong>{{ item.title }}</strong>
                 <span>{{ item.detail }}</span>
               </div>
@@ -221,38 +206,38 @@
           </div>
         </article>
 
-        <article class="admin-panel overview-panel overview-trend-panel">
-          <div class="panel-head">
-            <h2>7-Day Trends</h2>
-            <span>Recent activity</span>
+        <article class="ao-panel ao-trend-board">
+          <div class="ao-section-head">
+            <h3>7-Day Trend Radar</h3>
+            <span>Activity pulse</span>
           </div>
-          <div class="overview-trend-grid">
-            <div class="overview-trend-card">
+          <div class="ao-trend-grid">
+            <div class="ao-trend-card">
               <strong>Logins</strong>
-              <div class="overview-sparkline" aria-hidden="true">
+              <div class="ao-sparkline" aria-hidden="true">
                 {% set login_peak = (overview.trends.login_series | max) if overview.trends.login_series else 0 %}
                 {% for value in overview.trends.login_series %}
-                  <span class="overview-spark-bar" style="height: {{ [((value / (login_peak or 1)) * 100) | round(0), 10] | max }}%" title="{{ overview.trends.labels[loop.index0] }}: {{ value }}"></span>
+                  <span class="ao-spark-bar" style="height: {{ [((value / (login_peak or 1)) * 100) | round(0), 10] | max }}%" title="{{ overview.trends.labels[loop.index0] }}: {{ value }}"></span>
                 {% endfor %}
               </div>
-              <span>{{ overview.activity.recent_signins_7d }} users seen in 7 days</span>
+              <span>{{ overview.activity.recent_signins_7d }} users in 7 days</span>
             </div>
-            <div class="overview-trend-card">
+            <div class="ao-trend-card">
               <strong>Failed Transactions</strong>
-              <div class="overview-sparkline" aria-hidden="true">
+              <div class="ao-sparkline" aria-hidden="true">
                 {% set fail_peak = (overview.trends.failed_transaction_series | max) if overview.trends.failed_transaction_series else 0 %}
                 {% for value in overview.trends.failed_transaction_series %}
-                  <span class="overview-spark-bar is-danger" style="height: {{ [((value / (fail_peak or 1)) * 100) | round(0), 10] | max }}%" title="{{ overview.trends.labels[loop.index0] }}: {{ value }}"></span>
+                  <span class="ao-spark-bar is-danger" style="height: {{ [((value / (fail_peak or 1)) * 100) | round(0), 10] | max }}%" title="{{ overview.trends.labels[loop.index0] }}: {{ value }}"></span>
                 {% endfor %}
               </div>
               <span>{{ overview.activity.failed_transaction_rate }}% failed rate overall</span>
             </div>
-            <div class="overview-trend-card">
+            <div class="ao-trend-card">
               <strong>Completed Backups</strong>
-              <div class="overview-sparkline" aria-hidden="true">
+              <div class="ao-sparkline" aria-hidden="true">
                 {% set backup_peak = (overview.trends.backup_series | max) if overview.trends.backup_series else 0 %}
                 {% for value in overview.trends.backup_series %}
-                  <span class="overview-spark-bar is-ok" style="height: {{ [((value / (backup_peak or 1)) * 100) | round(0), 10] | max }}%" title="{{ overview.trends.labels[loop.index0] }}: {{ value }}"></span>
+                  <span class="ao-spark-bar is-ok" style="height: {{ [((value / (backup_peak or 1)) * 100) | round(0), 10] | max }}%" title="{{ overview.trends.labels[loop.index0] }}: {{ value }}"></span>
                 {% endfor %}
               </div>
               <span>{{ overview.backup.verified_local_count }} verified local archives</span>
@@ -260,21 +245,21 @@
           </div>
         </article>
 
-        <article class="admin-panel overview-panel">
-          <div class="panel-head">
-            <h2>Recent Access</h2>
+        <article class="ao-panel ao-access-board">
+          <div class="ao-section-head">
+            <h3>Recent Access</h3>
             <span>{{ overview.activity.recent_signins_24h }} in 24h</span>
           </div>
-          <div class="overview-user-list">
+          <div class="ao-rows">
             {% for item in overview.recent_users %}
-              <div class="overview-user-row">
+              <div class="ao-row">
                 <div>
                   <strong>{{ item.label }}</strong>
                   <span>{{ item.email }}</span>
                 </div>
-                <div class="overview-user-meta">
+                <div class="ao-row-meta">
                   <span>{{ item.last_login_at | localtime(request) | datetimeformat if item.last_login_at else 'Never logged in' }}</span>
-                  <div class="overview-inline-pills">
+                  <div class="ao-inline-pills">
                     <span class="status-pill {{ 'up' if item.enabled else 'down' }}">{{ 'Enabled' if item.enabled else 'Disabled' }}</span>
                     <span class="status-pill {{ 'up' if item.is_admin else 'down' }}">{{ 'Admin' if item.is_admin else item.auth_provider | title }}</span>
                   </div>
@@ -284,19 +269,19 @@
           </div>
         </article>
 
-        <article class="admin-panel overview-panel">
-          <div class="panel-head">
-            <h2>Recent Audit Activity</h2>
+        <article class="ao-panel ao-audit-board">
+          <div class="ao-section-head">
+            <h3>Recent Audit Activity</h3>
             <span>{{ overview.recent_audit | length }} entries</span>
           </div>
-          <div class="overview-audit-list">
+          <div class="ao-rows">
             {% for item in overview.recent_audit %}
-              <div class="overview-audit-row">
+              <div class="ao-row">
                 <div>
                   <strong>{{ item.action }}</strong>
                   <span>{{ item.username }} • {{ item.auth_provider | title }}</span>
                 </div>
-                <div class="overview-audit-meta">
+                <div class="ao-row-meta">
                   <span>{{ item.timestamp | localtime(request) | datetimeformat if item.timestamp else '-' }}</span>
                   {% if item.meta_summary %}
                     <span>{{ item.meta_summary }}</span>
@@ -307,28 +292,27 @@
           </div>
         </article>
 
-
-        <article class="admin-panel overview-panel">
-          <div class="panel-head">
-            <h2>Recent Local Backups</h2>
+        <article class="ao-panel ao-local-backups-board">
+          <div class="ao-section-head">
+            <h3>Recent Local Backups</h3>
             <span>{{ overview.backup.local_count }} found</span>
           </div>
-          <div class="overview-backup-list">
+          <div class="ao-rows">
             {% if overview.backup.recent_local_backups %}
               {% for item in overview.backup.recent_local_backups %}
-                <div class="overview-backup-row">
+                <div class="ao-row">
                   <div>
                     <strong>{{ item.archive_name }}</strong>
                     <span>{{ item.created_at | localtime(request) | datetimeformat if item.created_at else '-' }}</span>
                   </div>
-                  <div class="overview-backup-meta">
+                  <div class="ao-row-meta">
                     <span>{{ ((item.archive_size_bytes or 0) / 1024) | round(1) }} KB</span>
                     <span class="status-pill {{ 'up' if item.verified else 'down' }}">{{ 'Verified' if item.verified else 'Needs Verify' }}</span>
                   </div>
                 </div>
               {% endfor %}
             {% else %}
-              <p class="overview-empty-state">No local backup files found in the configured destination.</p>
+              <p class="ao-empty">No local backup files found in the configured destination.</p>
             {% endif %}
           </div>
         </article>

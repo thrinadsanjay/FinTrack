@@ -29,6 +29,7 @@ document.addEventListener("DOMContentLoaded", () => {
       outstanding: node.dataset.cardOutstanding || "0",
       statementBalance: node.dataset.cardStatementBalance || "0",
       dueLabel: node.dataset.cardPaymentDueLabel || "Not set",
+      palette: node.dataset.cardPalette || "1",
     };
   }
 
@@ -36,11 +37,12 @@ document.addEventListener("DOMContentLoaded", () => {
     if (card.networkLogo) {
       return `<img src="${card.networkLogo}" alt="${card.networkLabel}">`;
     }
-    const extraClass = heroMode ? " data-cc-network-text" : "";
-    return `<span${extraClass}>${card.networkLabel}</span>`;
+    const extraAttr = heroMode ? " data-cc-network-text" : "";
+    return `<span${extraAttr}>${card.networkLabel}</span>`;
   }
 
   function writeHero(card) {
+    // Set data attributes so readCard() works on the hero node
     hero.dataset.cardId = card.id;
     hero.dataset.cardNetwork = card.network;
     hero.dataset.cardNetworkLabel = card.networkLabel;
@@ -50,22 +52,30 @@ document.addEventListener("DOMContentLoaded", () => {
     hero.dataset.cardOutstanding = card.outstanding;
     hero.dataset.cardStatementBalance = card.statementBalance;
     hero.dataset.cardPaymentDueLabel = card.dueLabel;
-    hero.className = `credit-card-wallet__hero network-${card.network} is-swapping`;
+    hero.dataset.cardPalette = card.palette;
+
+    // Place hero instantly in the "entering from right" position (no transition)
+    hero.className = `credit-card-wallet__hero network-${card.network} card-palette-${card.palette} is-entering`;
+
     if (bankEl) bankEl.textContent = card.bankName;
     if (networkEl) networkEl.innerHTML = buildNetworkMarkup(card, true);
     if (numberEl) numberEl.textContent = card.numberHint;
     if (outstandingEl) outstandingEl.textContent = formatMoney(card.outstanding);
     if (statementEl) statementEl.textContent = formatMoney(card.statementBalance);
     if (dueEl) dueEl.textContent = card.dueLabel;
+
+    // Two rAF frames: paint the enter-position, then remove is-entering to trigger slide-in transition
     requestAnimationFrame(() => {
-      window.setTimeout(() => hero.classList.remove("is-swapping"), 140);
+      requestAnimationFrame(() => {
+        hero.classList.remove("is-entering");
+      });
     });
   }
 
   function createMini(card) {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = `credit-card-wallet__mini network-${card.network}`;
+    button.className = `credit-card-wallet__mini network-${card.network} card-palette-${card.palette}`;
     button.dataset.cardId = card.id;
     button.dataset.cardNetwork = card.network;
     button.dataset.cardNetworkLabel = card.networkLabel;
@@ -75,6 +85,7 @@ document.addEventListener("DOMContentLoaded", () => {
     button.dataset.cardOutstanding = card.outstanding;
     button.dataset.cardStatementBalance = card.statementBalance;
     button.dataset.cardPaymentDueLabel = card.dueLabel;
+    button.dataset.cardPalette = card.palette;
     button.innerHTML = `
       <span class="credit-card-wallet__bank">${card.bankName}</span>
       <span class="credit-card-wallet__network">${buildNetworkMarkup(card)}</span>
@@ -129,7 +140,6 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!targetId || isAnimating || targetId === activeCardId) {
       return;
     }
-
     const targetIndex = orderedCards.findIndex((card) => card.id === targetId);
     if (targetIndex === -1) {
       return;
@@ -139,16 +149,18 @@ document.addEventListener("DOMContentLoaded", () => {
     if (animateNode) {
       animateNode.classList.add("is-promoting");
     }
-    hero.classList.add("is-rotating-out");
+
+    // Rotate current hero out to the left
+    hero.classList.add("is-exiting");
 
     window.setTimeout(() => {
       activeCardId = orderedCards[targetIndex].id;
+      // writeHero sets is-entering (instant), then removes it on next rAF → smooth slide in
       renderActiveCard();
       window.setTimeout(() => {
-        hero.classList.remove("is-rotating-out");
         isAnimating = false;
-      }, 180);
-    }, 130);
+      }, 480);
+    }, 230);
   }
 
   stack.addEventListener("click", (event) => {
@@ -164,8 +176,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
     const nextIndex = (getActiveIndex() + 1) % orderedCards.length;
-    const nextId = orderedCards[nextIndex]?.id;
-    rotateToCard(nextId, null);
+    rotateToCard(orderedCards[nextIndex]?.id, null);
   });
 
   hero.addEventListener("keydown", (event) => {
@@ -177,8 +188,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
     const nextIndex = (getActiveIndex() + 1) % orderedCards.length;
-    const nextId = orderedCards[nextIndex]?.id;
-    rotateToCard(nextId, null);
+    rotateToCard(orderedCards[nextIndex]?.id, null);
   });
 
   renderActiveCard();

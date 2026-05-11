@@ -1,81 +1,139 @@
 {% extends "base.html" %}
 {% block title %}{{ FT_APP_NAME }} ¦ Transaction Inbox{% endblock %}
 {% block extra_css %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/css/transactions.css">
+<link rel="stylesheet" href="/static/css/inbox-redesign.css?v={{ FT_APP_VERSION }}">
 {% endblock %}
 
 {% block content %}
-<section class="page page-transaction-inbox">
+<section class="page page-transaction-inbox inbox-shell">
   <script src="/static/js/transaction_inbox.js" defer></script>
 
-  <div class="title-row">
-    <div>
+  <header class="card inbox-hero">
+    <div class="inbox-hero-copy">
+      <p class="inbox-eyebrow">Workflow</p>
       <h1>Transaction Inbox</h1>
-      <p class="page-subtitle">Catch up fast: import, review, and approve without bypassing transaction rules.</p>
+      <p class="subtitle">Import, review, and approve transactions with a single control surface before they hit your ledger.</p>
     </div>
-  </div>
-
-  <div class="inbox-summary-grid" id="inbox-summary">
-    <article class="card inbox-stat">
-      <span>Pending</span>
-      <strong data-summary-pending>0</strong>
-    </article>
-    <article class="card inbox-stat inbox-stat--attention">
-      <span>Needs Attention</span>
-      <strong data-summary-attention>0</strong>
-    </article>
-    <article class="card inbox-stat">
-      <span>From Statements</span>
-      <strong data-summary-statement>0</strong>
-    </article>
-    <article class="card inbox-stat">
-      <span>From SMS</span>
-      <strong data-summary-sms>0</strong>
-    </article>
-  </div>
-
-  <div class="card inbox-upload-card">
-    <div class="inbox-section-head">
-      <div>
-        <h2>Upload Bank Statement</h2>
-        <p>PDF, CSV, or XLSX. Only new rows enter the inbox.</p>
-      </div>
+    <div class="inbox-summary-grid" id="inbox-summary">
+      <article class="inbox-stat inbox-stat--pending">
+        <span>Pending</span>
+        <strong data-summary-pending>0</strong>
+      </article>
+      <article class="inbox-stat inbox-stat--attention">
+        <span>Needs Attention</span>
+        <strong data-summary-attention>0</strong>
+      </article>
+      <article class="inbox-stat inbox-stat--statement">
+        <span>From Statements</span>
+        <strong data-summary-statement>0</strong>
+      </article>
+      <article class="inbox-stat inbox-stat--sms">
+        <span>From SMS</span>
+        <strong data-summary-sms>0</strong>
+      </article>
     </div>
-    <form id="statement-upload-form" class="inbox-upload-form">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
-      <div class="field-group">
-        <div class="form-field field--active">
-          <label>Account</label>
-          <select name="account_id" required>
-            <option value="" hidden></option>
-            {% for acc in accounts %}
-            <option value="{{ acc._id }}">{{ acc.name }} (₹{{ acc.balance | money }})</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="form-field field--active">
-          <label>Statement File</label>
-          <input type="file" name="statement_file" accept=".pdf,.csv,.xlsx" required>
+  </header>
+
+  <div class="inbox-panels-grid">
+    <div class="card inbox-recon-card">
+      <div class="inbox-section-head">
+        <div>
+          <h2><i class="fa-solid fa-scale-balanced" aria-hidden="true"></i> Reconciliation</h2>
+          <p>Statement import total versus pending inbox total</p>
         </div>
       </div>
-      <div class="inbox-upload-actions">
-        <button type="submit" class="add-tx-btn">Import To Inbox</button>
-        <div class="inbox-upload-result" id="upload-result" aria-live="polite"></div>
+      <div class="inbox-recon-grid">
+        <div class="inbox-recon-cell">
+          <span>Statement Total</span>
+          <strong data-summary-statement-total>₹ 0.00</strong>
+        </div>
+        <div class="inbox-recon-cell">
+          <span>Inbox Total</span>
+          <strong data-summary-inbox-total>₹ 0.00</strong>
+        </div>
       </div>
-    </form>
+    </div>
+
+    <div class="card inbox-upload-card">
+      <div class="inbox-section-head">
+        <div>
+          <h2><i class="fa-solid fa-file-arrow-up" aria-hidden="true"></i> Upload Bank Statement</h2>
+          <p>Import PDF, CSV, or XLSX files. Duplicate detection runs automatically using date and amount.</p>
+        </div>
+      </div>
+      <form id="statement-upload-form" class="inbox-upload-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+        <div class="field-group">
+          <div class="form-field field--active">
+            <label>Account</label>
+            <select name="account_id" id="statement-account-id" required>
+              <option value="" hidden></option>
+              {% for acc in accounts %}
+              <option value="{{ acc._id }}">{{ acc.name }} (₹{{ acc.balance | money }})</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-field field--active">
+            <label>Statement File</label>
+            <input type="file" name="statement_file" accept=".pdf,.csv,.xlsx" required>
+          </div>
+        </div>
+        <div class="inbox-upload-actions">
+          <button type="submit" class="add-tx-btn inbox-primary-btn">Import To Inbox</button>
+          <div class="inbox-upload-result" id="upload-result" aria-live="polite" aria-atomic="true"></div>
+        </div>
+      </form>
+    </div>
+
+    <div class="card inbox-upload-card">
+      <div class="inbox-section-head">
+        <div>
+          <h2><i class="fa-solid fa-comment-dots" aria-hidden="true"></i> SMS Capture</h2>
+          <p>Use Android bridge controls to sync and process bank SMS data.</p>
+        </div>
+      </div>
+      <form id="sms-buffer-sync-form" class="inbox-upload-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+        <div class="field-group">
+          <div class="form-field field--active">
+            <label>Account</label>
+            <select name="account_id" id="sms-account-id" required>
+              <option value="" hidden></option>
+              {% for acc in accounts %}
+              <option value="{{ acc._id }}">{{ acc.name }} (₹{{ acc.balance | money }})</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="inbox-toolbar-right inbox-sms-controls">
+            <button type="button" class="chip chip-action" id="sms-request-permission">Request READ_SMS</button>
+            <button type="button" class="chip chip-subtle" id="sms-sync-device">Sync Device SMS</button>
+            <button type="submit" class="chip chip-subtle" id="sms-sync-buffer">Sync SMS Buffer</button>
+            <button type="button" class="chip chip-danger chip-danger--ghost" id="sms-clear-buffer">Clear SMS Buffer</button>
+          </div>
+        </div>
+        <div class="inbox-upload-result" id="sms-result" aria-live="polite" aria-atomic="true"></div>
+      </form>
+    </div>
   </div>
 
   <div class="card table-card inbox-table-card">
     <div class="inbox-toolbar">
       <div class="inbox-toolbar-left">
-        <label class="inbox-filter-toggle">
+        <label class="inbox-filter-toggle inbox-filter-toggle--button" for="needs-attention-only">
           <input type="checkbox" id="needs-attention-only">
-          <span>Needs Attention Only</span>
+          <span class="inbox-filter-toggle__text">Needs Attention Only</span>
+          <span class="inbox-filter-toggle__state" aria-hidden="true"></span>
         </label>
       </div>
       <div class="inbox-toolbar-right">
+        <button type="button" class="chip chip-action" id="approve-high-confidence" title="Auto-approve rows with confidence ≥ 70%">High Confidence</button>
         <button type="button" class="chip chip-action" id="approve-selected">Approve Selected</button>
         <button type="button" class="chip chip-danger" id="discard-selected">Discard Selected</button>
+        <button type="button" class="chip chip-danger chip-danger--ghost" id="clear-pending-buffer">Clear Buffer</button>
       </div>
     </div>
 
@@ -90,14 +148,15 @@
             <th>Type</th>
             <th>Mode</th>
             <th>Category</th>
-            <th>Account</th>
-            <th>Attention</th>
+            <th>Sub Category</th>
+            <th>Score</th>
+            <th>⚠️</th>
             <th>Actions</th>
           </tr>
         </thead>
         <tbody id="inbox-rows">
           <tr>
-            <td colspan="10" class="inbox-empty-cell">Loading inbox...</td>
+            <td colspan="11" class="inbox-empty-cell">Loading inbox...</td>
           </tr>
         </tbody>
       </table>

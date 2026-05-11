@@ -44,6 +44,38 @@
   overflow: hidden;
 }
 
+.inbox-recon-card {
+  overflow: hidden;
+}
+
+.inbox-recon-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.inbox-recon-cell {
+  border: 1px solid color-mix(in srgb, var(--color-border) 82%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-surface-strong) 88%, transparent);
+  padding: 10px;
+  display: grid;
+  gap: 5px;
+}
+
+.inbox-recon-cell span {
+  color: var(--color-muted);
+  font-size: 0.79rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+}
+
+.inbox-recon-cell strong {
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+}
+
 .inbox-section-head h2 {
   margin-bottom: 4px;
 }
@@ -111,6 +143,25 @@
   vertical-align: middle;
 }
 
+.inbox-group-row td {
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-primary) 14%, transparent);
+}
+
+.inbox-group-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.8rem;
+  color: var(--color-muted);
+}
+
+.inbox-group-meta strong {
+  color: var(--color-text);
+  font-size: 0.86rem;
+}
+
 .inbox-row--attention {
   background: linear-gradient(90deg, color-mix(in srgb, #f59e0b 12%, transparent), transparent);
 }
@@ -123,6 +174,38 @@
   background: color-mix(in srgb, var(--color-primary) 10%, transparent);
   font-size: 0.86rem;
   font-weight: 600;
+}
+
+.inbox-merchant {
+  font-size: 0.78rem;
+  color: var(--color-muted);
+  text-transform: lowercase;
+}
+
+.confidence-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.confidence-high {
+  background: color-mix(in srgb, #16a34a 18%, transparent);
+  color: #166534;
+}
+
+.confidence-medium {
+  background: color-mix(in srgb, #f59e0b 18%, transparent);
+  color: #92400e;
+}
+
+.confidence-low {
+  background: color-mix(in srgb, #dc2626 16%, transparent);
+  color: #991b1b;
 }
 
 .attention-badge {
@@ -181,6 +264,10 @@
 @media (max-width: 1100px) {
   .inbox-summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .inbox-recon-grid {
+    grid-template-columns: 1fr;
   }
 }
 

@@ -220,14 +220,14 @@
     <span>Home</span>
   </a>
 
-  <a href="/transactions" class="{% if active_page == 'addtransaction' %}active{% endif %}">
-    <i class="fa fa-plus"></i>
-    <span>Add</span>
-  </a>
-
   <a href="/transactions/list" class="{% if active_page == 'listtransactions' %}active{% endif %}">
     <i class="fa fa-list"></i>
     <span>Transactions</span>
+  </a>
+
+  <a href="/transactions" class="add-btn {% if active_page == 'addtransaction' %}active{% endif %}" title="Add Transaction" aria-label="Add new transaction">
+    <i class="fa fa-plus"></i>
+    <span>Add</span>
   </a>
 
   <a href="/transaction-inbox" class="{% if active_page == 'transactioninbox' %}active{% endif %}">
@@ -251,9 +251,4 @@
     <span>Admin</span>
   </a>
   {% endif %}
-
-  <!-- <button type="button" class="mobile-profile" data-profile-toggle aria-expanded="false">
-    <i class="fa fa-user"></i>
-    <span>Profile</span>
-  </button> -->
 </nav>
