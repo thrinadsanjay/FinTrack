@@ -4,7 +4,10 @@
   {% set notif_total = notifications | length %}
   {% set notif_count = notifications | selectattr("is_read", "equalto", false) | list | length %}
   <div class="nav-left">
-    <span class="logo head">FinTracker</span>
+    <div class="logo-wrap">
+      <span class="logo head">FinTracker</span>
+      <span class="logo-sub">Money OS</span>
+    </div>
 
     <nav class="nav-links">
       <a href="/" class="{% if active_page == 'dashboard' %}active{% endif %}">
@@ -67,6 +70,10 @@
     <span class="logo head">FinTracker</span>
   </div>
   <div class="nav-right">
+    <a href="/transactions" class="mobile-quick-add" aria-label="Add transaction" title="Add transaction">
+      <i class="fa fa-plus"></i>
+      <span>Add</span>
+    </a>
     <button
       type="button"
       class="theme-toggle"

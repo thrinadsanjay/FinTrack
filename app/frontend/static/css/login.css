@@ -290,6 +290,21 @@ html[data-theme="dark"] .page-auth .form-group input:focus {
   font-size: 0.95rem;
 }
 
+.login-panel__status {
+  margin-top: 10px;
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(37, 84, 219, 0.24);
+  background: rgba(37, 84, 219, 0.08);
+  color: #20418b;
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
 .login-google {
   width: 56px;
   height: 56px;
@@ -888,6 +903,12 @@ html[data-theme="dark"] .login-panel__header h1 {
 html[data-theme="dark"] .login-panel__eyebrow,
 html[data-theme="dark"] .login-panel__copy {
   color: #9ab0cd;
+}
+
+html[data-theme="dark"] .login-panel__status {
+  border-color: rgba(125, 170, 255, 0.3);
+  background: rgba(59, 130, 246, 0.16);
+  color: #b8d3ff;
 }
 
 html[data-theme="dark"] .login-card {
