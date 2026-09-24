@@ -11,9 +11,11 @@ Must NOT:
 - Write audit logs
 """
 
-from datetime import datetime, timezone, timedelta
+from datetime import date, datetime, timezone, timedelta
 from bson import ObjectId
 from app.db.mongo import db
+from app.helpers.planning_math import as_date, next_due_on_or_after
+from app.helpers.bank_brands import resolve_bank_brand
 from app.helpers.dashboard_cards import (
     fetch_total_balance,
     fetch_credit_debit_totals_since,
@@ -21,11 +23,18 @@ from app.helpers.dashboard_cards import (
     fetch_top_spending_categories,
     fetch_largest_transactions,
     fetch_daily_trend,
+    fetch_monthly_trend,
     fetch_monthly_trend_12m,
     build_credit_card_alerts,
 )
 from app.helpers.dashboard_recurring import fetch_dashboard_recurring_overview
-from app.helpers.dashboard_time import start_of_today_utc, start_of_month_utc, start_of_day_utc
+from app.helpers.dashboard_time import (
+    APP_ZONE,
+    app_now,
+    start_of_today_utc,
+    start_of_month_utc,
+    start_of_day_utc,
+)
 from app.helpers.dashboard_upcoming import fetch_upcoming_bills
 from app.helpers.dashboard_notifications import persist_dashboard_notifications
 from app.helpers.money import round_money
@@ -47,28 +56,48 @@ async def _fetch_credit_card_summary(uid: ObjectId) -> dict:
 
     cursor = db.accounts.find(
         {"user_id": uid, "deleted_at": None, "type": "credit_card"},
-        {"name": 1, "bank_name": 1, "balance": 1, "credit_limit": 1, "statement_balance": 1, "payment_due_date": 1, "card_network": 1},
+        {
+            "name": 1,
+            "bank_name": 1,
+            "balance": 1,
+            "credit_limit": 1,
+            "statement_balance": 1,
+            "payment_due_date": 1,
+            "due_day": 1,
+            "card_network": 1,
+        },
     )
+    today = datetime.now(timezone.utc).date()
     async for card in cursor:
         balance = float(card.get("balance") or 0)
         outstanding = round_money(abs(balance)) if balance < 0 else 0.0
         statement_balance = round_money(float(card.get("statement_balance") or 0))
-        payment_due_date = card.get("payment_due_date")
-        if payment_due_date and payment_due_date.tzinfo is None:
-            payment_due_date = payment_due_date.replace(tzinfo=timezone.utc)
+        stored_due = card.get("payment_due_date")
+        if stored_due and getattr(stored_due, "tzinfo", None) is None:
+            stored_due = stored_due.replace(tzinfo=timezone.utc)
+        due = next_due_on_or_after(
+            due_day=card.get("due_day") or 5,
+            today=today,
+            existing=as_date(stored_due),
+        )
+        payment_due_date = due or as_date(stored_due) or stored_due
         total_outstanding += outstanding
         total_statement_balance += statement_balance
-        if payment_due_date and (next_due_date is None or payment_due_date < next_due_date):
+        due_cmp = as_date(payment_due_date)
+        next_cmp = as_date(next_due_date)
+        if due_cmp and (next_cmp is None or due_cmp < next_cmp):
             next_due_date = payment_due_date
         network = (card.get("card_network") or "visa").lower()
         card_id = str(card["_id"])
         digits = "".join(ch for ch in card_id if ch.isdigit())
         number_hint = (digits[-4:] if len(digits) >= 4 else (digits + "4821")[-4:])
+        brand = resolve_bank_brand(card, group="card")
         cards.append(
             {
                 "id": card_id,
                 "name": card.get("name") or "Credit Card",
                 "bank_name": card.get("bank_name") or card.get("name") or "Bank",
+                "bank_logo": brand.get("logo"),
                 "card_network": network,
                 "card_network_label": {
                     "visa": "VISA",
@@ -87,6 +116,7 @@ async def _fetch_credit_card_summary(uid: ObjectId) -> dict:
                 "outstanding": outstanding,
                 "statement_balance": statement_balance,
                 "payment_due_date": payment_due_date,
+                "due_day": int(card.get("due_day") or 5),
                 "credit_limit": card.get("credit_limit") or 0,
             }
         )
@@ -131,9 +161,9 @@ async def _fetch_credit_card_summary(uid: ObjectId) -> dict:
 
     cards.sort(
         key=lambda item: (
-            item["payment_due_date"] is None,
-            item["payment_due_date"] or datetime.max.replace(tzinfo=timezone.utc),
-            item["bank_name"].lower(),
+            as_date(item["payment_due_date"]) is None,
+            as_date(item["payment_due_date"]) or date.max,
+            (item.get("bank_name") or "").lower(),
         )
     )
 
@@ -148,6 +178,98 @@ async def _fetch_credit_card_summary(uid: ObjectId) -> dict:
         "emi_next_due_date": emi_next_due_date,
         "payment_month_total": round_money(payment_month_total),
         "payment_month_count": payment_month_count,
+    }
+
+
+def _shift_month(local_month: datetime, delta: int) -> datetime:
+    index = local_month.year * 12 + (local_month.month - 1) + delta
+    year, month_index = divmod(index, 12)
+    return datetime(year, month_index + 1, 1, tzinfo=APP_ZONE)
+
+
+def _cashflow_window(range_key: str, offset: int) -> tuple[datetime, datetime, str, str]:
+    now_local = app_now()
+    offset = min(0, max(-120, int(offset)))
+
+    if range_key == "week":
+        this_monday = datetime(
+            now_local.year,
+            now_local.month,
+            now_local.day,
+            tzinfo=APP_ZONE,
+        ) - timedelta(days=now_local.weekday())
+        start_local = this_monday + timedelta(weeks=offset)
+        end_local = start_local + timedelta(days=7)
+        end_day = end_local - timedelta(days=1)
+        label = (
+            f"{start_local.strftime('%d %b')} – "
+            f"{end_day.strftime('%d %b %Y')}"
+        )
+        granularity = "day"
+    elif range_key == "month":
+        this_month = datetime(now_local.year, now_local.month, 1, tzinfo=APP_ZONE)
+        start_local = _shift_month(this_month, offset)
+        end_local = _shift_month(start_local, 1)
+        label = start_local.strftime("%B %Y")
+        granularity = "day"
+    elif range_key in {"3m", "6m"}:
+        months = 3 if range_key == "3m" else 6
+        this_month = datetime(now_local.year, now_local.month, 1, tzinfo=APP_ZONE)
+        base_start = _shift_month(this_month, -(months - 1))
+        start_local = _shift_month(base_start, offset * months)
+        end_local = _shift_month(start_local, months)
+        end_month = _shift_month(end_local, -1)
+        if start_local.year == end_month.year:
+            label = f"{start_local.strftime('%b')} – {end_month.strftime('%b %Y')}"
+        else:
+            label = f"{start_local.strftime('%b %Y')} – {end_month.strftime('%b %Y')}"
+        granularity = "month"
+    else:
+        year = now_local.year + offset
+        start_local = datetime(year, 1, 1, tzinfo=APP_ZONE)
+        end_local = datetime(year + 1, 1, 1, tzinfo=APP_ZONE)
+        label = str(year)
+        granularity = "month"
+
+    return (
+        start_local.astimezone(timezone.utc),
+        end_local.astimezone(timezone.utc),
+        label,
+        granularity,
+    )
+
+
+async def get_cashflow_window(user_id: str, range_key: str, offset: int = 0) -> dict:
+    normalized = range_key if range_key in {"week", "month", "3m", "6m", "year"} else "month"
+    safe_offset = min(0, max(-120, int(offset)))
+    start, end, label, granularity = _cashflow_window(normalized, safe_offset)
+    uid = ObjectId(user_id)
+
+    if granularity == "day":
+        series = await fetch_daily_trend(uid, start, end)
+    else:
+        series = await fetch_monthly_trend(uid, start, end)
+
+    income = round_money(sum(float(point.get("income") or 0) for point in series))
+    expense = round_money(sum(float(point.get("expense") or 0) for point in series))
+    current_balance = round_money(await fetch_total_balance(uid))
+    now_utc = datetime.now(timezone.utc)
+    ending_balance = current_balance
+    if end < now_utc:
+        credits_after, debits_after = await fetch_credit_debit_totals_since(uid, end)
+        ending_balance = round_money(current_balance - credits_after + debits_after)
+
+    return {
+        "range": normalized,
+        "offset": safe_offset,
+        "label": label,
+        "granularity": granularity,
+        "series": series,
+        "income": income,
+        "expense": expense,
+        "net": round_money(income - expense),
+        "ending_balance": ending_balance,
+        "can_next": safe_offset < 0,
     }
 
 
@@ -203,6 +325,16 @@ async def get_dashboard_summary(user_id: str):
         prev_rate = ((prev_credit - prev_debit) / prev_credit) * 100
         savings_rate_change = round(savings_rate - prev_rate, 1)
 
+    def _pct_change(current, previous):
+        if previous in (None, 0):
+            return None
+        return round(((current - previous) / abs(previous)) * 100, 1)
+
+    prev_net = prev_credit - prev_debit
+    month_income_change_pct = _pct_change(month_credit, prev_credit)
+    month_expense_change_pct = _pct_change(month_debit, prev_debit)
+    month_net_change_pct = _pct_change(month_credit - month_debit, prev_net) if (prev_credit or prev_debit) else None
+
     account_alerts = build_credit_card_alerts(account_balances, notifications)
 
     return {
@@ -214,6 +346,9 @@ async def get_dashboard_summary(user_id: str):
         "month_net": month_credit - month_debit,
         "month_income": month_credit,
         "month_expense": month_debit,
+        "month_income_change_pct": month_income_change_pct,
+        "month_expense_change_pct": month_expense_change_pct,
+        "month_net_change_pct": month_net_change_pct,
         "savings_rate": savings_rate,
         "savings_rate_change": savings_rate_change,
         "account_balances": account_balances,
@@ -363,6 +498,9 @@ async def get_recent_transactions(user_id: str, limit: int = 5):
             continue
 
         tx["account_name"] = account_map.get(str(tx.get("account_id")))
+        category = tx.get("category") or {}
+        if isinstance(category, dict):
+            tx["category_name"] = category.get("name")
         merged.append(tx)
 
     return merged

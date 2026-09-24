@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Credit Cards QA</title>
+  <link rel="stylesheet" href="./css/core/reset.css">
+  <link rel="stylesheet" href="./css/core/tokens.css">
+  <link rel="stylesheet" href="./css/core/typography.css">
+  <link rel="stylesheet" href="./css/pages/dashboard.css">
+  <link rel="stylesheet" href="./css/pages/dashboard-cards.css">
+  <style>
+    body { margin: 0; padding: 24px; background: var(--ft-canvas); color: var(--ft-ink); font-family: "Plus Jakarta Sans", system-ui, sans-serif; }
+    h1 { font-size: 1.1rem; margin: 0 0 12px; }
+    .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+    button { min-height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--ft-border); background: var(--ft-surface); color: inherit; }
+    .stage { max-width: 1100px; }
+    .stage .dash {
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: 10px;
+      overflow-x: clip;
+    }
+    .dummy {
+      grid-column: span 7;
+      min-height: 320px;
+      border-radius: 12px;
+      border: 1px dashed var(--ft-border);
+      background: var(--ft-surface);
+      padding: 14px;
+      color: var(--ft-muted);
+      font-size: 0.8rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Credit Cards panel QA</h1>
+  <div class="toolbar">
+    <button type="button" id="themeBtn">Toggle theme</button>
+    <button type="button" data-n="0">0 cards</button>
+    <button type="button" data-n="1">1 card</button>
+    <button type="button" data-n="2">2 cards</button>
+    <button type="button" data-n="3">3 cards</button>
+    <button type="button" data-n="8">8 cards</button>
+  </div>
+  <div class="stage" id="stage"></div>
+  <script>
+    const names = [
+      { name: "Amazon Pay", bank: "ICICI", net: "visa", logo: "./icons/visa.svg", out: 18450, avail: 31550, util: "36.9", stmt: 18450, due: "Due 18 Sep · In 3 days", mod: "is-soon", emi: "3 active EMIs · ₹ 4,250.00/mo", hint: "•••• 4821" },
+      { name: "Regalia", bank: "HDFC", net: "mastercard", logo: "./icons/mastercard.svg", out: 6200, avail: 43800, util: "12.4", stmt: 6200, due: "Due 22 Sep", mod: "is-normal", emi: "", hint: "•••• 1092" },
+      { name: "RuPay Select", bank: "SBI", net: "rupay", logo: "./icons/rupay.svg", out: 0, avail: 150000, util: "0.0", stmt: 0, due: "", mod: "", emi: "", hint: "•••• 7740" },
+      { name: "Platinum", bank: "Amex", net: "amex", logo: "./icons/americanexpress.svg", out: 91000, avail: 9000, util: "91.0", stmt: 91000, due: "Due 12 Sep · Overdue", mod: "is-overdue", emi: "1 active EMI · ₹ 8,000.00/mo", hint: "•••• 3005" }
+    ];
+
+    function money(n) {
+      return "₹ " + Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function cardHtml(c, i) {
+      return `<article class="dash-cards__slide" data-card-slide data-name="${c.bank} ${c.name}"
+        data-outstanding="${money(c.out)}" data-available="${money(c.avail)}" data-utilization="${c.util}%"
+        data-statement="Statement ${money(c.stmt)}" data-due="${c.due}" data-due-rel="" data-due-mod="${c.mod}" data-emi="${c.emi}">
+        <div class="dash-cards__face tone-${i % 3}">
+          <div class="dash-cards__pattern"></div>
+          <div class="dash-cards__top"><span>${c.bank}</span><img src="${c.logo}" alt="${c.net}"></div>
+          <div class="dash-cards__chiprow"><i class="dash-cards__chip"></i><i class="dash-cards__wave"></i></div>
+          <div class="dash-cards__product">${c.name}</div>
+          <div class="dash-cards__num">${c.hint}</div>
+          <div class="dash-cards__bottom"><em>ADMIN</em></div>
+        </div>
+      </article>`;
+    }
+
+    function render(n) {
+      const list = [];
+      for (let i = 0; i < n; i++) list.push(Object.assign({}, names[i % names.length], i >= 4 ? { name: names[i % 4].name + " " + (i + 1), hint: "•••• " + String(1000 + i) } : {}));
+      const first = list[0];
+      document.getElementById("stage").innerHTML = `
+        <section class="dash" data-dashboard data-trend="[]" data-monthly="[]">
+          <aside class="dummy">Cash Flow Overview stand-in — cards must not overflow into this column.</aside>
+          <article class="dash-panel dash-cards dash-span-5">
+            <div class="dash-cards__head">
+              <div><h2>Credit Cards</h2><p>${n ? "Swipe through your cards" : "Track balances, bills and EMIs"}</p></div>
+              <a class="dash-cards__view" href="#all">View all <span>→</span></a>
+            </div>
+            ${n ? `
+              <div class="dash-cards__carousel" data-card-carousel>
+                <button type="button" class="dash-cards__nav is-prev" data-card-prev aria-label="Previous credit card">‹</button>
+                <div class="dash-cards__stage">${list.map(cardHtml).join("")}</div>
+                <button type="button" class="dash-cards__nav is-next" data-card-next aria-label="Next credit card">›</button>
+              </div>
+              <div class="dash-cards__dots" data-card-dots></div>
+              <div class="dash-cards__stats" data-card-stats>
+                <div><span>Outstanding</span><strong data-stat="out">${money(first.out)}</strong></div>
+                <div><span>Available</span><strong data-stat="avail">${money(first.avail)}</strong></div>
+                <div><span>Utilization</span><strong data-stat="util">${first.util}%</strong></div>
+              </div>
+              <div class="dash-cards__bill">
+                <span data-stat="statement">Statement ${money(first.stmt)}</span>
+                <span class="${first.mod}" data-stat="due">${first.due}</span>
+              </div>
+              <p class="dash-cards__emi" data-stat="emi" ${first.emi ? "" : "hidden"}>${first.emi}</p>
+            ` : `
+              <div class="dash-cards__empty">
+                <div class="dash-cards__ghost" aria-hidden="true"><i></i><span></span><b></b></div>
+                <strong>No credit cards yet</strong>
+                <p>Track balances, utilization, bills and EMIs in one place.</p>
+                <a class="dash-cards__add" href="#add">Add your first card</a>
+              </div>`}
+          </article>
+        </section>`;
+      const s = document.createElement("script");
+      s.src = "./js/dashboard.js?v=" + Date.now();
+      document.body.appendChild(s);
+    }
+
+    document.getElementById("themeBtn").onclick = () => {
+      document.documentElement.dataset.theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    };
+    document.querySelectorAll("[data-n]").forEach(btn => btn.onclick = () => {
+      document.querySelectorAll("script[src*='dashboard.js']").forEach(s => s.remove());
+      render(Number(btn.dataset.n));
+    });
+    render(2);
+  </script>
+</body>
+</html>

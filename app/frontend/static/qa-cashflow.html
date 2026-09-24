@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cash Flow QA</title>
+  <link rel="stylesheet" href="./css/core/tokens.css">
+  <link rel="stylesheet" href="./css/core/typography.css">
+  <link rel="stylesheet" href="./css/pages/dashboard.css">
+  <link rel="stylesheet" href="./css/pages/dashboard-cashflow.css">
+  <style>
+    body { margin: 0; padding: 24px; background: var(--ft-canvas); color: var(--ft-ink); font-family: "Plus Jakarta Sans", system-ui, sans-serif; }
+    h1 { font-size: 1.1rem; margin: 0 0 12px; }
+    .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+    button { min-height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--ft-border); background: var(--ft-surface); color: inherit; }
+    .stage { max-width: 920px; }
+    .stage .dash { display: block; overflow: visible; }
+  </style>
+</head>
+<body>
+  <h1>Cash Flow Overview QA</h1>
+  <div class="toolbar">
+    <button type="button" id="themeBtn">Toggle theme</button>
+    <button type="button" data-case="sparse">Sparse 1 day</button>
+    <button type="button" data-case="few">4 days</button>
+    <button type="button" data-case="month">Full month</button>
+    <button type="button" data-case="positive">Positive net</button>
+    <button type="button" data-case="year">12 months</button>
+    <button type="button" data-case="empty">Empty</button>
+  </div>
+  <div class="stage" id="stage"></div>
+  <script>
+    const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const cases = {
+      sparse: {
+        defaultRange: "month",
+        income: 0,
+        expense: 1432,
+        label: "Aug 2026",
+        trend: [{ date: "2026-08-04", day: 4, income: 0, expense: 1432 }],
+        monthly: [{ month: "2026-08", month_short: "Aug", month_label: "Aug 2026", income: 0, expense: 1432 }]
+      },
+      few: {
+        defaultRange: "month",
+        income: 8000,
+        expense: 4200,
+        label: "Aug 2026",
+        trend: [
+          { date: "2026-08-02", day: 2, income: 8000, expense: 0 },
+          { date: "2026-08-08", day: 8, income: 0, expense: 1400 },
+          { date: "2026-08-16", day: 16, income: 0, expense: 900 },
+          { date: "2026-08-24", day: 24, income: 0, expense: 1900 }
+        ],
+        monthly: []
+      },
+      month: {
+        defaultRange: "month",
+        income: 42000,
+        expense: 28100,
+        label: "Aug 2026",
+        trend: Array.from({ length: 31 }, (_, i) => {
+          const day = i + 1;
+          const date = "2026-08-" + String(day).padStart(2, "0");
+          const income = day === 1 ? 42000 : 0;
+          const expense = day % 3 === 0 ? 1200 + (day * 40) : (day % 7 === 0 ? 800 : 0);
+          return { date, day, income, expense };
+        }),
+        monthly: []
+      },
+      positive: {
+        defaultRange: "month",
+        income: 12000,
+        expense: 4300,
+        label: "Sep 2026",
+        trend: [
+          { date: "2026-09-01", day: 1, income: 12000, expense: 0 },
+          { date: "2026-09-12", day: 12, income: 0, expense: 4300 }
+        ],
+        monthly: []
+      },
+      year: {
+        defaultRange: "12m",
+        income: 0,
+        expense: 0,
+        label: "Sep 2026",
+        trend: [],
+        monthly: MONTHS.map((m, i) => ({
+          month: "2025-" + String((i + 10) % 12 + 1).padStart(2, "0"),
+          month_short: m,
+          month_label: m + " 2026",
+          income: i % 5 === 0 ? 0 : 18000 + i * 400,
+          expense: 9000 + i * 350
+        }))
+      },
+      empty: {
+        defaultRange: "month",
+        income: 0,
+        expense: 0,
+        label: "Aug 2026",
+        trend: [],
+        monthly: []
+      }
+    };
+
+    function money(n) {
+      const v = Number(n || 0);
+      const body = Math.abs(v).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      if (v < 0) return "-₹ " + body;
+      if (v > 0 && arguments[1] === "net") return "+₹ " + body;
+      return "₹ " + body;
+    }
+
+    function render(spec) {
+      const has = spec.trend.some(p => p.income || p.expense) || spec.monthly.some(p => p.income || p.expense);
+      const net = spec.income - spec.expense;
+      const yearIncome = spec.monthly.reduce((s, r) => s + r.income, 0);
+      const yearExpense = spec.monthly.reduce((s, r) => s + r.expense, 0);
+      const showIn = spec.defaultRange === "12m" ? yearIncome : spec.income;
+      const showOut = spec.defaultRange === "12m" ? yearExpense : spec.expense;
+      const showNet = showIn - showOut;
+      document.getElementById("stage").innerHTML = `
+        <section class="dash" data-dashboard
+          data-trend='${JSON.stringify(spec.trend)}'
+          data-monthly='${JSON.stringify(spec.monthly)}'
+          data-cashflow-default="${spec.defaultRange}"
+          data-month-income="${spec.income}"
+          data-month-expense="${spec.expense}">
+          <article class="dash-panel dash-cashflow dash-span-7" data-month-income="${spec.income}" data-month-expense="${spec.expense}" data-month-label="${spec.label}">
+            <div class="dash-cashflow__head">
+              <div>
+                <h2 id="dash-cashflow-title">Cash Flow Overview</h2>
+                <p data-cashflow-subtitle>Income vs Expense · ${spec.defaultRange === "12m" ? "Last 12 months" : spec.label}</p>
+              </div>
+              ${has ? `<label class="dash-cashflow__range"><span class="visually-hidden">Cash flow range</span>
+                <select data-cashflow-range>
+                  ${spec.trend.length ? `<option value="month" ${spec.defaultRange === "month" ? "selected" : ""}>This month</option>` : ""}
+                  ${spec.monthly.length ? `<option value="12m" ${spec.defaultRange === "12m" ? "selected" : ""}>Last 12 months</option>` : ""}
+                </select></label>` : ""}
+            </div>
+            <div class="dash-cashflow__metrics">
+              <div><span>Income</span><strong class="is-in" data-cashflow-income>${money(showIn)}</strong></div>
+              <div><span>Expense</span><strong class="is-out" data-cashflow-expense>${money(showOut)}</strong></div>
+              <div><span>Net</span><strong class="${showNet > 0 ? "is-in" : showNet < 0 ? "is-out" : "is-zero"}" data-cashflow-net>${money(showNet, "net")}</strong></div>
+            </div>
+            ${has ? `<div class="dash-cashflow__legend">
+              <span><i class="is-in"></i> Income</span>
+              <span><i class="is-out"></i> Expense</span>
+              <span><i class="is-net"></i> Net</span>
+            </div>
+            <div class="dash-cashflow__plot">
+              <canvas class="dash-cashflow__chart" data-cashflow-chart role="img" tabindex="0" aria-label="Cash flow chart"></canvas>
+              <div class="dash-tooltip dash-cashflow__tip" data-cashflow-tip hidden></div>
+            </div>` : `<div class="dash-cashflow__empty"><strong>No cash flow recorded yet</strong><a class="dash-cashflow__add" href="#add">Add transaction →</a></div>`}
+          </article>
+        </section>`;
+      const script = document.createElement("script");
+      script.src = "./js/dashboard.js?v=" + Date.now();
+      document.body.appendChild(script);
+    }
+
+    document.getElementById("themeBtn").onclick = () => {
+      document.documentElement.dataset.theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+      window.dispatchEvent(new Event("ft:theme"));
+    };
+    document.querySelectorAll("[data-case]").forEach(btn => {
+      btn.onclick = () => {
+        document.querySelectorAll("script[src*='dashboard.js']").forEach(s => s.remove());
+        render(cases[btn.dataset.case]);
+      };
+    });
+    render(cases.sparse);
+  </script>
+</body>
+</html>

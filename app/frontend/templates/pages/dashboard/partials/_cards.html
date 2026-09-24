@@ -1,0 +1,118 @@
+<article class="dash-panel dash-cards ft-reveal" style="--delay:230ms" aria-labelledby="dash-cards-title">
+  <div class="dash-cards__head">
+    <div>
+      <h2 id="dash-cards-title">
+        <span class="dash-ico"><i class="fa-solid fa-credit-card" aria-hidden="true"></i></span>
+        Credit Cards
+      </h2>
+    </div>
+    <a class="dash-cards__view" href="/accounts?group=card">View all <span aria-hidden="true">→</span></a>
+  </div>
+
+  {% if card_list %}
+  {% set holder = (user.full_name or user.username or '')|trim %}
+  <div class="dash-cards__carousel" data-card-carousel>
+    {% if card_list|length > 1 %}
+    <button type="button" class="dash-cards__nav is-prev" data-card-prev aria-label="Previous credit card">
+      <i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
+    </button>
+    {% endif %}
+    <div class="dash-cards__stage" data-card-stage>
+      {% for card in card_list %}
+      {% set limit = card.credit_limit or card.limit or 0 %}
+      {% set outstanding = card.outstanding or 0 %}
+      {% set extra = namespace(available=card.available if card.available is number else none, util=card.utilization if card.utilization is number else none, statement=card.statement_balance if card.statement_balance is not none else card.statement, due=card.payment_due_date or card.due_date, due_day=card.due_day or 5, emi_count=card.emi_count or 0, monthly_emi=card.monthly_emi or 0) %}
+      {% for pc in cards_stats.cards or [] %}
+        {% if (pc.id and card.id and pc.id == card.id) or (pc.name and card.name and pc.name == card.name) or (pc.name and card.bank_name and pc.name == card.bank_name) %}
+          {% if extra.available is none and pc.available is number %}{% set extra.available = pc.available %}{% endif %}
+          {% if extra.util is none and pc.utilization is number %}{% set extra.util = pc.utilization %}{% endif %}
+          {% if extra.statement is none %}{% set extra.statement = pc.statement %}{% endif %}
+          {% if extra.due is none %}{% set extra.due = pc.due_date %}{% endif %}
+          {% if pc.due_day %}{% set extra.due_day = pc.due_day %}{% endif %}
+          {% if pc.emi_count %}{% set extra.emi_count = pc.emi_count %}{% endif %}
+          {% if pc.monthly_emi %}{% set extra.monthly_emi = pc.monthly_emi %}{% endif %}
+        {% endif %}
+      {% endfor %}
+      {% if extra.available is none and limit %}{% set extra.available = limit - outstanding %}{% endif %}
+      {% if extra.util is none and limit %}{% set extra.util = ((outstanding / limit) * 100) | round(1) %}{% endif %}
+      {% set due_delta = extra.due | days_until if extra.due else none %}
+      {% set due_mod = 'is-overdue' if due_delta is not none and due_delta < 0 else ('is-soon' if due_delta is not none and due_delta <= 3 else 'is-normal') %}
+      {% set emi_label = '' %}
+      {% if extra.emi_count and extra.monthly_emi %}
+        {% set emi_label = extra.emi_count ~ ' EMI' ~ ('s' if extra.emi_count != 1 else '') ~ ' · ₹ ' ~ (extra.monthly_emi | money) ~ '/mo' %}
+      {% elif extra.emi_count %}
+        {% set emi_label = extra.emi_count ~ ' EMI' ~ ('s' if extra.emi_count != 1 else '') %}
+      {% elif extra.monthly_emi %}
+        {% set emi_label = 'EMI ₹ ' ~ (extra.monthly_emi | money) ~ '/mo' %}
+      {% endif %}
+      {% set last4 = (card.card_number_hint or '')|replace('•', '')|replace(' ', '') %}
+      <article
+        class="dash-cards__slide"
+        data-card-slide
+        data-name="{{ card.name or card.bank_name or 'Card' }}"
+        data-due-iso="{% if extra.due %}{{ extra.due | dateformat('%Y-%m-%d') }}{% endif %}"
+        data-due-day="{{ extra.due_day or card.due_day or 5 }}"
+      >
+        <div class="dash-cards__face tone-{{ loop.index0 % 3 }}">
+          <div class="dash-cards__pattern" aria-hidden="true"></div>
+          <div class="dash-cards__top">
+            <span class="dash-cards__bank">
+              {% if card.bank_logo %}
+              <img class="dash-cards__bank-logo" src="{{ card.bank_logo }}" alt="" width="14" height="14">
+              {% endif %}
+              <b>{{ card.bank_name or card.name or 'Card' }}</b>
+            </span>
+            {% if card.card_network_logo %}
+            <img src="{{ card.card_network_logo }}" alt="{{ card.card_network_label or card.network or '' }}">
+            {% elif card.card_network_label or card.network %}
+            <strong>{{ (card.card_network_label or card.network) | upper }}</strong>
+            {% endif %}
+          </div>
+          <div class="dash-cards__mid">
+            <i class="dash-cards__chip" aria-hidden="true"></i>
+            <span class="dash-cards__pan" aria-hidden="true">
+              <i></i><i></i><i></i><i></i>
+              <i></i><i></i><i></i><i></i>
+            </span>
+            {% if last4 %}
+            <b class="dash-cards__last4">{{ last4 }}</b>
+            {% endif %}
+          </div>
+          {% if holder %}
+          <div class="dash-cards__holder">{{ holder }}</div>
+          {% endif %}
+          {% if emi_label %}
+          <div class="dash-cards__emi-line">{{ emi_label }}</div>
+          {% endif %}
+          <div class="dash-cards__meta">
+            <div>
+              <span>Outstanding</span>
+              <strong>₹ {{ outstanding | money }}</strong>
+            </div>
+            <div class="{{ due_mod }}">
+              <span>Due on</span>
+              <strong data-card-due>{% if extra.due %}{{ extra.due | dateformat('%d %b %Y') }}{% else %}—{% endif %}</strong>
+            </div>
+          </div>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+    {% if card_list|length > 1 %}
+    <button type="button" class="dash-cards__nav is-next" data-card-next aria-label="Next credit card">
+      <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+    </button>
+    {% endif %}
+  </div>
+  <div class="dash-cards__dots" data-card-dots></div>
+  {% else %}
+  <div class="dash-cards__empty">
+    <div class="dash-cards__ghost" aria-hidden="true">
+      <i></i><span></span><b></b>
+    </div>
+    <strong>No credit cards yet</strong>
+    <p>Track balances, utilization, bills and EMIs in one place.</p>
+    <a class="dash-cards__add" href="/accounts">Add your first card</a>
+  </div>
+  {% endif %}
+</article>

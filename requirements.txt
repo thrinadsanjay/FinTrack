@@ -1,7 +1,6 @@
 fastapi==0.124.4
 starlette==0.50.0
 uvicorn[standard]==0.38.0
-psycopg2-binary==2.9.11
 python-dotenv==1.1.1
 pydantic[email]==2.12.5
 pydantic-settings==2.11.0

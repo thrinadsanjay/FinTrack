@@ -1,0 +1,62 @@
+{% extends "base/base.html" %}
+{% block title %}Net Worth · {{ FT_APP_NAME }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/pages/planning.css?v={{ FT_APP_VERSION }}-head1">
+{% endblock %}
+{% block content %}
+{% set n = bundle.net_worth or {} %}
+<section class="pln" data-planning-page data-networth-history='{{ bundle.net_worth_history | default([]) | tojson }}'>
+  <header class="pln-hero">
+    <div>
+      <h1>Net Worth</h1>
+    </div>
+  </header>
+
+  <div class="pln-kpis">
+    <article class="pln-kpi">
+      <span class="pln-kpi__label">Net worth</span>
+      <div class="pln-kpi__value {% if (n.net_worth or 0) < 0 %}is-neg{% endif %}">₹ {{ (n.net_worth or 0) | money }}</div>
+    </article>
+    <article class="pln-kpi">
+      <span class="pln-kpi__label">Assets</span>
+      <div class="pln-kpi__value is-pos">₹ {{ (n.assets or 0) | money }}</div>
+    </article>
+    <article class="pln-kpi">
+      <span class="pln-kpi__label">Liabilities</span>
+      <div class="pln-kpi__value is-neg">₹ {{ (n.liabilities or 0) | money }}</div>
+    </article>
+    <article class="pln-kpi">
+      <span class="pln-kpi__label">This month</span>
+      {% if n.monthly_change is not none %}
+      <div class="pln-kpi__value {% if n.monthly_change < 0 %}is-neg{% else %}is-pos{% endif %}">₹ {{ n.monthly_change | money }}</div>
+      <div class="pln-kpi__meta">{% if n.percent_change is not none %}{{ n.percent_change }}%{% else %}vs last snapshot{% endif %}</div>
+      {% else %}
+      <div class="pln-kpi__value">—</div>
+      <div class="pln-kpi__meta">Need a prior snapshot</div>
+      {% endif %}
+    </article>
+  </div>
+
+  <div class="pln-grid">
+    <article class="pln-panel">
+      <h2>Trend</h2>
+      <canvas class="pln-chart" data-networth-chart width="720" height="220" aria-label="Net worth chart"></canvas>
+    </article>
+    <article class="pln-panel">
+      <h2>Breakdown</h2>
+      {% for row in n.asset_rows or [] %}
+      <div class="pln-row"><span>{{ row.name }}</span><strong>₹ {{ row.amount | money }}</strong></div>
+      {% endfor %}
+      {% for row in n.liability_rows or [] %}
+      <div class="pln-row"><span>{{ row.name }}</span><strong class="is-neg">− ₹ {{ row.amount | money }}</strong></div>
+      {% endfor %}
+      {% if not n.asset_rows and not n.liability_rows %}
+      <p class="pln-empty">Add accounts to see a breakdown.</p>
+      {% endif %}
+    </article>
+  </div>
+</section>
+{% endblock %}
+{% block extra_js %}
+<script src="/static/js/planning.js?v={{ FT_APP_VERSION }}-fmt1" defer></script>
+{% endblock %}

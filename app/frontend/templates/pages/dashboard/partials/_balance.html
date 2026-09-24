@@ -1,0 +1,25 @@
+<article
+  class="dash-panel dash-kpi dash-club-tile is-balance dash-summary-primary ft-reveal"
+  style="--delay:40ms"
+  aria-labelledby="dash-balance-title"
+>
+  <div class="dash-panel__head dash-balance__head">
+    <div>
+      <h2 id="dash-balance-title">
+        <span class="dash-ico is-balance"><i class="fa-solid fa-wallet" aria-hidden="true"></i></span>
+        Total Available Balance
+      </h2>
+    </div>
+    <a class="dash-balance__view" href="/accounts" aria-label="View accounts">
+      <span aria-hidden="true">→</span>
+    </a>
+  </div>
+
+  <div class="dash-kpi__value dash-summary-primary__value ft-money{% if balance_total < 0 %} is-negative{% endif %}" data-countup="{{ balance_total }}">
+    ₹ {{ balance_total | money }}
+  </div>
+  <div class="dash-spark-wrap dash-summary-primary__trend">
+    <svg class="dash-spark" data-spark="balance" role="img" aria-label="Available balance trend"></svg>
+    <div class="dash-tooltip" data-spark-tip hidden></div>
+  </div>
+</article>

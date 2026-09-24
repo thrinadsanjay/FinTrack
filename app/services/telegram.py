@@ -48,7 +48,13 @@ def is_mirror_eligible(*, key: str, notif_type: str, message: str) -> bool:
 
     if k.startswith("scheduled_today:"):
         return True
+    if k.startswith("forecast_low") or k.startswith("safe_to_spend_zero"):
+        return True
+    if k.startswith("health_drop") or k.startswith("goal_behind:"):
+        return True
     if k.startswith("low_balance:") or k.startswith("balance_threshold:"):
+        return True
+    if k.startswith("rule:") and "telegram_notify" in k:
         return True
     if k.startswith("recurring_failed:") or k.startswith("tx_failed:") or k.startswith("failed_tx_retry_failed:"):
         return True

@@ -1,0 +1,56 @@
+{% set cal_days = calendar_days if calendar_days is defined else ((plan.calendar.days if plan.calendar else {}) or {}) %}
+{% set cal_year = calendar_year if calendar_year is defined else (plan.calendar.year if plan.calendar else none) %}
+{% set cal_month = calendar_month if calendar_month is defined else (plan.calendar.month if plan.calendar else none) %}
+{% set cal_today = now.date().isoformat() if now else '' %}
+<article
+  class="dash-panel dash-cal-panel ft-reveal"
+  style="--delay:350ms"
+  data-cal-panel
+  data-cal-year="{{ cal_year or '' }}"
+  data-cal-month="{{ cal_month or '' }}"
+  data-cal-today="{{ cal_today }}"
+  data-cal-days='{{ cal_days | tojson }}'
+  data-cal-upcoming='{{ calendar_events | tojson }}'
+>
+  <div class="dash-panel__head">
+    <div>
+      <h2>
+        <span class="dash-ico"><i class="fa-regular fa-calendar" aria-hidden="true"></i></span>
+        Financial Calendar
+      </h2>
+      <p data-cal-heading>{{ now | dateformat('%B %Y') if now else '' }}</p>
+    </div>
+    <a class="dash-link" data-cal-open href="/planning/calendar">Open calendar <span aria-hidden="true">→</span></a>
+  </div>
+
+  <div class="dash-cal-split">
+    <div class="dash-cal-split__cal">
+      <div class="dash-cal-nav">
+        <button type="button" class="dash-cal-nav__btn" data-cal-prev aria-label="Previous month">‹</button>
+        <p class="dash-cal-nav__label" data-cal-month-label></p>
+        <button type="button" class="dash-cal-nav__btn" data-cal-next aria-label="Next month">›</button>
+      </div>
+      <div class="dash-mini-cal">
+        <div class="dash-mini-cal__dows" aria-hidden="true">
+          <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+        </div>
+        <div class="dash-mini-cal__grid" data-cal-grid></div>
+      </div>
+      <div class="dash-cal-legend" aria-label="Payment type legend">
+        <span><i class="is-card" data-shape="square"></i>Card</span>
+        <span><i class="is-utility" data-shape="circle"></i>Utility</span>
+        <span><i class="is-subscription" data-shape="diamond"></i>Sub</span>
+        <span><i class="is-emi" data-shape="plus"></i>EMI</span>
+        <span><i class="is-income" data-shape="ring"></i>Income</span>
+      </div>
+    </div>
+
+    <section class="dash-cal-up" aria-label="Upcoming this month">
+      <div class="dash-cal-up__head">
+        <h3>Upcoming this month</h3>
+        <a class="dash-link" data-cal-viewall href="/planning/calendar">View all <span aria-hidden="true">→</span></a>
+      </div>
+      <div class="dash-cal-up__body" data-cal-upcoming-list></div>
+    </section>
+  </div>
+</article>

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en-IN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="csrf-token" content="{{ csrf_token(request) }}">
+  <title>{% block title %}{{ FT_APP_NAME }}{% endblock %}</title>
+  <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/static/icons/favicon-16x16.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="/static/css/app.css?v={{ FT_APP_VERSION }}-dash32">
+  {% block extra_css %}{% endblock %}
+  <meta name="theme-color" content="#b96f42">
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem("ft_theme");
+        var theme = saved || "light";
+        document.documentElement.setAttribute("data-theme", theme);
+      } catch (_e) {}
+      try {
+        if (localStorage.getItem("ft_nav_collapsed") === "1") {
+          document.documentElement.classList.add("ft-nav-collapsed");
+        }
+      } catch (_nav) {}
+      try {
+        var tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (!tz) return;
+        var match = document.cookie.match(/(?:^|; )ft_tz=([^;]*)/);
+        var existing = match ? decodeURIComponent(match[1]) : "";
+        if (existing === tz) return;
+        document.cookie = "ft_tz=" + encodeURIComponent(tz) + "; path=/; max-age=31536000; samesite=lax";
+      } catch (_err) {}
+    })();
+  </script>
+</head>
+{% set session_user = (request.scope.get("session") or {}).get("user") %}
+{% set current_user = session_user or user %}
+{% set flash = pop_flash(request) %}
+<body
+  class="{% if current_user %}user-authenticated{% else %}user-guest{% endif %}{% if request.state.maintenance_mode %} maintenance-on{% endif %}"
+  data-maintenance-mode="{{ 'true' if request.state.maintenance_mode else 'false' }}"
+  data-user-id="{{ current_user.user_id if current_user else '' }}"
+  {% if flash %}data-flash-message="{{ flash.message }}" data-flash-tone="{{ flash.tone }}"{% endif %}
+>
+  {% if request.state.maintenance_mode %}
+    {% include "layout/maintenance-banner.html" %}
+  {% endif %}
+
+  <div class="ft-shell">
+    {% if current_user %}
+      {% with user=current_user %}
+        {% include "layout/sidebar.html" %}
+      {% endwith %}
+    {% endif %}
+
+    <div class="ft-main">
+      {% if current_user %}
+        {% with user=current_user %}
+          {% include "layout/header.html" %}
+        {% endwith %}
+      {% endif %}
+
+      <main class="ft-content">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+    {% if current_user %}
+      {% include "layout/footer.html" %}
+    {% endif %}
+  </div>
+
+  {% if current_user %}
+    {% with user=current_user %}
+      {% include "layout/mobile-nav.html" %}
+    {% endwith %}
+  {% endif %}
+
+  {% include "layout/toast-stack.html" %}
+  {% if current_user %}
+    {% set goal_prompt = pop_goal_prompt(request) %}
+    {% if goal_prompt %}{% include "layout/goal-link-prompt.html" %}{% endif %}
+  {% endif %}
+  {% include "layout/chat-widget.html" %}
+
+  <script src="/static/js/format.js?v={{ FT_APP_VERSION }}-fmt4" defer></script>
+  <script src="/static/js/app.js?v={{ FT_APP_VERSION }}-dash3" defer></script>
+  <script src="/static/js/shell.js?v={{ FT_APP_VERSION }}-nav4" defer></script>
+  <script src="/static/js/chat-widget.js?v={{ FT_APP_VERSION }}-assist9" defer></script>
+  {% if current_user %}
+  <script src="/static/js/search.js?v={{ FT_APP_VERSION }}-dash2" defer></script>
+  {% endif %}
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

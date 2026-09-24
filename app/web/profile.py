@@ -98,7 +98,9 @@ async def edit_profile_page(request: Request):
             "ended_at": None,
         }
     )
-    unread_count = await db.notifications.count_documents({"user_id": uid, "is_read": False})
+    unread_count = await db.notifications.count_documents(
+        {"user_id": uid, "is_read": False, "archived_at": None}
+    )
 
     identity = _profile_identity(db_user, session_user)
     profile = {
@@ -126,7 +128,8 @@ async def edit_profile_page(request: Request):
         "telegram_username": (db_user or {}).get("telegram_username") or "",
         "telegram_verified_at": (db_user or {}).get("telegram_verified_at"),
         "passkey_count": len(list((db_user or {}).get("passkeys") or [])),
-        "biometric_enabled": bool((db_user or {}).get("biometric_enabled", True)),
+        "biometric_enabled": bool((db_user or {}).get("biometric_enabled", True))
+        and bool((db_user or {}).get("passkeys") or []),
         "stats": {
             "accounts_count": accounts_count,
             "tx_this_month": tx_this_month,
@@ -144,7 +147,7 @@ async def edit_profile_page(request: Request):
 
     return templates.TemplateResponse(
         request=request,
-        name="profile.html",
+        name="pages/profile/profile.html",
         context={
             "request": request,
             "user": session_user,
@@ -501,10 +504,21 @@ async def verify_telegram_otp(request: Request):
 @router.post("/profile/telegram/deregister")
 @login_required
 async def deregister_telegram(request: Request):
-    verify_csrf_token(request, request.headers.get("X-CSRF-Token"))
+    csrf_value = request.headers.get("X-CSRF-Token")
+    content_type = str(request.headers.get("content-type") or "")
+    form = None
+    if "application/json" in content_type:
+        payload = await request.json()
+        csrf_value = csrf_value or (payload or {}).get("csrf_token")
+    else:
+        form = await request.form()
+        csrf_value = csrf_value or form.get("csrf_token")
+    verify_csrf_token(request, csrf_value)
     session_user = request.session.get("user") or {}
     user_id = session_user.get("user_id")
     if not user_id or not ObjectId.is_valid(user_id):
+        if form is not None:
+            return RedirectResponse("/login", status_code=303)
         return JSONResponse({"detail": "Invalid user session."}, status_code=401)
 
     now = datetime.now(timezone.utc)
@@ -521,13 +535,13 @@ async def deregister_telegram(request: Request):
         },
     )
     await db.telegram_otp_verifications.delete_many({"user_id": ObjectId(user_id)})
+    if form is not None:
+        return RedirectResponse("/profile#telegram", status_code=303)
     return JSONResponse({"status": "ok"})
 
 
 @router.post("/profile/passkeys/register/options")
 @login_required
-
-
 async def profile_passkey_register_options(request: Request):
     verify_csrf_token(request, request.headers.get("X-CSRF-Token"))
     session_user = request.session.get("user") or {}

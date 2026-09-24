@@ -251,6 +251,15 @@ __*_disabled
 db/data
 db/init
 
+# Secrets: TLS keys/certs are mounted at runtime (FT_CERTS_DIR), never committed
+db/certs/
+certs/
+*.key
+*.csr
+*.srl
+*.p12
+*.pfx
+
 # Log files
 logs/
 *.log

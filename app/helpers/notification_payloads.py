@@ -20,7 +20,6 @@ def tx_added_payload(*, tx_id: str, tx_type: str, amount: float) -> dict:
         "notif_type": "success",
         "title": "Transfer added successfully" if tx_type == "transfer" else "Transaction added successfully",
         "message": f"₹ {amount} has been recorded.",
-        "is_read": True,
     }
 
 
@@ -30,7 +29,6 @@ def tx_deleted_payload(*, transaction_id: str, stamp: str, amount: float) -> dic
         "notif_type": "success",
         "title": "Transaction deleted",
         "message": f"Deleted transaction of ₹ {amount}.",
-        "is_read": True,
     }
 
 
@@ -40,7 +38,6 @@ def tx_restored_payload(*, transaction_id: str, stamp: str, amount: float) -> di
         "notif_type": "success",
         "title": "Transaction restored",
         "message": f"Restored transaction of ₹ {amount}.",
-        "is_read": True,
     }
 
 
@@ -50,7 +47,6 @@ def tx_updated_payload(*, transaction_id: str, stamp: str, new_amount: float) ->
         "notif_type": "success",
         "title": "Transaction updated",
         "message": f"Updated transaction to ₹ {new_amount}.",
-        "is_read": True,
     }
 
 
@@ -78,7 +74,6 @@ def recurring_created_payload(*, recurring_id: str, stamp: str, tx_type: str, am
         "notif_type": "success",
         "title": "Recurring rule created",
         "message": f"Created recurring {tx_type} of ₹ {amount}.",
-        "is_read": True,
     }
 
 
@@ -90,7 +85,6 @@ def recurring_updated_payload(
         "notif_type": "success",
         "title": "Recurring rule updated",
         "message": f"Updated recurring rule to ₹ {amount} ({frequency}).",
-        "is_read": True,
     }
 
 
@@ -100,7 +94,6 @@ def recurring_paused_payload(*, recurring_id: str, stamp: str, description: str)
         "notif_type": "info",
         "title": "Recurring rule paused",
         "message": f"Paused recurring rule: {description}.",
-        "is_read": True,
     }
 
 
@@ -112,7 +105,6 @@ def recurring_resumed_payload(
         "notif_type": "success",
         "title": "Recurring rule resumed",
         "message": f"Resumed recurring rule: {description} (next run {next_run_label}).",
-        "is_read": True,
     }
 
 
@@ -122,7 +114,6 @@ def recurring_ended_payload(*, recurring_id: str, stamp: str, description: str) 
         "notif_type": "info",
         "title": "Recurring rule ended",
         "message": f"Ended recurring rule: {description}.",
-        "is_read": True,
     }
 
 
@@ -142,4 +133,37 @@ def recurring_failed_scheduler_payload(
         "message": (
             f"{account_name} has ₹ {balance}, but ₹ {amount} is required for {description}."
         ),
+    }
+
+
+def account_created_payload(*, account_id: str, name: str, acc_type: str) -> dict:
+    labels = {
+        "bank": "Account",
+        "credit_card": "Credit card",
+        "loan": "Loan",
+    }
+    kind = labels.get(acc_type, "Account")
+    return {
+        "key": f"account_created:{account_id}",
+        "notif_type": "success",
+        "title": f"{kind} added",
+        "message": f"{name} was added to your accounts.",
+    }
+
+
+def account_updated_payload(*, account_id: str, stamp: str, name: str) -> dict:
+    return {
+        "key": f"account_updated:{account_id}:{stamp}",
+        "notif_type": "success",
+        "title": "Account updated",
+        "message": f"{name} was updated.",
+    }
+
+
+def account_deleted_payload(*, account_id: str, stamp: str, name: str) -> dict:
+    return {
+        "key": f"account_deleted:{account_id}:{stamp}",
+        "notif_type": "info",
+        "title": "Account deleted",
+        "message": f"{name} was deleted.",
     }

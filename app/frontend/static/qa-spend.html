@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Spending by Category QA</title>
+  <link rel="stylesheet" href="./css/core/reset.css">
+  <link rel="stylesheet" href="./css/core/tokens.css">
+  <link rel="stylesheet" href="./css/pages/dashboard.css">
+  <link rel="stylesheet" href="./css/pages/dashboard-spend.css">
+  <style>
+    body { margin: 0; padding: 24px; background: var(--ft-canvas); color: var(--ft-ink); font-family: "Plus Jakarta Sans", system-ui, sans-serif; }
+    h1 { font-size: 1.1rem; margin: 0 0 12px; }
+    .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+    button { min-height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--ft-border); background: var(--ft-surface); color: inherit; }
+    .stage { max-width: 1100px; }
+    .stage .dash { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 10px; overflow-x: clip; }
+    .dummy { grid-column: span 7; min-height: 280px; border-radius: 12px; border: 1px dashed var(--ft-border); background: var(--ft-surface); padding: 14px; color: var(--ft-muted); font-size: 0.8rem; }
+  </style>
+</head>
+<body>
+  <h1>Spending by Category QA</h1>
+  <div class="toolbar">
+    <button type="button" id="themeBtn">Toggle theme</button>
+    <button type="button" data-n="0">0 cats</button>
+    <button type="button" data-n="1">1 cat</button>
+    <button type="button" data-n="2">2 cats</button>
+    <button type="button" data-n="5">5 cats</button>
+    <button type="button" data-n="10">10 cats</button>
+    <button type="button" data-n="eq">equal</button>
+  </div>
+  <div class="stage" id="stage"></div>
+  <script>
+    const names = ["Food", "Investment", "Bills", "Transport", "Entertainment", "Shopping", "Health", "Education", "Travel", "Other"];
+    function money(n) {
+      return Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function cats(n, equal) {
+      if (!n) return [];
+      if (n === 2 && !equal) {
+        return [
+          { name: "Food", total: 1332, percent: 93 },
+          { name: "Investment", total: 100, percent: 7 }
+        ];
+      }
+      const weights = equal ? Array(n).fill(1) : names.slice(0, n).map((_, i) => Math.max(n - i, 1) * (i === 0 ? 8 : 1));
+      const sum = weights.reduce((a, b) => a + b, 0);
+      const total = 26200;
+      return weights.map((w, i) => {
+        const val = Math.round((w / sum) * total * 100) / 100;
+        return { name: names[i], total: val, percent: Math.round((val / total) * 1000) / 10 };
+      });
+    }
+    function render(n, equal) {
+      const items = cats(n, equal);
+      const total = items.reduce((s, c) => s + c.total, 0);
+      const shown = items.slice(0, 5);
+      const more = items.length - shown.length;
+      document.getElementById("stage").innerHTML = `
+        <section class="dash" data-dashboard data-trend="[]" data-monthly="[]">
+          <aside class="dummy">Cash Flow / neighbor stand-in — spend panel must not overflow.</aside>
+          <article class="dash-panel dash-spend dash-span-5" data-spend-panel data-categories='${JSON.stringify(items)}' data-spend-total="${total}">
+            <div class="dash-spend__head">
+              <div><h2>Spending by Category</h2><p>Where your money went</p></div>
+              <span class="dash-spend__period">This month <span aria-hidden="true">▼</span></span>
+            </div>
+            ${items.length ? `
+              <div class="dash-spend__body">
+                <div class="dash-spend__chart">
+                  <svg class="dash-spend__svg" data-donut="spend" viewBox="0 0 120 120" role="img" aria-label="Spending by category"></svg>
+                  <div class="dash-spend__center"><span>Total spent</span><strong>₹ ${money(total)}</strong></div>
+                  <div class="dash-spend__tip" data-spend-tip hidden></div>
+                </div>
+                <div class="dash-spend__breakdown">
+                  <ul class="dash-spend__list">
+                    ${shown.map((c, i) => `<li data-spend-row="${i}"><i data-spend-swatch></i><span>${c.name}</span><em>₹ ${money(c.total)}</em><b>${c.percent}%</b></li>`).join("")}
+                  </ul>
+                  ${more > 0 ? `<p class="dash-spend__more">+ ${more} more</p>` : ""}
+                  <a class="dash-spend__view" href="#tx">View transactions <span>→</span></a>
+                </div>
+              </div>
+            ` : `
+              <div class="dash-spend__empty">
+                <strong>No spending recorded yet</strong>
+                <p>Add transactions to see where your money goes.</p>
+                <a class="dash-spend__add" href="#add">Add transaction →</a>
+              </div>`}
+          </article>
+        </section>`;
+      document.querySelectorAll("script[src*='dashboard.js']").forEach(s => s.remove());
+      const s = document.createElement("script");
+      s.src = "./js/dashboard.js?v=" + Date.now();
+      document.body.appendChild(s);
+    }
+    document.getElementById("themeBtn").onclick = () => {
+      document.documentElement.dataset.theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+      window.dispatchEvent(new Event("ft:theme"));
+    };
+    document.querySelectorAll("[data-n]").forEach(btn => btn.onclick = () => {
+      if (btn.dataset.n === "eq") render(5, true);
+      else render(Number(btn.dataset.n), false);
+    });
+    render(2);
+  </script>
+</body>
+</html>

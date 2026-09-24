@@ -15,6 +15,19 @@ _maintenance_cache: dict = {
 }
 
 
+_settings_cache: dict = {
+    "expires_at": datetime.fromtimestamp(0, tz=timezone.utc),
+    "value": None,
+}
+
+
+def _settings_cache_ttl_seconds() -> float:
+    try:
+        return max(0.0, float(os.getenv("FT_SETTINGS_CACHE_SECONDS", "10")))
+    except ValueError:
+        return 10.0
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -149,12 +162,34 @@ async def get_admin_settings_doc() -> dict | None:
     return await db.app_settings.find_one({"_id": SETTINGS_DOC_ID})
 
 
-async def get_admin_settings() -> dict:
+async def get_admin_settings(force_refresh: bool = False) -> dict:
+    """
+    Merged admin settings, cached for FT_SETTINGS_CACHE_SECONDS (default 10s).
+    This runs on every request via middleware, so it must not hit Mongo each time.
+    Saves in this process invalidate immediately; other processes catch up within the TTL.
+    Returns a copy, so callers may mutate it freely.
+    """
+    now = _now()
+    if not force_refresh and _settings_cache["value"] is not None and now < _settings_cache["expires_at"]:
+        return deepcopy(_settings_cache["value"])
+
     defaults = default_admin_settings()
     doc = await get_admin_settings_doc()
     overrides = (doc or {}).get("values") or {}
     merged = _deep_merge(defaults, overrides)
-    return _normalize_admin_settings(merged, defaults)
+    value = _normalize_admin_settings(merged, defaults)
+
+    _settings_cache["value"] = value
+    _settings_cache["expires_at"] = datetime.fromtimestamp(
+        now.timestamp() + _settings_cache_ttl_seconds(), tz=timezone.utc
+    )
+    return deepcopy(value)
+
+
+def invalidate_admin_settings_cache() -> None:
+    _settings_cache["value"] = None
+    _settings_cache["expires_at"] = datetime.fromtimestamp(0, tz=timezone.utc)
+    _maintenance_cache["expires_at"] = datetime.fromtimestamp(0, tz=timezone.utc)
 
 
 async def get_maintenance_state(force_refresh: bool = False) -> dict:
@@ -188,4 +223,4 @@ async def save_admin_settings(values: dict) -> None:
         },
         upsert=True,
     )
-    _maintenance_cache["expires_at"] = datetime.fromtimestamp(0, tz=timezone.utc)
+    invalidate_admin_settings_cache()

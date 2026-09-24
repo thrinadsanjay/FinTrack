@@ -14,9 +14,9 @@ ARCHITECTURE (Three-Stage Pipeline):
    - NO deduplication here - that's the next stage
 
 3. BUFFER INSERT STAGE: Check duplicates and insert to buffer table
-   - Check date+amount against existing transactions
-   - Check date+amount against existing inbox
-   - Insert only new transactions to buffer
+   - Exact fingerprint: account + date + amount + type + cleaned merchant/desc
+   - Soft match: account + amount + type + date±1 + similar description
+   - Weak match: account + amount + date±1 → insert with possible_duplicate flag
    - Report detailed metrics (parsed, normalized, duplicates, inserted)
 
 RESPONSIBILITIES:
@@ -32,10 +32,12 @@ from __future__ import annotations
 import csv
 import hashlib
 import io
+import logging
 import re
 import zipfile
-from collections import Counter, defaultdict
+from collections import Counter
 from datetime import date, datetime, time, timedelta, timezone
+from difflib import SequenceMatcher
 from typing import Any
 from xml.etree import ElementTree as ET
 
@@ -46,10 +48,20 @@ from pymongo.errors import BulkWriteError
 from app.core.errors import NotFoundError, ValidationError
 from app.db.mongo import db
 from app.helpers.money import round_money
+from app.helpers.planning_math import best_duplicate_match
+from app.services.categorization_engine import categorize_transaction
+from app.services.categorization.confidence_engine import score_confidence as memory_confidence_score
+from app.services.categorization.description_cleaner import clean_description as clean_memory_description
+from app.services.categorization.merchant_extractor import extract_merchant_key
+from app.services.categorization.merchant_memory_service import learn as learn_merchant_memory
+from app.services.categorization.merchant_memory_service import lookup as lookup_merchant_memory
+from app.services.categorization.merchant_memory_service import record_feedback
 from app.services.categories import get_subcategories
 from app.services.transactions import create_transaction
 
 UTC = timezone.utc
+INBOX_CONFIDENCE_THRESHOLD = 0.85
+logger = logging.getLogger(__name__)
 
 XML_NS = {"a": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 
@@ -101,7 +113,7 @@ PDF_FOOTER_RE = re.compile(
 MODE_MAP = {
     "upi": ["upi"],
     "card": ["pos", "card", "atm"],
-    "transfer": ["neft", "imps"],
+    "transfer": ["neft", "imps", "rtgs", "ach", "nach"],
 }
 
 CATEGORY_STOPWORDS = {
@@ -239,8 +251,9 @@ def clean_description(value: str) -> str:
     
     # Normalize spaces
     text = DESC_SPACES_RE.sub(" ", text).strip(" -|/")
-    
-    return text
+
+    # Reuse the shared categorization cleaner for inbox-facing description hygiene.
+    return clean_memory_description(text)
 
 
 def extract_merchant_keyword(description: str) -> str | None:
@@ -260,13 +273,15 @@ def extract_merchant_keyword(description: str) -> str | None:
 
 def detect_mode(description: str) -> str:
     """Detect transaction mode (upi/card/transfer)"""
-    text = f" {description.lower()} "
-    
-    if any(f" {k} " in text for k in MODE_MAP["upi"]):
+    text = _normalize_text(description).lower()
+    if not text:
+        return "unknown"
+
+    if any(re.search(rf"\b{re.escape(k)}\b", text) for k in MODE_MAP["upi"]):
         return "upi"
-    if any(f" {k} " in text for k in MODE_MAP["card"]):
+    if any(re.search(rf"\b{re.escape(k)}\b", text) for k in MODE_MAP["card"]):
         return "card"
-    if any(f" {k} " in text for k in MODE_MAP["transfer"]):
+    if any(re.search(rf"\b{re.escape(k)}\b", text) for k in MODE_MAP["transfer"]):
         return "transfer"
     return "unknown"
 
@@ -291,10 +306,100 @@ def infer_type_from_description(description: str, explicit_type: str | None = No
     return "debit"
 
 
-def generate_fingerprint(tx_date: date, amount: float) -> str:
-    """Generate deduplication fingerprint from date + amount"""
+def _identity_key(description: str | None) -> str:
+    """Stable identity for matching: merchant keyword when possible, else cleaned text."""
+    cleaned = clean_description(description or "")
+    if not cleaned:
+        return ""
+    merchant = extract_merchant_keyword(cleaned)
+    return (merchant or cleaned).lower()
+
+
+def generate_fingerprint(
+    tx_date: date,
+    amount: float,
+    description: str | None = None,
+    tx_type: str | None = None,
+    account_id: str | ObjectId | None = None,
+) -> str:
+    """Exact dedupe key: account + date + amount + type + cleaned merchant/description."""
+    identity = _identity_key(description)
+    normalized_type = _normalize_text(tx_type or "").lower()
+    account_part = str(account_id or "")
+    payload = (
+        f"{account_part}|{tx_date.isoformat()}|{round_money(amount):.2f}|"
+        f"{normalized_type}|{identity}"
+    )
+    return hashlib.sha1(payload.encode("utf-8")).hexdigest()
+
+
+def _legacy_fingerprint(tx_date: date, amount: float) -> str:
+    """Legacy date+amount-only fingerprint used by older inbox rows."""
     payload = f"{tx_date.isoformat()}|{round_money(amount):.2f}"
     return hashlib.sha1(payload.encode("utf-8")).hexdigest()
+
+
+def _legacy_description_fingerprint(
+    tx_date: date,
+    amount: float,
+    description: str | None = None,
+    tx_type: str | None = None,
+) -> str:
+    """Pre-account fingerprint shape (kept for matching older inbox/ledger rows)."""
+    normalized_description = _normalize_text(description or "").lower()
+    normalized_type = _normalize_text(tx_type or "").lower()
+    payload = f"{tx_date.isoformat()}|{round_money(amount):.2f}|{normalized_type}|{normalized_description}"
+    return hashlib.sha1(payload.encode("utf-8")).hexdigest()
+
+
+SOFT_MATCH_THRESHOLD = 0.82
+
+
+def _is_soft_ledger_match(candidate: dict[str, Any], ledger_rows: list[dict[str, Any]]) -> bool:
+    """Same account/amount/type within ±1 day and similar cleaned identity."""
+    cand_identity = candidate.get("identity") or ""
+    cand_amount = round_money(candidate.get("amount") or 0)
+    cand_type = str(candidate.get("type") or "")
+    cand_date = candidate.get("date")
+    if not isinstance(cand_date, date):
+        return False
+
+    for row in ledger_rows:
+        if abs((cand_date - row["date"]).days) > 1:
+            continue
+        if round_money(row.get("amount") or 0) != cand_amount:
+            continue
+        if str(row.get("type") or "") != cand_type:
+            continue
+        row_identity = row.get("identity") or ""
+        if cand_identity and row_identity:
+            if cand_identity == row_identity:
+                return True
+            # Merchant token containment (SMS "swiggy" vs statement "swiggy bangalore")
+            if cand_identity in row_identity.split() or row_identity in cand_identity.split():
+                return True
+            if cand_identity.startswith(row_identity) or row_identity.startswith(cand_identity):
+                if min(len(cand_identity), len(row_identity)) >= 4:
+                    return True
+            if SequenceMatcher(None, cand_identity, row_identity).ratio() >= SOFT_MATCH_THRESHOLD:
+                return True
+        elif not cand_identity and not row_identity:
+            return True
+    return False
+
+
+def _is_weak_ledger_match(candidate: dict[str, Any], ledger_rows: list[dict[str, Any]]) -> bool:
+    """Same account + amount within ±1 day — possible duplicate, do not auto-skip."""
+    cand_amount = round_money(candidate.get("amount") or 0)
+    cand_date = candidate.get("date")
+    if not isinstance(cand_date, date):
+        return False
+    for row in ledger_rows:
+        if abs((cand_date - row["date"]).days) > 1:
+            continue
+        if round_money(row.get("amount") or 0) == cand_amount:
+            return True
+    return False
 
 
 def _compute_confidence(
@@ -315,6 +420,30 @@ def _compute_confidence(
     if merchant_memory_hit:
         score += 10
     return int(max(0, min(100, score)))
+
+
+def _confidence_ratio(value: Any) -> float:
+    raw = float(value or 0)
+    if raw > 1:
+        raw = raw / 100.0
+    return max(0.0, min(1.0, raw))
+
+
+def _needs_attention_fields(row: dict[str, Any]) -> list[str]:
+    fields: list[str] = []
+    if not row.get("category_code"):
+        fields.append("category")
+    if row.get("category_code") and not row.get("subcategory_code"):
+        fields.append("subcategory")
+    if _confidence_ratio(row.get("confidence")) < INBOX_CONFIDENCE_THRESHOLD:
+        fields.append("confidence")
+    if row.get("possible_duplicate"):
+        fields.append("possible_duplicate")
+    # Preserve any extra attention tags already stored on the document.
+    for extra in row.get("needs_attention") or []:
+        if isinstance(extra, str) and extra and extra not in fields:
+            fields.append(extra)
+    return fields
 
 
 def _pick_value(row: dict[str, Any], candidates: set[str]) -> Any:
@@ -603,19 +732,24 @@ def normalize_csv_row(row: dict[str, Any]) -> dict[str, Any] | None:
     description_raw = _normalize_text(_pick_value(row, DESCRIPTION_KEYS) or "")
     amount = _parse_amount(_pick_value(row, AMOUNT_KEYS))
 
-    # Try to infer type from debit/credit columns
+    # Try to infer type/amount from debit/credit columns (common bank export shape)
     tx_type = "debit"
     debit_value = _pick_value(row, DEBIT_KEYS)
     credit_value = _pick_value(row, CREDIT_KEYS)
-    
+
     if debit_value not in (None, ""):
         tx_type = "debit"
+        if amount is None or amount <= 0:
+            amount = _parse_amount(debit_value)
     elif credit_value not in (None, ""):
         tx_type = "credit"
+        if amount is None or amount <= 0:
+            amount = _parse_amount(credit_value)
     else:
         raw_type = _normalize_text(_pick_value(row, TYPE_KEYS) or "")
         tx_type = infer_type_from_description(description_raw, explicit_type=raw_type)
 
+    detected_mode = detect_mode(description_raw)
     description = clean_description(description_raw)
 
     # Validation
@@ -633,7 +767,7 @@ def normalize_csv_row(row: dict[str, Any]) -> dict[str, Any] | None:
         "amount": amount,
         "type": tx_type,
         "description": description,
-        "mode": detect_mode(description),
+        "mode": detected_mode if detected_mode != "unknown" else detect_mode(description),
         "raw_data": row,
     }
 
@@ -747,6 +881,7 @@ def normalize_pdf_row(row: dict[str, Any]) -> dict[str, Any] | None:
         tx_type = infer_type_from_description(description)
 
     # Final cleanup
+    raw_mode_source = description
     description = DATE_TOKEN_RE.sub(" ", description)
     description = _normalize_text(description)
 
@@ -762,7 +897,7 @@ def normalize_pdf_row(row: dict[str, Any]) -> dict[str, Any] | None:
         "amount": amount_value,
         "type": tx_type or "debit",
         "description": cleaned_desc,
-        "mode": detect_mode(cleaned_desc),
+        "mode": detect_mode(raw_mode_source) if detect_mode(raw_mode_source) != "unknown" else detect_mode(cleaned_desc),
         "raw_data": row,
     }
 
@@ -835,10 +970,14 @@ async def normalize_rows(
 # STAGE 3: INSERT TO BUFFER → DEDUPE, SCORE, STORE
 # =========================================================================
 
-async def _existing_transaction_fingerprints(user_oid: ObjectId, dates: list[date]) -> set[str]:
-    """Get fingerprints of existing transactions for date range"""
+async def _ledger_match_index(
+    user_oid: ObjectId,
+    account_oid: ObjectId,
+    dates: list[date],
+) -> dict[str, Any]:
+    """Build exact fingerprints + soft-match rows for one account and date window."""
     if not dates:
-        return set()
+        return {"fingerprints": set(), "rows": []}
 
     start_dt = _combine_statement_date(min(dates)) - timedelta(days=1)
     end_dt = _combine_statement_date(max(dates)) + timedelta(days=1)
@@ -846,6 +985,7 @@ async def _existing_transaction_fingerprints(user_oid: ObjectId, dates: list[dat
     cursor = db.transactions.find(
         {
             "user_id": user_oid,
+            "account_id": account_oid,
             "deleted_at": None,
             "is_failed": {"$ne": True},
             "type": {"$in": ["debit", "credit"]},
@@ -854,7 +994,70 @@ async def _existing_transaction_fingerprints(user_oid: ObjectId, dates: list[dat
                 {"created_at": {"$gte": start_dt, "$lte": end_dt}},
             ],
         },
-        {"transaction_date": 1, "created_at": 1, "amount": 1},
+        {"transaction_date": 1, "created_at": 1, "amount": 1, "description": 1, "type": 1, "account_id": 1},
+    )
+
+    fingerprints: set[str] = set()
+    rows: list[dict[str, Any]] = []
+    async for tx in cursor:
+        tx_date_obj = tx.get("transaction_date") or tx.get("created_at")
+        tx_date = tx_date_obj.date() if isinstance(tx_date_obj, datetime) else _parse_date_value(tx_date_obj)
+        amount = _parse_amount(tx.get("amount"))
+        if not tx_date or amount is None:
+            continue
+        tx_description = str(tx.get("description") or "")
+        tx_type = str(tx.get("type") or "")
+        account_part = str(tx.get("account_id") or account_oid)
+        fingerprints.add(
+            generate_fingerprint(tx_date, amount, tx_description, tx_type, account_part)
+        )
+        fingerprints.add(
+            _legacy_description_fingerprint(tx_date, amount, tx_description, tx_type)
+        )
+        fingerprints.add(
+            generate_fingerprint(tx_date, amount, clean_description(tx_description), tx_type, account_part)
+        )
+        rows.append(
+            {
+                "id": str(tx.get("_id") or ""),
+                "date": tx_date,
+                "amount": amount,
+                "type": tx_type,
+                "identity": _identity_key(tx_description),
+                "description": tx_description,
+                "account_id": account_part,
+            }
+        )
+    return {"fingerprints": fingerprints, "rows": rows}
+
+
+async def _existing_transaction_fingerprints(
+    user_oid: ObjectId,
+    dates: list[date],
+    account_oid: ObjectId | None = None,
+) -> set[str]:
+    """Get fingerprints of existing transactions for date range (optionally account-scoped)."""
+    if not dates:
+        return set()
+
+    start_dt = _combine_statement_date(min(dates)) - timedelta(days=1)
+    end_dt = _combine_statement_date(max(dates)) + timedelta(days=1)
+    query: dict[str, Any] = {
+        "user_id": user_oid,
+        "deleted_at": None,
+        "is_failed": {"$ne": True},
+        "type": {"$in": ["debit", "credit"]},
+        "$or": [
+            {"transaction_date": {"$gte": start_dt, "$lte": end_dt}},
+            {"created_at": {"$gte": start_dt, "$lte": end_dt}},
+        ],
+    }
+    if account_oid is not None:
+        query["account_id"] = account_oid
+
+    cursor = db.transactions.find(
+        query,
+        {"transaction_date": 1, "created_at": 1, "amount": 1, "description": 1, "type": 1, "account_id": 1},
     )
 
     fingerprints: set[str] = set()
@@ -863,14 +1066,22 @@ async def _existing_transaction_fingerprints(user_oid: ObjectId, dates: list[dat
         tx_date = tx_date_obj.date() if isinstance(tx_date_obj, datetime) else _parse_date_value(tx_date_obj)
         amount = _parse_amount(tx.get("amount"))
         if tx_date and amount is not None:
-            fingerprints.add(generate_fingerprint(tx_date, amount))
+            tx_description = str(tx.get("description") or "")
+            tx_type = str(tx.get("type") or "")
+            account_part = str(tx.get("account_id") or "")
+            fingerprints.add(
+                generate_fingerprint(tx_date, amount, tx_description, tx_type, account_part)
+            )
+            fingerprints.add(
+                _legacy_description_fingerprint(tx_date, amount, tx_description, tx_type)
+            )
     return fingerprints
 
 
 async def _existing_inbox_fingerprints(user_oid: ObjectId, statuses: list[str] | None = None) -> set[str]:
     """Get fingerprints of existing inbox rows"""
     if statuses is None:
-        statuses = ["pending", "approved"]
+        statuses = ["pending"]
 
     cursor = db.transaction_inbox.find(
         {"user_id": user_oid, "status": {"$in": statuses}},
@@ -888,14 +1099,22 @@ async def _lookup_merchant_memory(
     if not merchant_keyword:
         return None
 
-    return await db.merchant_memory.find_one(
-        {
-            "user_id": user_oid,
-            "merchant_keyword": merchant_keyword,
-            "type": tx_type,
-        },
-        {"_id": 0, "category_code": 1, "category_name": 1, "subcategory_code": 1, "subcategory_name": 1},
-    )
+    memory_doc = await lookup_merchant_memory(user_id=user_oid, cleaned_key=merchant_keyword)
+    if not memory_doc:
+        return None
+
+    category_code = memory_doc.get("category_code")
+    subcategory_code = memory_doc.get("subcategory_code")
+    if not category_code or not subcategory_code:
+        return None
+
+    return {
+        "category_code": str(category_code),
+        "category_name": str(memory_doc.get("category") or category_code),
+        "subcategory_code": str(subcategory_code),
+        "subcategory_name": str(memory_doc.get("subcategory") or subcategory_code),
+        "confidence": float(memory_doc.get("confidence") or memory_confidence_score(memory_hit=True)),
+    }
 
 
 async def _suggest_category_from_history(
@@ -964,24 +1183,16 @@ async def _upsert_merchant_memory(
     if not merchant_keyword:
         return
 
-    now = datetime.now(UTC)
-    await db.merchant_memory.update_one(
-        {"user_id": user_oid, "merchant_keyword": merchant_keyword, "type": tx_type},
-        {
-            "$set": {
-                "category_code": category_code,
-                "category_name": category_name,
-                "subcategory_code": subcategory_code,
-                "subcategory_name": subcategory_name,
-                "updated_at": now,
-                "last_used_at": now,
-            },
-            "$setOnInsert": {
-                "created_at": now,
-            },
-            "$inc": {"usage_count": 1},
-        },
-        upsert=True,
+    await learn_merchant_memory(
+        user_id=user_oid,
+        cleaned_key=merchant_keyword,
+        merchant_name=merchant_keyword.title(),
+        category=category_name or category_code,
+        subcategory=subcategory_name or subcategory_code,
+        category_code=category_code,
+        subcategory_code=subcategory_code,
+        confidence=memory_confidence_score(memory_hit=True),
+        learned_from="user",
     )
 
 
@@ -1008,55 +1219,123 @@ async def _insert_rows_to_buffer(
         return {
             "inserted_count": 0,
             "duplicate_count": 0,
+            "soft_duplicate_count": 0,
             "needs_attention_count": 0,
             "statement_total": 0.0,
             "inbox_total": 0.0,
             "errors": [],
         }
 
-    # Get existing fingerprints to check for duplicates
+    # Get existing fingerprints to check for duplicates (account-scoped + soft match)
     dates = [row["date"] for row in normalized_rows]
-    existing_tx_fingerprints = await _existing_transaction_fingerprints(user_oid, dates)
+    ledger_index = await _ledger_match_index(user_oid, account_oid, dates)
+    existing_tx_fingerprints = ledger_index["fingerprints"]
+    ledger_rows = ledger_index["rows"]
     existing_inbox_fingerprints = await _existing_inbox_fingerprints(user_oid)
 
     inserted_docs: list[dict[str, Any]] = []
     seen_batch: set[str] = set()
     duplicates = 0
+    soft_duplicates = 0
     attention_count = 0
     statement_total = 0.0
     inserted_total = 0.0
     errors: list[dict[str, Any]] = []
+    account_part = str(account_oid)
 
     for row in normalized_rows:
         statement_total += float(row["amount"])
-        fingerprint = generate_fingerprint(row["date"], row["amount"])
+        raw_payload = row.get("raw_data") or {}
+        raw_description = str(
+            raw_payload.get("description")
+            or raw_payload.get("body")
+            or raw_payload.get("raw_line")
+            or row.get("description")
+            or ""
+        )
+        fingerprint = generate_fingerprint(
+            row["date"],
+            row["amount"],
+            row.get("description"),
+            row.get("type"),
+            account_part,
+        )
+        legacy_fingerprint = _legacy_fingerprint(row["date"], row["amount"])
+        legacy_desc_fingerprint = _legacy_description_fingerprint(
+            row["date"],
+            row["amount"],
+            row.get("description"),
+            row.get("type"),
+        )
+        candidate = {
+            "date": row["date"],
+            "amount": row["amount"],
+            "type": row.get("type"),
+            "identity": _identity_key(row.get("description") or raw_description),
+            "account_id": account_part,
+        }
 
-        # Check if duplicate
-        if fingerprint in existing_tx_fingerprints or fingerprint in existing_inbox_fingerprints or fingerprint in seen_batch:
+        # Exact fingerprint or soft ledger match → already in books / inbox
+        soft_hit = _is_soft_ledger_match(candidate, ledger_rows)
+        if (
+            fingerprint in existing_tx_fingerprints
+            or legacy_desc_fingerprint in existing_tx_fingerprints
+            or fingerprint in existing_inbox_fingerprints
+            or legacy_fingerprint in existing_inbox_fingerprints
+            or legacy_desc_fingerprint in existing_inbox_fingerprints
+            or fingerprint in seen_batch
+            or soft_hit
+        ):
             duplicates += 1
+            if soft_hit:
+                soft_duplicates += 1
             continue
 
+        duplicate_match = best_duplicate_match(candidate, ledger_rows)
+        possible_duplicate = bool(duplicate_match) or _is_weak_ledger_match(candidate, ledger_rows)
+
         try:
-            # Try to get category suggestion
-            merchant_keyword = extract_merchant_keyword(row["description"])
-            memory_suggestion = await _lookup_merchant_memory(user_oid, merchant_keyword, row["type"])
-            history_suggestion, description_match = await _suggest_category_from_history(
-                user_oid, row["type"], row["description"]
+            detected_mode = detect_mode(raw_description)
+            effective_mode = detected_mode if detected_mode != "unknown" else str(row.get("mode") or "unknown")
+
+            # Use shared categorization service used by UI and Telegram flows.
+            categorization = await categorize_transaction(
+                user_id=user_oid,
+                raw_description=raw_description,
+                amount=float(row["amount"]),
+                tx_type=str(row["type"]),
+                mode=effective_mode,
             )
 
-            suggestion = memory_suggestion or history_suggestion
-            category_autofill = suggestion is not None
-            merchant_hit = memory_suggestion is not None
-            mode_detected = row["mode"] != "unknown"
+            cleaned_key = str(categorization.get("cleaned_key") or clean_memory_description(raw_description))
+            merchant_keyword = str(categorization.get("detected_merchant") or "").lower() or None
+            suggested_category = str(categorization.get("suggested_category") or "") or None
+            suggested_category_code = str(categorization.get("suggested_category_code") or "") or None
+            suggested_subcategory = str(categorization.get("suggested_subcategory") or "") or None
+            suggested_subcategory_code = str(categorization.get("suggested_subcategory_code") or "") or None
+            confidence_ratio = _confidence_ratio(categorization.get("confidence_ratio") or categorization.get("confidence"))
+            matched_layers = [str(layer) for layer in (categorization.get("matched_by") or [])]
 
-            confidence = _compute_confidence(
-                description_match=description_match,
-                category_autofill=category_autofill,
-                mode_detected=mode_detected,
-                merchant_memory_hit=merchant_hit,
+            logger.info(
+                "statement row categorized: user_id=%s cleaned_key=%s merchant=%s confidence=%.2f matched_by=%s",
+                str(user_oid),
+                cleaned_key,
+                merchant_keyword,
+                confidence_ratio,
+                ",".join(matched_layers) if matched_layers else "none",
             )
 
-            needs_attention = not category_autofill
+            needs_attention_fields: list[str] = []
+            if not suggested_category_code:
+                needs_attention_fields.append("category")
+            elif suggested_category_code and not suggested_subcategory_code:
+                needs_attention_fields.append("subcategory")
+            if confidence_ratio < INBOX_CONFIDENCE_THRESHOLD:
+                needs_attention_fields.append("confidence")
+            if possible_duplicate:
+                needs_attention_fields.append("possible_duplicate")
+
+            needs_attention = bool(needs_attention_fields)
             if needs_attention:
                 attention_count += 1
 
@@ -1066,17 +1345,27 @@ async def _insert_rows_to_buffer(
                     "source": source,
                     "account_id": account_oid,
                     "date": _combine_statement_date(row["date"]),
+                    "txn_date": _combine_statement_date(row["date"]),
                     "amount": row["amount"],
                     "type": row["type"],
                     "description": row["description"],
-                    "mode": row["mode"],
-                    "category": suggestion.get("category_name") if suggestion else None,
-                    "category_code": suggestion.get("category_code") if suggestion else None,
-                    "subcategory_code": suggestion.get("subcategory_code") if suggestion else None,
-                    "subcategory_name": suggestion.get("subcategory_name") if suggestion else None,
+                    "raw_description": raw_description,
+                    "mode": effective_mode,
+                    "category": suggested_category,
+                    "category_code": suggested_category_code,
+                    "subcategory_code": suggested_subcategory_code,
+                    "subcategory_name": suggested_subcategory,
                     "merchant_keyword": merchant_keyword,
-                    "confidence": confidence,
-                    "needs_attention": needs_attention,
+                    "detected_merchant": categorization.get("detected_merchant") or (merchant_keyword.title() if merchant_keyword else None),
+                    "cleaned_key": cleaned_key,
+                    "original_category": suggested_category,
+                    "original_category_code": suggested_category_code,
+                    "original_subcategory_name": suggested_subcategory,
+                    "original_subcategory_code": suggested_subcategory_code,
+                    "confidence": confidence_ratio,
+                    "needs_attention": needs_attention_fields,
+                    "possible_duplicate": possible_duplicate,
+                    "duplicate_match": duplicate_match,
                     "fingerprint": fingerprint,
                     "status": "pending",
                     "raw_data": row.get("raw_data") or row,
@@ -1103,11 +1392,13 @@ async def _insert_rows_to_buffer(
             duplicate_errors = sum(1 for error in write_errors if int(error.get("code") or 0) == 11000)
             if duplicate_errors:
                 inserted_count = max(0, inserted_count - duplicate_errors)
+                duplicates += duplicate_errors
                 errors.append({"error": f"{duplicate_errors} rows had duplicate key errors"})
 
     return {
         "inserted_count": inserted_count,
         "duplicate_count": duplicates,
+        "soft_duplicate_count": soft_duplicates,
         "needs_attention_count": attention_count,
         "statement_total": round_money(statement_total),
         "inbox_total": round_money(inserted_total),
@@ -1152,7 +1443,7 @@ async def import_statement_to_inbox(
         raise ValidationError(f"No valid transactions after normalization. Errors: {normalize_errors[:5]}")
 
     # STAGE 3: Insert to Buffer
-    insert_result = await _insert_rows_to_buffer(user_oid, account_oid, "statement", normalized_rows)
+    insert_result = await _insert_rows_to_buffer(user_oid, account_oid, source_format, normalized_rows)
 
     # Return detailed report
     return {
@@ -1172,6 +1463,7 @@ async def import_statement_to_inbox(
         "stage2_errors": normalize_errors,
         "stage3_inserted": insert_result["inserted_count"],
         "stage3_duplicates": insert_result["duplicate_count"],
+        "stage3_soft_duplicates": insert_result.get("soft_duplicate_count", 0),
         "stage3_needs_attention": insert_result["needs_attention_count"],
         "stage3_errors": insert_result["errors"],
         "statement_total": insert_result["statement_total"],
@@ -1185,30 +1477,52 @@ async def import_statement_to_inbox(
 
 def _serialize_inbox_row(row: dict[str, Any], account_name: str | None = None) -> dict[str, Any]:
     """Serialize inbox row for API response"""
-    row_date = row.get("date")
+    row_date = row.get("txn_date") or row.get("date")
     if isinstance(row_date, (datetime, date)):
         iso = row_date.isoformat()
     else:
         iso = ""
     
+    source = str(row.get("source", "statement") or "statement")
+    normalized_source = "pdf" if source == "statement" else source
+    confidence_ratio = _confidence_ratio(row.get("confidence"))
+    attention_fields = _needs_attention_fields(row)
+    raw_description = (
+        row.get("raw_description")
+        or (row.get("raw_data") or {}).get("description")
+        or (row.get("raw_data") or {}).get("body")
+        or (row.get("raw_data") or {}).get("raw_line")
+        or row.get("description")
+        or ""
+    )
+
     return {
         "id": str(row["_id"]),
-        "source": row.get("source", "statement"),
+        "source": normalized_source,
         "account_id": str(row.get("account_id") or ""),
         "account_name": account_name or "",
         "date": iso,
+        "txn_date": iso,
         "date_key": iso[:10] if iso else "",
         "amount": float(row.get("amount") or 0),
         "type": row.get("type") or "debit",
         "description": row.get("description") or "",
+        "raw_description": raw_description,
         "mode": row.get("mode") or "unknown",
         "category": row.get("category"),
         "category_code": row.get("category_code"),
         "subcategory_code": row.get("subcategory_code"),
         "subcategory_name": row.get("subcategory_name"),
-        "confidence": int(row.get("confidence") or 0),
+        "suggested_category": row.get("category"),
+        "suggested_subcategory": row.get("subcategory_name"),
+        "confidence": confidence_ratio,
+        "confidence_percent": int(round(confidence_ratio * 100)),
         "merchant_keyword": row.get("merchant_keyword"),
-        "needs_attention": bool(row.get("needs_attention")),
+        "cleaned_key": row.get("cleaned_key") or row.get("merchant_keyword"),
+        "detected_merchant": row.get("detected_merchant") or ((row.get("merchant_keyword") or "").title() if row.get("merchant_keyword") else None),
+        "needs_attention": attention_fields,
+        "possible_duplicate": bool(row.get("possible_duplicate")),
+        "duplicate_match": row.get("duplicate_match") or None,
         "status": row.get("status", "pending"),
     }
 
@@ -1218,7 +1532,10 @@ async def list_inbox_rows(user_id: str, only_attention: bool = False) -> dict[st
     user_oid = _user_oid(user_id)
     query: dict[str, Any] = {"user_id": user_oid, "status": "pending"}
     if only_attention:
-        query["needs_attention"] = True
+        query["$or"] = [
+            {"needs_attention": {"$exists": True, "$ne": []}},
+            {"needs_attention": True},
+        ]
 
     accounts_cursor = db.accounts.find({"user_id": user_oid, "deleted_at": None}, {"name": 1})
     account_map = {str(acc["_id"]): acc.get("name", "Account") async for acc in accounts_cursor}
@@ -1236,19 +1553,26 @@ async def list_inbox_rows(user_id: str, only_attention: bool = False) -> dict[st
 
         amount = float(serialized["amount"])
         inbox_total += amount
-        if serialized["source"] == "statement":
+        if serialized["source"] == "pdf" or serialized["source"] == "csv":
             statement_total += amount
 
         if serialized["needs_attention"]:
             attention_count += 1
-        type_counts[str(serialized["source"] or "statement")] += 1
+        type_counts[str(serialized["source"] or "pdf")] += 1
+
+    from app.services.planning import enrich_inbox_duplicates
+
+    rows = await enrich_inbox_duplicates(user_id, rows)
+    duplicate_count = sum(1 for row in rows if row.get("possible_duplicate"))
+    attention_count = sum(1 for row in rows if row.get("needs_attention"))
 
     return {
         "rows": rows,
         "summary": {
             "pending_count": len(rows),
             "needs_attention_count": attention_count,
-            "statement_count": type_counts.get("statement", 0),
+            "duplicate_count": duplicate_count,
+            "statement_count": type_counts.get("pdf", 0) + type_counts.get("csv", 0),
             "sms_count": type_counts.get("sms", 0),
             "statement_total": round_money(statement_total),
             "inbox_total": round_money(inbox_total),
@@ -1266,6 +1590,7 @@ async def update_inbox_row(
     category_code: str | None = None,
     subcategory_code: str | None = None,
     statement_date: str | None = None,
+    account_id: str | None = None,
 ) -> dict[str, Any]:
     """Update pending inbox row"""
     user_oid = _user_oid(user_id)
@@ -1276,6 +1601,17 @@ async def update_inbox_row(
         raise NotFoundError("Inbox row not found")
 
     update: dict[str, Any] = {}
+    next_account_id = row.get("account_id")
+    if account_id is not None and str(account_id).strip():
+        next_account_oid = _account_oid(str(account_id))
+        account = await db.accounts.find_one(
+            {"_id": next_account_oid, "user_id": user_oid, "deleted_at": None},
+            {"_id": 1, "name": 1},
+        )
+        if not account:
+            raise NotFoundError("Account not found")
+        next_account_id = next_account_oid
+        update["account_id"] = next_account_oid
 
     next_type = tx_type or str(row.get("type") or "debit")
     if next_type not in {"debit", "credit"}:
@@ -1296,6 +1632,7 @@ async def update_inbox_row(
             raise ValidationError("Invalid date")
         next_date_dt = _combine_statement_date(parsed)
         update["date"] = next_date_dt
+        update["txn_date"] = next_date_dt
 
     next_date = next_date_dt.date() if isinstance(next_date_dt, datetime) else _parse_date_value(next_date_dt)
     if not next_date:
@@ -1305,11 +1642,16 @@ async def update_inbox_row(
     next_category_code = str(row.get("category_code") or "").strip() or None
     next_subcategory_code = str(row.get("subcategory_code") or "").strip() or None
 
+    next_cleaned_key = clean_memory_description(next_description)
+    next_merchant_key = await extract_merchant_key(user_id=user_oid, cleaned_description=next_cleaned_key)
+
     update["description"] = next_description
     update["amount"] = next_amount
     update["type"] = next_type
     update["mode"] = next_mode
-    update["merchant_keyword"] = extract_merchant_keyword(next_description)
+    update["merchant_keyword"] = next_merchant_key or extract_merchant_keyword(next_description)
+    update["detected_merchant"] = next_merchant_key.title() if next_merchant_key else None
+    update["cleaned_key"] = next_cleaned_key
 
     if category_code is not None:
         next_category_code = category_code.strip() or None
@@ -1333,6 +1675,12 @@ async def update_inbox_row(
 
         update["subcategory_code"] = str(matched.get("code"))
         update["subcategory_name"] = str(matched.get("name") or matched.get("code"))
+        if category_code is not None:
+            from app.services.categories import get_categories_by_type
+            cats = await get_categories_by_type(next_type)
+            cat_match = next((c for c in (cats or []) if str(c.get("code")) == next_category_code), None)
+            if cat_match:
+                update["category"] = str(cat_match.get("name") or next_category_code)
     elif next_category_code and subcategory_code is not None:
         update["subcategory_code"] = None
         update["subcategory_name"] = None
@@ -1340,31 +1688,46 @@ async def update_inbox_row(
         update["subcategory_code"] = None
         update["subcategory_name"] = None
 
-    next_fingerprint = generate_fingerprint(next_date, next_amount)
+    account_part = str(next_account_id or "")
+    next_fingerprint = generate_fingerprint(
+        next_date, next_amount, next_description, next_type, account_part
+    )
+    next_legacy_fingerprint = _legacy_fingerprint(next_date, next_amount)
 
     # Check for duplicates
     duplicate_inbox = await db.transaction_inbox.find_one(
         {
             "_id": {"$ne": oid},
             "user_id": user_oid,
-            "fingerprint": next_fingerprint,
-            "status": {"$in": ["pending", "approved"]},
+            "fingerprint": {"$in": [next_fingerprint, next_legacy_fingerprint]},
+            "status": "pending",
         },
         {"_id": 1},
     )
     if duplicate_inbox:
         raise ValidationError("This row matches an existing inbox item")
 
-    tx_fingerprints = await _existing_transaction_fingerprints(user_oid, [next_date])
+    account_for_match = next_account_id if isinstance(next_account_id, ObjectId) else None
+    tx_fingerprints = await _existing_transaction_fingerprints(
+        user_oid, [next_date], account_oid=account_for_match
+    )
     if next_fingerprint in tx_fingerprints:
         raise ValidationError("This row matches an existing transaction")
 
     update["fingerprint"] = next_fingerprint
+    refreshed_row = {
+        **row,
+        **update,
+    }
+    update["needs_attention"] = _needs_attention_fields(refreshed_row)
 
     await db.transaction_inbox.update_one({"_id": oid}, {"$set": update})
     updated = await db.transaction_inbox.find_one({"_id": oid})
-
-    return _serialize_inbox_row(updated)
+    account_name = None
+    if updated and updated.get("account_id"):
+        acc = await db.accounts.find_one({"_id": updated["account_id"]}, {"name": 1})
+        account_name = (acc or {}).get("name")
+    return _serialize_inbox_row(updated, account_name)
 
 
 async def approve_inbox_rows(user_id: str, row_ids: list[str], request=None) -> dict[str, Any]:
@@ -1396,19 +1759,26 @@ async def approve_inbox_rows(user_id: str, row_ids: list[str], request=None) -> 
             failed.append({"id": str(row["_id"]), "error": "Transaction date is missing"})
             continue
 
-        fingerprint = generate_fingerprint(row_day, float(row.get("amount") or 0))
-        tx_fingerprints = await _existing_transaction_fingerprints(user_oid, [row_day])
+        fingerprint = generate_fingerprint(
+            row_day,
+            float(row.get("amount") or 0),
+            str(row.get("description") or ""),
+            str(row.get("type") or ""),
+            str(row.get("account_id") or ""),
+        )
+        tx_fingerprints = await _existing_transaction_fingerprints(
+            user_oid,
+            [row_day],
+            account_oid=row.get("account_id") if isinstance(row.get("account_id"), ObjectId) else None,
+        )
         
         if fingerprint in tx_fingerprints:
-            await db.transaction_inbox.update_one(
-                {"_id": row["_id"]},
-                {"$set": {"status": "discarded", "discarded_at": datetime.now(UTC)}},
-            )
+            await db.transaction_inbox.delete_one({"_id": row["_id"], "user_id": user_oid})
             failed.append({"id": str(row["_id"]), "error": "Skipped because the transaction already exists"})
             continue
 
         try:
-            await create_transaction(
+            tx_id = await create_transaction(
                 user_id=user_id,
                 account_id=str(row["account_id"]),
                 amount=float(row["amount"]),
@@ -1421,12 +1791,13 @@ async def approve_inbox_rows(user_id: str, row_ids: list[str], request=None) -> 
                 request=request,
             )
 
-            await db.transaction_inbox.update_one(
-                {"_id": row["_id"]},
-                {"$set": {"status": "approved", "approved_at": datetime.now(UTC)}},
-            )
+            # Delete after approve so unique fingerprint index does not block re-imports.
+            await db.transaction_inbox.delete_one({"_id": row["_id"], "user_id": user_oid})
 
-            merchant_keyword = row.get("merchant_keyword") or extract_merchant_keyword(str(row.get("description") or ""))
+            merchant_keyword = row.get("merchant_keyword") or await extract_merchant_key(
+                user_id=user_oid,
+                cleaned_description=clean_memory_description(str(row.get("description") or "")),
+            )
             await _upsert_merchant_memory(
                 user_oid,
                 merchant_keyword,
@@ -1437,6 +1808,27 @@ async def approve_inbox_rows(user_id: str, row_ids: list[str], request=None) -> 
                 str(row.get("subcategory_name") or ""),
             )
 
+            original_category_code = row.get("original_category_code")
+            original_subcategory_code = row.get("original_subcategory_code")
+            if (
+                tx_id
+                and (original_category_code or original_subcategory_code)
+                and (
+                    str(original_category_code or "") != str(row.get("category_code") or "")
+                    or str(original_subcategory_code or "") != str(row.get("subcategory_code") or "")
+                )
+            ):
+                await record_feedback(
+                    user_id=user_oid,
+                    txn_id=str(tx_id),
+                    original_description=str(row.get("description") or ""),
+                    cleaned_key=str(row.get("cleaned_key") or merchant_keyword or ""),
+                    old_category=str(row.get("original_category") or row.get("original_category_code") or ""),
+                    new_category=str(row.get("category") or row.get("category_code") or ""),
+                    old_subcategory=str(row.get("original_subcategory_name") or row.get("original_subcategory_code") or ""),
+                    new_subcategory=str(row.get("subcategory_name") or row.get("subcategory_code") or ""),
+                )
+
             approved += 1
         except Exception as exc:
             failed.append({"id": str(row["_id"]), "error": str(exc)})
@@ -1444,22 +1836,90 @@ async def approve_inbox_rows(user_id: str, row_ids: list[str], request=None) -> 
     return {"approved_count": approved, "failed": failed}
 
 
+async def skip_duplicate_inbox_rows(user_id: str) -> dict[str, Any]:
+    listed = await list_inbox_rows(user_id=user_id)
+    ids = [row["id"] for row in listed.get("rows") or [] if row.get("possible_duplicate")]
+    if not ids:
+        return {"discarded_count": 0}
+    return await discard_inbox_rows(user_id, ids)
+
+
 async def discard_inbox_rows(user_id: str, row_ids: list[str]) -> dict[str, Any]:
-    """Discard selected inbox rows"""
+    """Discard selected inbox rows (hard delete frees unique fingerprint)."""
     user_oid = _user_oid(user_id)
     valid_ids = [_row_oid(row_id) for row_id in row_ids]
     if not valid_ids:
         raise ValidationError("Select at least one inbox row")
 
-    result = await db.transaction_inbox.update_many(
+    result = await db.transaction_inbox.delete_many(
         {
             "_id": {"$in": valid_ids},
             "user_id": user_oid,
             "status": "pending",
-        },
-        {"$set": {"status": "discarded", "discarded_at": datetime.now(UTC)}},
+        }
     )
-    return {"discarded_count": int(result.modified_count)}
+    return {"discarded_count": int(result.deleted_count)}
+
+
+async def get_pending_inbox_items(user_id: str, only_attention: bool = False) -> dict[str, Any]:
+    """JSON-friendly pending inbox listing for the review APIs."""
+    return await list_inbox_rows(user_id=user_id, only_attention=only_attention)
+
+
+async def approve_inbox_item(
+    user_id: str,
+    row_id: str,
+    *,
+    request=None,
+    amount: float | None = None,
+    description: str | None = None,
+    tx_type: str | None = None,
+    mode: str | None = None,
+    category_code: str | None = None,
+    subcategory_code: str | None = None,
+    statement_date: str | None = None,
+) -> dict[str, Any]:
+    """Approve a single inbox item, optionally applying edits first."""
+    if any(
+        value is not None
+        for value in [amount, description, tx_type, mode, category_code, subcategory_code, statement_date]
+    ):
+        await update_inbox_row(
+            user_id=user_id,
+            row_id=row_id,
+            amount=amount,
+            description=description,
+            tx_type=tx_type,
+            mode=mode,
+            category_code=category_code,
+            subcategory_code=subcategory_code,
+            statement_date=statement_date,
+        )
+
+    result = await approve_inbox_rows(user_id=user_id, row_ids=[row_id], request=request)
+    if result.get("approved_count", 0) > 0:
+        await db.transaction_inbox.delete_one({"_id": _row_oid(row_id), "user_id": _user_oid(user_id)})
+    return result
+
+
+async def bulk_approve_inbox_items(user_id: str, row_ids: list[str], *, request=None) -> dict[str, Any]:
+    """Approve multiple inbox items and clear them from the review queue."""
+    result = await approve_inbox_rows(user_id=user_id, row_ids=row_ids, request=request)
+    if result.get("approved_count", 0) > 0:
+        user_oid = _user_oid(user_id)
+        approved_ids = [_row_oid(row_id) for row_id in row_ids]
+        await db.transaction_inbox.delete_many({"_id": {"$in": approved_ids}, "user_id": user_oid, "status": "approved"})
+    return result
+
+
+async def reject_inbox_item(user_id: str, row_id: str) -> dict[str, Any]:
+    """Reject a pending inbox row and remove it from the queue."""
+    user_oid = _user_oid(user_id)
+    oid = _row_oid(row_id)
+    result = await db.transaction_inbox.delete_one({"_id": oid, "user_id": user_oid, "status": "pending"})
+    if int(result.deleted_count) <= 0:
+        raise NotFoundError("Inbox row not found")
+    return {"rejected_count": 1}
 
 
 async def clear_pending_buffer(user_id: str) -> dict[str, int]:
@@ -1474,12 +1934,18 @@ async def clear_pending_buffer(user_id: str) -> dict[str, int]:
 async def approve_high_confidence_rows(user_id: str, min_confidence: int = 70, request=None) -> dict[str, Any]:
     """Auto-approve rows with confidence >= min_confidence"""
     user_oid = _user_oid(user_id)
+    threshold = float(min_confidence)
+    if threshold > 1:
+        threshold = threshold / 100.0
     rows = await db.transaction_inbox.find(
         {
             "user_id": user_oid,
             "status": "pending",
-            "needs_attention": False,
-            "confidence": {"$gte": int(min_confidence)},
+            "$or": [
+                {"needs_attention": []},
+                {"needs_attention": False},
+            ],
+            "confidence": {"$gte": threshold},
         }
     ).to_list(length=500)
 
@@ -1500,7 +1966,12 @@ async def approve_high_confidence_rows(user_id: str, min_confidence: int = 70, r
             failed.append({"id": str(row["_id"]), "error": "Transaction date is missing"})
             continue
 
-        fingerprint = generate_fingerprint(row_day, float(row.get("amount") or 0))
+        fingerprint = generate_fingerprint(
+            row_day,
+            float(row.get("amount") or 0),
+            str(row.get("description") or ""),
+            str(row.get("type") or ""),
+        )
         tx_fingerprints = await _existing_transaction_fingerprints(user_oid, [row_day])
         
         if fingerprint in tx_fingerprints:
@@ -1512,7 +1983,7 @@ async def approve_high_confidence_rows(user_id: str, min_confidence: int = 70, r
             continue
 
         try:
-            await create_transaction(
+            tx_id = await create_transaction(
                 user_id=user_id,
                 account_id=str(row["account_id"]),
                 amount=float(row["amount"]),
@@ -1530,7 +2001,10 @@ async def approve_high_confidence_rows(user_id: str, min_confidence: int = 70, r
                 {"$set": {"status": "approved", "approved_at": datetime.now(UTC)}},
             )
 
-            merchant_keyword = row.get("merchant_keyword") or extract_merchant_keyword(str(row.get("description") or ""))
+            merchant_keyword = row.get("merchant_keyword") or await extract_merchant_key(
+                user_id=user_oid,
+                cleaned_description=clean_memory_description(str(row.get("description") or "")),
+            )
             await _upsert_merchant_memory(
                 user_oid,
                 merchant_keyword,
@@ -1540,6 +2014,27 @@ async def approve_high_confidence_rows(user_id: str, min_confidence: int = 70, r
                 str(row["subcategory_code"]),
                 str(row.get("subcategory_name") or ""),
             )
+
+            original_category_code = row.get("original_category_code")
+            original_subcategory_code = row.get("original_subcategory_code")
+            if (
+                tx_id
+                and (original_category_code or original_subcategory_code)
+                and (
+                    str(original_category_code or "") != str(row.get("category_code") or "")
+                    or str(original_subcategory_code or "") != str(row.get("subcategory_code") or "")
+                )
+            ):
+                await record_feedback(
+                    user_id=user_oid,
+                    txn_id=str(tx_id),
+                    original_description=str(row.get("description") or ""),
+                    cleaned_key=str(row.get("cleaned_key") or merchant_keyword or ""),
+                    old_category=str(row.get("original_category") or row.get("original_category_code") or ""),
+                    new_category=str(row.get("category") or row.get("category_code") or ""),
+                    old_subcategory=str(row.get("original_subcategory_name") or row.get("original_subcategory_code") or ""),
+                    new_subcategory=str(row.get("subcategory_name") or row.get("subcategory_code") or ""),
+                )
 
             approved += 1
         except Exception as exc:
@@ -1603,9 +2098,12 @@ def _normalize_sms_message(message: dict[str, Any]) -> dict[str, Any] | None:
         return None
 
     row_date = _extract_sms_date(message)
+    # Infer type from the raw SMS body before verbs are stripped for description.
+    tx_type = infer_type_from_description(body)
     description = _extract_sms_description(body)
-    tx_type = infer_type_from_description(description)
-    mode = detect_mode(description)
+    mode = detect_mode(body)
+    if mode == "unknown":
+        mode = detect_mode(description)
 
     return {
         "date": row_date,
@@ -1619,6 +2117,34 @@ def _normalize_sms_message(message: dict[str, Any]) -> dict[str, Any] | None:
             "timestamp": message.get("timestamp"),
         },
     }
+
+
+async def buffer_sms_messages(
+    user_id: str,
+    messages: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Store raw SMS messages from mobile for later parse → inbox."""
+    user_oid = _user_oid(user_id)
+    docs: list[dict[str, Any]] = []
+    now = datetime.now(UTC)
+    for message in messages or []:
+        body = _normalize_text(message.get("body") or message.get("text") or "")
+        if not body:
+            continue
+        docs.append(
+            {
+                "user_id": user_oid,
+                "address": message.get("address") or message.get("sender") or "",
+                "body": body,
+                "timestamp": message.get("timestamp") or now,
+                "parsed": False,
+                "created_at": now,
+            }
+        )
+    if not docs:
+        raise ValidationError("No SMS messages to buffer")
+    result = await db.sms_buffer.insert_many(docs, ordered=False)
+    return {"buffered_count": len(result.inserted_ids)}
 
 
 async def ingest_sms_to_inbox(

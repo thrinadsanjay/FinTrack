@@ -1,92 +1,87 @@
-function togglePassword(button) {
-  const field = button?.closest(".password-field")?.querySelector("input");
-  if (!field) return;
-  const isHidden = field.type === "password";
-  field.type = isHidden ? "text" : "password";
-  const icon = button.querySelector("i");
-  if (icon) {
-    icon.className = isHidden ? "fa-regular fa-eye-slash" : "fa-regular fa-eye";
-  }
-  button.setAttribute("aria-label", isHidden ? "Hide password" : "Show password");
-}
-
-function normalizeDigits(value) {
-  return (value || "").replace(/\D+/g, "").trim();
-}
-
-function syncPhoneGroup(container) {
-  if (!container) return;
-  const country = container.querySelector("[data-phone-country]");
-  const local = container.querySelector("[data-phone-local]");
-  const full = container.querySelector("[data-phone-full]");
-  const hiddenCountry = container.querySelector("[data-phone-country-hidden]");
-  if (!local || !full) return;
-
-  const selectedOption = country?.selectedOptions?.[0];
-  const countryValue = selectedOption?.dataset.countryCode || "";
-  const localValue = normalizeDigits(local.value);
-  local.value = localValue;
-  full.value = countryValue && localValue ? `+${countryValue}${localValue}` : localValue;
-  if (hiddenCountry && country) hiddenCountry.value = country.value;
-}
-
-function setPanel(panel, open) {
-  if (!panel) return;
-  panel.hidden = !open;
-}
-
-function setSwitcherState(root, active) {
-  root.querySelectorAll(".login-switcher__button").forEach((button) => {
-    const isLocal = button.hasAttribute("data-local-toggle");
-    const shouldActivate = active === "local" ? isLocal : !isLocal;
-    button.classList.toggle("is-active", shouldActivate);
-    button.setAttribute("aria-selected", shouldActivate ? "true" : "false");
-  });
-}
-
-function openLocalPanel(root) {
-  setPanel(root.querySelector("[data-local-panel]"), true);
-  setPanel(root.querySelector("[data-telegram-panel]"), false);
-  setSwitcherState(root, "local");
-  root.querySelector("input[name='username']")?.focus();
-}
-
-function openTelegramPanel(root) {
-  setPanel(root.querySelector("[data-local-panel]"), false);
-  setPanel(root.querySelector("[data-telegram-panel]"), true);
-  setSwitcherState(root, "telegram");
-  root.querySelectorAll("[data-phone-input]").forEach(syncPhoneGroup);
-  const otp = root.querySelector("[data-telegram-otp]");
-  const phone = root.querySelector("[data-telegram-panel] [data-phone-local]");
-  (otp || phone)?.focus();
-}
-
-function initLoginPage() {
-  const root = document.querySelector("[data-login-page]");
+(function () {
+  var root = document.querySelector("[data-login-page]");
   if (!root) return;
 
-  root.querySelectorAll("[data-password-toggle]").forEach((button) => {
-    button.addEventListener("click", () => togglePassword(button));
-  });
+  var localPanel = root.querySelector("[data-local-panel]");
+  var telegramPanel = root.querySelector("[data-telegram-panel]");
+  var localToggle = root.querySelector("[data-local-toggle]");
+  var telegramToggle = root.querySelector("[data-telegram-open]");
 
-  root.querySelectorAll("[data-phone-input]").forEach((container) => {
-    const country = container.querySelector("[data-phone-country]");
-    const local = container.querySelector("[data-phone-local]");
-    country?.addEventListener("change", () => syncPhoneGroup(container));
-    local?.addEventListener("input", () => syncPhoneGroup(container));
-    syncPhoneGroup(container);
-  });
-
-  root.querySelector("[data-local-toggle]")?.addEventListener("click", () => openLocalPanel(root));
-  root.querySelector("[data-telegram-open]")?.addEventListener("click", () => openTelegramPanel(root));
-
-  const auth = root.dataset.loginState || "";
-  const error = root.dataset.loginError || "";
-  if (auth === "telegram_otp_sent" || error.startsWith("telegram_")) {
-    openTelegramPanel(root);
-  } else {
-    openLocalPanel(root);
+  function showLocal() {
+    if (localPanel) localPanel.hidden = false;
+    if (telegramPanel) telegramPanel.hidden = true;
+    if (localToggle) localToggle.classList.add("is-active");
+    if (telegramToggle) telegramToggle.classList.remove("is-active");
   }
-}
 
-document.addEventListener("DOMContentLoaded", initLoginPage);
+  function showTelegram() {
+    if (localPanel) localPanel.hidden = true;
+    if (telegramPanel) telegramPanel.hidden = false;
+    if (localToggle) localToggle.classList.remove("is-active");
+    if (telegramToggle) telegramToggle.classList.add("is-active");
+  }
+
+  if (localToggle) localToggle.addEventListener("click", showLocal);
+  if (telegramToggle) telegramToggle.addEventListener("click", showTelegram);
+
+  root.querySelectorAll("[data-password-toggle]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var input = btn.parentElement.querySelector("input");
+      if (!input) return;
+      var show = input.type === "password";
+      input.type = show ? "text" : "password";
+      var icon = btn.querySelector("i");
+      if (icon) {
+        icon.className = show ? "fa-regular fa-eye-slash" : "fa-regular fa-eye";
+      }
+    });
+  });
+
+  var passkeyBtn = root.querySelector("[data-passkey-login]");
+  if (passkeyBtn) {
+    passkeyBtn.addEventListener("click", async function () {
+      try {
+        var usernameInput = document.getElementById("username");
+        var username = usernameInput ? usernameInput.value.trim() : "";
+        var optionsRes = await fetch("/login/passkey/options", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": window.FinTrack.csrfToken(),
+          },
+          body: JSON.stringify({ username: username || null }),
+        });
+        var optionsPayload = await optionsRes.json();
+        if (!optionsRes.ok) {
+          throw new Error(optionsPayload.detail || "Passkey options failed");
+        }
+        if (!window.PublicKeyCredential) {
+          throw new Error("Passkeys are not supported on this device");
+        }
+        // Minimal discoverable flow — full WebAuthn decode lives in a later pass.
+        window.FinTrack.toast(
+          "Passkey challenge issued. Complete biometric prompt when available.",
+          "success"
+        );
+        var verifyRes = await fetch("/login/passkey/verify", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": window.FinTrack.csrfToken(),
+          },
+          body: JSON.stringify({
+            credential: null,
+            options: optionsPayload.options,
+          }),
+        });
+        var verifyPayload = await verifyRes.json();
+        if (!verifyRes.ok) {
+          throw new Error(verifyPayload.detail || "Passkey verify failed");
+        }
+        window.location.href = verifyPayload.redirect || "/";
+      } catch (err) {
+        window.FinTrack.toast(err.message || "Passkey login failed", "error");
+      }
+    });
+  }
+})();

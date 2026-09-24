@@ -1,0 +1,81 @@
+{% extends "base/base.html" %}
+{% block title %}Financial Health · {{ FT_APP_NAME }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/pages/planning.css?v={{ FT_APP_VERSION }}-head2">
+{% endblock %}
+{% block content %}
+{% set health = bundle.health or {} %}
+{% set labels = {
+  'savings': 'Savings',
+  'expense_control': 'Spending control',
+  'cash_buffer': 'Cash buffer',
+  'utilization': 'Credit utilization',
+  'obligations': 'Upcoming obligations',
+  'recurring': 'Recurring payments',
+  'bills': 'Bill management',
+  'emi': 'EMI burden'
+} %}
+<section class="pln" data-planning-page data-health-history='{{ bundle.health_history | default([]) | tojson }}'>
+  <header class="pln-hero">
+    <div>
+      <h1>Financial Health</h1>
+    </div>
+  </header>
+
+  <div class="pln-kpis">
+    <article class="pln-kpi">
+      <span class="pln-kpi__label">Score</span>
+      {% if health.score is not none %}
+      <div class="pln-kpi__value">{{ health.score }} / 100</div>
+      <div class="pln-band is-{{ (health.band or 'insufficient') | lower }}">{{ (health.band or 'insufficient') | health_label }}</div>
+      {% else %}
+      <div class="pln-kpi__value">—</div>
+      <div class="pln-band is-insufficient">INSUFFICIENT DATA</div>
+      {% endif %}
+    </article>
+    <article class="pln-kpi">
+      <span class="pln-kpi__label">Dimensions used</span>
+      <div class="pln-kpi__value">{{ health.available_count or 0 }}</div>
+      <div class="pln-kpi__meta">Equal-weighted among available inputs</div>
+    </article>
+  </div>
+
+  <div class="pln-grid">
+    <article class="pln-panel">
+      <h2>Breakdown</h2>
+      <div class="pln-bars">
+        {% for key, label in labels.items() %}
+          {% set value = (health.dimensions or {}).get(key) %}
+          <div class="pln-bar {% if value is not none and value < 50 %}is-bad{% elif value is not none and value < 65 %}is-low{% endif %}">
+            <div>
+              <div class="pln-row" style="border:0;padding:0 0 0.35rem">
+                <span>{{ label }}</span>
+                <strong>{% if value is not none %}{{ value }}{% else %}Unavailable{% endif %}</strong>
+              </div>
+              <div class="pln-bar__track"><span class="pln-bar__fill" style="width: {{ value if value is not none else 0 }}%"></span></div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </article>
+    <article class="pln-panel">
+      <h2>Why this score</h2>
+      {% if health.reasons %}
+        {% for reason in health.reasons %}
+        <div class="pln-row"><span>{{ reason }}</span></div>
+        {% endfor %}
+      {% else %}
+        <p class="pln-empty">Record income, expenses, and accounts to generate an explanation.</p>
+      {% endif %}
+      {% if bundle.health_history %}
+      <p class="pln-kpi__meta">Score trend (0–100)</p>
+      <canvas class="pln-chart" data-health-chart width="420" height="180" aria-label="Health score trend from 0 to 100"></canvas>
+      {% endif %}
+    </article>
+  </div>
+  <p class="pln-disclaimer">{{ health.disclaimer or bundle.disclaimer }}</p>
+</section>
+{% endblock %}
+{% block extra_js %}
+<script src="/static/js/planning.js?v={{ FT_APP_VERSION }}-fmt1" defer></script>
+{% endblock %}

@@ -1,0 +1,21 @@
+<footer class="ft-page-footer">
+  {% if shell_status == 'error' %}
+    {% set status_class = 'is-bad' %}
+    {% set status_title = 'Something is broken' %}
+  {% elif request.state.maintenance_mode %}
+    {% set status_class = 'is-warn' %}
+    {% set status_title = 'Maintenance mode' %}
+  {% else %}
+    {% set status_class = 'is-ok' %}
+    {% set status_title = 'Online' %}
+  {% endif %}
+  <div class="ft-page-footer__brand">
+    <strong>{{ FT_APP_NAME }}</strong>
+    <span class="ft-page-footer__version">v{{ FT_APP_VERSION }}</span>
+    <span class="ft-sidebar__pulse {{ status_class }}" title="{{ status_title }}" aria-label="{{ status_title }}"></span>
+  </div>
+  <div class="ft-page-footer__bar">
+    <p class="ft-page-footer__tag">Your Money, One Simple View.</p>
+    <p class="ft-page-footer__copy">© {% if now is defined and now %}{{ now.year }}{% else %}2026{% endif %} · Created by Sanjay Chintakayala</p>
+  </div>
+</footer>

@@ -18,7 +18,8 @@ class TestTransactionQueries(unittest.TestCase):
         self.assertEqual(str(query["user_id"]), user_id)
         self.assertEqual(str(query["account_id"]), account_id)
         self.assertEqual(query["type"], {"$in": ["transfer_in", "transfer_out"]})
-        self.assertIn("description", query)
+        # Search terms are AND-ed alongside the failed/retry filter.
+        self.assertIn({"description": {"$regex": "rent", "$options": "i"}}, query["$and"][-1]["$or"])
 
     def test_resolve_transactions_sort_defaults_and_amount(self):
         self.assertEqual(resolve_transactions_sort(None, None), ("created_at", -1))

@@ -1,0 +1,262 @@
+{% extends "base/base.html" %}
+{% block title %}Transactions · {{ FT_APP_NAME }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/pages/transactions-all.css?v={{ FT_APP_VERSION }}-head1">
+{% endblock %}
+
+{% block content %}
+{% set f = filters or {} %}
+{% set groups = transaction_groups or [] %}
+
+<section class="txl" data-tx-all>
+  <header class="txl-hero">
+    <div>
+      <h1>All Transactions</h1>
+    </div>
+    <div class="txl-hero__actions">
+      <a class="ft-btn ft-btn--secondary" href="/transactions/list?view=board">
+        <i class="fa-solid fa-columns" aria-hidden="true"></i> Board view
+      </a>
+      <a class="ft-btn ft-btn--primary" href="/transactions/add">
+        <i class="fa-solid fa-plus" aria-hidden="true"></i> Add new
+      </a>
+    </div>
+  </header>
+
+  <form method="get" action="/transactions/all" class="txl-toolbar">
+    <input class="ft-input txl-toolbar__search" id="search" name="search" value="{{ f.search or '' }}" placeholder="Search description…">
+    <select class="ft-select" id="tx_type" name="tx_type" aria-label="Type">
+      <option value="">All types</option>
+      {% for t in ['credit','debit','transfer'] %}
+      <option value="{{ t }}" {% if f.tx_type == t %}selected{% endif %}>{{ t | title }}</option>
+      {% endfor %}
+    </select>
+    <select class="ft-select" id="account_id" name="account_id" aria-label="Account">
+      <option value="">All accounts</option>
+      {% for acc in accounts %}
+      <option value="{{ acc._id }}" {% if f.account_id == acc._id|string %}selected{% endif %}>{{ acc.name or acc.bank_name }}</option>
+      {% endfor %}
+    </select>
+    <input class="ft-input" id="date_from" name="date_from" type="date" lang="en-IN" title="Date as DD/MM/YYYY" value="{{ f.date_from or '' }}" aria-label="From date">
+    <input class="ft-input" id="date_to" name="date_to" type="date" lang="en-IN" title="Date as DD/MM/YYYY" value="{{ f.date_to or '' }}" aria-label="To date">
+    <button class="ft-btn ft-btn--secondary" type="submit">Filter</button>
+    {% if active_filter_count %}
+    <a class="ft-btn ft-btn--ghost" href="/transactions/all">Clear</a>
+    {% endif %}
+    <div class="txl-toolbar__meta">
+      <span class="txl-count">{{ transactions | length }}</span>
+      <span class="txl-legend" aria-hidden="true">
+        <span class="txl-legend__item is-credit">Income</span>
+        <span class="txl-legend__item is-debit">Expense</span>
+        <span class="txl-legend__item is-transfer">Transfer</span>
+      </span>
+    </div>
+  </form>
+
+  {% if groups %}
+  <div class="txl-board">
+    <table class="txl-table">
+      <colgroup>
+        <col class="txl-w-type">
+        <col class="txl-w-amount">
+        <col class="txl-w-desc">
+        <col class="txl-w-account">
+        <col class="txl-w-cat">
+        <col class="txl-w-time">
+        <col class="txl-w-actions">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Amount</th>
+          <th>Description</th>
+          <th>Account</th>
+          <th>Category</th>
+          <th>Time</th>
+          <th class="txl-actions-h"><span class="sr-only">Actions</span></th>
+        </tr>
+      </thead>
+      {% for group in groups %}
+      <tbody>
+        <tr class="txl-group__head">
+          <td colspan="7">
+            <span class="txl-group__label">{{ group.label }}</span>
+            <span class="txl-group__count">{{ group.rows | length }}</span>
+          </td>
+        </tr>
+        {% for tx in group.rows %}
+        <tr class="txl-row {% if tx.type == 'credit' %}is-credit{% elif tx.type == 'debit' %}is-debit{% elif tx.is_transfer %}is-transfer{% endif %}{% if tx.is_deleted %} is-deleted{% endif %}{% if tx.is_restored %} is-restored{% endif %}{% if tx.is_failed %} is-failed{% endif %}">
+          <td>
+            {% if tx.type == 'credit' %}
+            <span class="txl-type is-credit">Income</span>
+            {% elif tx.type == 'debit' %}
+            <span class="txl-type is-debit">Expense</span>
+            {% elif tx.is_transfer %}
+            <span class="txl-type is-transfer">Transfer</span>
+            {% else %}
+            <span class="txl-type">{{ tx.type_label or tx.type or '—' }}</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="txl-amount ft-money">₹ {{ tx.amount | money }}</span>
+          </td>
+          <td>
+            <div class="txl-desc">
+              <span class="txl-desc__title" title="{% if tx.display_title %}{{ tx.display_title }}{% elif tx.category_name and not tx.is_transfer %}{{ tx.category_name }}{% else %}{% endif %}">
+                {% if tx.display_title %}
+                {{ tx.display_title }}
+                {% elif tx.category_name and not tx.is_transfer %}
+                {{ tx.category_name }}{% if tx.subcategory_name %} · {{ tx.subcategory_name }}{% endif %}
+                {% else %}
+                —
+                {% endif %}
+              </span>
+              {% if tx.is_deleted %}<span class="ft-badge ft-badge--warning">Rolled back</span>{% endif %}
+              {% if tx.is_restored %}<span class="ft-badge ft-badge--accent">Restored</span>{% endif %}
+              {% if tx.is_failed %}<span class="ft-badge ft-badge--negative">Failed</span>{% endif %}
+            </div>
+            {% if tx.status_info %}<div class="txl-desc__status">{{ tx.status_info }}</div>{% endif %}
+          </td>
+          <td>
+            <span class="txl-ellipsis" title="{{ tx.account_name or '' }}">{{ tx.account_name or '—' }}</span>
+          </td>
+          <td>
+            <span class="txl-ellipsis">{% if tx.is_transfer %}Self transfer{% else %}{{ tx.category_name or '—' }}{% endif %}</span>
+          </td>
+          <td class="txl-time">{{ tx.local_time or '—' }}</td>
+          <td class="txl-actions-cell">
+            <div class="txl-tools">
+              <button type="button" class="txl-icon-btn" data-tx-info data-info="{{ tx.info_text | e }}" aria-label="Info" title="Info">
+                <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+              </button>
+              <div class="txl-menu">
+                <button type="button" class="txl-icon-btn" data-tx-menu-toggle aria-haspopup="menu" aria-expanded="false" aria-label="Actions" title="Actions">
+                  <i class="fa-solid fa-ellipsis" aria-hidden="true"></i>
+                </button>
+                <div class="txl-menu__panel" data-tx-menu-panel hidden>
+                  {% if tx.can_modify and not tx.is_transfer %}
+                  <button type="button" class="txl-menu__item" data-tx-edit data-id="{{ tx._id }}" data-account-id="{{ tx.account_id }}" data-amount="{{ tx.amount }}" data-description="{{ tx.description or '' }}" data-category-code="{{ tx.category_code or '' }}" data-subcategory-code="{{ tx.subcategory_code or '' }}">
+                    <i class="fa-solid fa-pen" aria-hidden="true"></i> Edit
+                  </button>
+                  {% endif %}
+                  {% if tx.can_convert_to_emi %}
+                  <button type="button" class="txl-menu__item" data-tx-emi data-id="{{ tx._id }}" data-amount="{{ tx.amount }}" data-description="{{ tx.description or '' }}">
+                    <i class="fa-solid fa-credit-card" aria-hidden="true"></i> Convert to EMI
+                  </button>
+                  {% endif %}
+                  {% if tx.can_retry %}
+                  <form method="post" action="/transactions/retry-failed">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                    <input type="hidden" name="transaction_id" value="{{ tx._id }}">
+                    <button class="txl-menu__item" type="submit"><i class="fa-solid fa-rotate-right" aria-hidden="true"></i> Retry</button>
+                  </form>
+                  {% endif %}
+                  {% if tx.can_restore %}
+                  <form method="post" action="/transactions/restore">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                    <input type="hidden" name="transaction_id" value="{{ tx._id }}">
+                    <button class="txl-menu__item" type="submit"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i> Restore</button>
+                  </form>
+                  {% endif %}
+                  {% if tx.can_modify %}
+                  <form method="post" action="/transactions/delete" onsubmit="return confirm('Delete this transaction?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                    <input type="hidden" name="transaction_id" value="{{ tx._id }}">
+                    <button class="txl-menu__item is-danger" type="submit"><i class="fa-solid fa-trash" aria-hidden="true"></i> Delete</button>
+                  </form>
+                  {% endif %}
+                  {% if not tx.has_actions %}
+                  <div class="txl-menu__empty">No actions available</div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      {% endfor %}
+    </table>
+  </div>
+  {% else %}
+  <div class="txl-empty">
+    <p>No transactions match these filters.</p>
+    <a class="ft-btn ft-btn--primary" href="/transactions/add">Add transaction</a>
+  </div>
+  {% endif %}
+</section>
+
+<dialog class="txl-dialog" data-tx-edit-dialog>
+  <form method="post" action="/transactions/edit" class="txl-dialog__card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+    <input type="hidden" name="transaction_id" data-edit-id>
+    <input type="hidden" name="category_code" data-edit-category>
+    <input type="hidden" name="subcategory_code" data-edit-subcategory>
+    <header class="txl-dialog__head">
+      <h3>Edit transaction</h3>
+      <button type="button" class="txl-dialog__close" data-dialog-close aria-label="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+    </header>
+    <div class="txl-dialog__body">
+      <div class="ft-field">
+        <label for="edit_account_id">Account</label>
+        <select class="ft-select" id="edit_account_id" name="account_id" data-edit-account required>
+          {% for acc in accounts %}
+          <option value="{{ acc._id }}">{{ acc.name or acc.bank_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="ft-field">
+        <label for="edit_amount">Amount</label>
+        <input class="ft-input" id="edit_amount" name="amount" type="number" step="0.01" min="0.01" data-edit-amount required>
+      </div>
+      <div class="ft-field">
+        <label for="edit_description">Description</label>
+        <input class="ft-input" id="edit_description" name="description" data-edit-description>
+      </div>
+    </div>
+    <footer class="txl-dialog__foot">
+      <button type="button" class="ft-btn ft-btn--ghost" data-dialog-close>Cancel</button>
+      <button type="submit" class="ft-btn ft-btn--primary">Save changes</button>
+    </footer>
+  </form>
+</dialog>
+
+<dialog class="txl-dialog" data-tx-emi-dialog>
+  <form method="post" action="/transactions/convert-to-emi" class="txl-dialog__card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+    <input type="hidden" name="transaction_id" data-emi-id>
+    <header class="txl-dialog__head">
+      <h3>Convert to EMI</h3>
+      <button type="button" class="txl-dialog__close" data-dialog-close aria-label="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+    </header>
+    <div class="txl-dialog__body">
+      <p class="txl-dialog__hint" data-emi-hint></p>
+      <div class="ft-field">
+        <label for="emi_title">Title</label>
+        <input class="ft-input" id="emi_title" name="emi_title" data-emi-title>
+      </div>
+      <div class="ft-field">
+        <label for="emi_tenure_months">Tenure (months)</label>
+        <input class="ft-input" id="emi_tenure_months" name="emi_tenure_months" type="number" min="2" value="6" required>
+      </div>
+      <div class="ft-field">
+        <label for="emi_interest_rate">Interest rate (% p.a.)</label>
+        <input class="ft-input" id="emi_interest_rate" name="emi_interest_rate" type="number" step="0.01" min="0" value="0">
+      </div>
+      <div class="ft-field">
+        <label for="emi_processing_fee_rate">Processing fee (%)</label>
+        <input class="ft-input" id="emi_processing_fee_rate" name="emi_processing_fee_rate" type="number" step="0.01" min="0" value="0">
+      </div>
+    </div>
+    <footer class="txl-dialog__foot">
+      <button type="button" class="ft-btn ft-btn--ghost" data-dialog-close>Cancel</button>
+      <button type="submit" class="ft-btn ft-btn--primary">Convert</button>
+    </footer>
+  </form>
+</dialog>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/transactions_all.js?v={{ FT_APP_VERSION }}" defer></script>
+{% endblock %}

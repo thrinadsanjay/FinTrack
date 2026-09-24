@@ -1,0 +1,80 @@
+{% set health_reasons = (health.reasons or [])[:5] %}
+{% if health.insufficient or health_score is none %}
+  {% set health_label = "Insufficient data" %}
+  {% set health_tone = "insufficient" %}
+{% else %}
+  {% set health_label = (health.band or health_band or "insufficient") | health_label %}
+  {% set health_tone = (health.band or health_band or "insufficient") | lower %}
+{% endif %}
+<article
+  class="dash-panel dash-kpi dash-health-panel dash-club-tile is-health ft-reveal"
+  style="--delay:80ms"
+  data-health-panel
+  data-health-score="{{ health_score if health_score is not none else '' }}"
+  data-health-prev="{{ health.previous_score if health.previous_score is not none else '' }}"
+>
+  <div class="dash-panel__head">
+    <div>
+      <h2>
+        <span class="dash-ico is-health"><i class="fa-solid fa-heart-pulse" aria-hidden="true"></i></span>
+        Financial Health
+      </h2>
+    </div>
+    <a class="dash-link" href="/insights#health" aria-label="View financial health">
+      <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+    </a>
+  </div>
+
+  <button
+    type="button"
+    class="dash-health-orb dash-kpi__value-btn"
+    data-health-orb
+    aria-expanded="false"
+    aria-controls="dash-health-pop"
+    aria-label="Financial Health {{ health_score if health_score is not none else 'unavailable' }}, {{ health_label }}"
+  >
+    <span class="dash-kpi__value" data-health-count>{% if health_score is not none %}{{ health_score }}{% else %}—{% endif %}</span>
+    <em class="dash-kpi__badge is-{{ health_tone }}">{{ health_label }}</em>
+  </button>
+
+  <div class="dash-spark-wrap">
+    <svg class="dash-spark" data-spark="health" role="img" aria-label="Financial health trend"></svg>
+    <div class="dash-tooltip" data-spark-tip hidden></div>
+  </div>
+
+  <div class="dash-health-pop" id="dash-health-pop" data-health-pop hidden role="dialog" aria-label="Financial Health analysis">
+    <div class="dash-health-pop__arrow" aria-hidden="true"></div>
+    <div class="dash-health-pop__head">
+      <strong>
+        <i class="fa-solid fa-heart-pulse" aria-hidden="true"></i>
+        Financial Health
+      </strong>
+      <button type="button" class="dash-health-pop__close" data-health-pop-close aria-label="Close">
+        <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+      </button>
+    </div>
+    <div class="dash-health-pop__score">
+      <b>{% if health_score is not none %}{{ health_score }}{% else %}—{% endif %}</b>
+      <div>
+        <span class="is-{{ health_tone }}">{{ health_label }}</span>
+        {% if health_tone in ['excellent', 'good'] %}
+        <small>You're on track ✨</small>
+        {% elif health_delta is not none %}
+        <small>{% if health_delta >= 0 %}↑ +{{ health_delta }}{% else %}↓ {{ health_delta }}{% endif %} from last month</small>
+        {% endif %}
+      </div>
+    </div>
+    {% if health_reasons %}
+    <ul class="dash-health-pop__reasons">
+      {% for reason in health_reasons %}
+      {% set reason_down = 'declined' in (reason | lower) or 'weakest' in (reason | lower) or 'not enough' in (reason | lower) %}
+      <li class="{% if reason_down %}is-down{% else %}is-up{% endif %}">
+        <i class="fa-solid {% if reason_down %}fa-circle-exclamation{% else %}fa-circle-check{% endif %}" aria-hidden="true"></i>
+        <span>{{ reason }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    <a class="dash-health-pop__link" href="/insights#health">View full analysis <span aria-hidden="true">→</span></a>
+  </div>
+</article>

@@ -1,0 +1,97 @@
+{% extends "base/base.html" %}
+{% block title %}Automations · {{ FT_APP_NAME }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/pages/planning.css?v={{ FT_APP_VERSION }}-head1">
+{% endblock %}
+{% block content %}
+<section class="pln" data-automations-page>
+  <header class="pln-hero">
+    <div>
+      <h1>Financial rules</h1>
+    </div>
+    <button class="ft-btn ft-btn--primary" type="button" data-rule-new>Create rule</button>
+  </header>
+
+  <div data-rule-list>
+    {% for rule in rules %}
+    <article class="pln-panel ft-rule" data-rule-id="{{ rule.id }}">
+      <div class="pln-row" style="border:0">
+        <div>
+          <h2 style="margin:0;font-size:1.02rem">{{ rule.name }}</h2>
+          <div class="pln-muted">
+            {% for c in rule.conditions %}{{ c.type | replace('_', ' ') }} {{ c.value or c.account_id or '' }}{% if not loop.last %} · {% endif %}{% endfor %}
+          </div>
+          <div class="pln-copy">→
+            {% for a in rule.actions %}{{ a.type | replace('_', ' ') }}{% if a.name or a.code %} {{ a.name or a.code }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}
+          </div>
+        </div>
+        <label class="ft-rule-toggle">
+          <input type="checkbox" data-rule-toggle {% if rule.enabled %}checked{% endif %}>
+          <span>{{ 'ON' if rule.enabled else 'OFF' }}</span>
+        </label>
+      </div>
+      <div class="pln-actions">
+        <button class="ft-btn ft-btn--ghost ft-btn--sm" type="button" data-rule-edit>Edit</button>
+        <button class="ft-btn ft-btn--ghost ft-btn--sm" type="button" data-rule-history>History</button>
+        <button class="ft-btn ft-btn--ghost ft-btn--sm" type="button" data-rule-delete>Delete</button>
+      </div>
+    </article>
+    {% else %}
+    <article class="pln-panel"><p class="pln-empty">No automations yet. Create a rule such as “merchant contains Swiggy → Food”.</p></article>
+    {% endfor %}
+  </div>
+
+  <article class="pln-panel">
+    <h2>Execution history</h2>
+    {% for run in runs %}
+    <div class="pln-row">
+      <span>{{ run.rule_name }} · {{ run.event_type }} · {{ run.status }}</span>
+      <strong>{% if run.created_at %}{{ run.created_at | datetimeformat }}{% endif %}</strong>
+    </div>
+    {% else %}
+    <p class="pln-empty">Runs appear after a matching transaction or account snapshot.</p>
+    {% endfor %}
+  </article>
+
+  <dialog class="ft-rule-dialog" data-rule-dialog>
+    <form method="dialog" class="pln-form" data-rule-form>
+      <h2 data-rule-dialog-title>Create rule</h2>
+      <input type="hidden" data-rule-id-field>
+      <label class="pln-span">Name<input class="ft-input" data-rule-name required maxlength="120" placeholder="Swiggy categorization"></label>
+      <label>Priority<input class="ft-input" type="number" data-rule-priority value="0"></label>
+      <label class="pln-span">When
+        <select class="ft-select" data-rule-cond-type>
+          <option value="merchant_contains">Merchant contains</option>
+          <option value="amount_gte">Amount ≥</option>
+          <option value="amount_lte">Amount ≤</option>
+          <option value="balance_lt">Balance &lt;</option>
+          <option value="utilization_gt">Credit utilization &gt;</option>
+          <option value="salary_received">Salary received</option>
+          <option value="tx_type">Transaction type</option>
+          <option value="due_within_days">Due within days</option>
+        </select>
+      </label>
+      <label class="pln-span">Value<input class="ft-input" data-rule-cond-value placeholder="Swiggy"></label>
+      <label class="pln-span">Then
+        <select class="ft-select" data-rule-act-type>
+          <option value="set_category">Set category</option>
+          <option value="set_subcategory">Set subcategory</option>
+          <option value="notify">Create notification</option>
+          <option value="telegram_notify">Telegram notification</option>
+          <option value="mark_review">Mark for review</option>
+          <option value="add_insight">Add insight</option>
+          <option value="goal_allocation_hint">Goal allocation suggestion</option>
+        </select>
+      </label>
+      <label class="pln-span">Action detail<input class="ft-input" data-rule-act-value placeholder="Food / Delivery or message"></label>
+      <div class="pln-span pln-actions">
+        <button class="ft-btn ft-btn--primary" type="submit">Save</button>
+        <button class="ft-btn ft-btn--ghost" type="button" data-rule-cancel>Cancel</button>
+      </div>
+    </form>
+  </dialog>
+</section>
+{% endblock %}
+{% block extra_js %}
+<script src="/static/js/automations.js?v={{ FT_APP_VERSION }}-burnt" defer></script>
+{% endblock %}

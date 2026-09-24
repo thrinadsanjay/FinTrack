@@ -1,0 +1,19 @@
+# Opt-in: run MongoDB with TLS using the mounted certs + db/config/mongod.conf.
+#
+#   docker compose -f compose.yml -f compose.tls.yml up -d
+#
+# Then switch clients to TLS in .env:
+#   FT_MONGO_URI=mongodb://mongodb:27017/?tls=true&tlsCAFile=/certs/ca.pem&tlsCertificateKeyFile=/certs/client-cert.pem
+#   ME_CONFIG_MONGODB_URL / ME_CONFIG_MONGODB_SSL* for mongo-express (see docker/env_temp)
+#
+# Certificates must be valid for the hostname "mongodb".
+services:
+  mongo:
+    command: ["mongod", "--config", "/etc/mongo/mongod.conf"]
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          mongosh --quiet --tls --tlsCAFile /certs/ca.pem
+          --tlsCertificateKeyFile /certs/client-cert.pem
+          --eval 'db.adminCommand({ ping: 1 }).ok' mongodb:27017/admin | grep 1 >/dev/null

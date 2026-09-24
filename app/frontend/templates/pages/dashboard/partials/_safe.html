@@ -1,0 +1,16 @@
+<a class="dash-panel dash-kpi dash-club-tile is-safe ft-reveal" style="--delay:110ms" href="/planning/safe-to-spend">
+  <div class="dash-panel__head">
+    <div>
+      <h2>
+        <span class="dash-ico is-safe"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i></span>
+        Safe to Spend
+      </h2>
+    </div>
+    <i class="fa-solid fa-chevron-right dash-kpi__go" aria-hidden="true"></i>
+  </div>
+  <div class="dash-kpi__value ft-money {% if (safe.amount or 0) <= 0 %}is-negative{% endif %}" data-countup="{{ safe.amount or 0 }}">₹ {{ (safe.amount or 0) | money }}</div>
+  <div class="dash-spark-wrap">
+    <svg class="dash-spark" data-spark="safe" aria-label="Safe to spend trend"></svg>
+    <div class="dash-tooltip" data-spark-tip hidden></div>
+  </div>
+</a>

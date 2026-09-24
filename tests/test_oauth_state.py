@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import AsyncMock, patch
 from urllib.parse import urlparse, parse_qs
 
 from starlette.requests import Request
@@ -24,7 +25,16 @@ def _make_request() -> Request:
     return Request(scope)
 
 
+_AUTH_STATE = {"oauth_enabled": True, "client_id": "test-client-id", "client_secret": "test-secret"}
+
+
 class TestOAuthState(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        # Keep these unit tests off the database: admin settings are stubbed.
+        patcher = patch("app.web.auth._auth_settings_state", new=AsyncMock(return_value=_AUTH_STATE))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     async def test_login_oauth_sets_state_and_redirect_contains_it(self):
         request = _make_request()
         response = await login_oauth(request)

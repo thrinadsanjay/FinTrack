@@ -1,0 +1,28 @@
+{% set current_view = tx_view or 'list' %}
+{% set preferred_view = tx_preferred_view or 'list' %}
+{% set other_view = 'board' if current_view == 'list' else 'list' %}
+<div class="tx-view-tools">
+  <a
+    class="tx-view-switch {% if current_view == 'board' %}is-board{% endif %}"
+    href="/transactions/list?view={{ other_view }}"
+    aria-label="Switch to {{ 'board' if current_view == 'list' else 'list' }} view"
+    title="{{ 'Board view' if current_view == 'list' else 'List view' }}"
+  >
+    <span class="tx-view-switch__thumb" aria-hidden="true"></span>
+    <i class="fa-solid fa-list" aria-hidden="true"></i>
+    <i class="fa-solid fa-columns" aria-hidden="true"></i>
+  </a>
+  {% if current_view == preferred_view %}
+  <span class="tx-view-star is-on" title="Default view" aria-label="Default view">
+    <i class="fa-solid fa-star" aria-hidden="true"></i>
+  </span>
+  {% else %}
+  <form method="post" action="/transactions/preferred-view" class="tx-view-star__form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+    <input type="hidden" name="view" value="{{ current_view }}">
+    <button type="submit" class="tx-view-star" title="Make this the default view" aria-label="Make this the default view">
+      <i class="fa-regular fa-star" aria-hidden="true"></i>
+    </button>
+  </form>
+  {% endif %}
+</div>

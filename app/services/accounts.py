@@ -21,7 +21,13 @@ from fastapi import HTTPException, Request
 from app.db.mongo import db
 from app.services.audit import audit_log
 from app.helpers.money import round_money
+from app.helpers.notification_payloads import (
+    account_created_payload,
+    account_deleted_payload,
+    account_updated_payload,
+)
 from app.core.errors import NotFoundError, ConflictError, ValidationError
+from app.services.notifications import upsert_notification
 
 
 # ======================================================
@@ -34,6 +40,17 @@ def _now():
 
 def normalize_amount(value: float) -> float:
     return round_money(value)
+
+
+def normalize_last4(value: str | None) -> str | None:
+    if value is None:
+        return None
+    digits = "".join(ch for ch in str(value) if ch.isdigit())
+    if not digits:
+        return None
+    if len(digits) != 4:
+        raise ValidationError("Last 4 digits must be exactly 4 numbers")
+    return digits
 
 
 def _normalize_optional_amount(value: float | None) -> float | None:
@@ -148,9 +165,19 @@ async def create_account(
     due_day: int | None = None,
     bill_generation_date: date | datetime | None = None,
     payment_due_date: date | datetime | None = None,
+    original_principal: float | None = None,
+    interest_rate: float | None = None,
+    emi_amount: float | None = None,
+    emi_day: int | None = None,
+    tenure_months: int | None = None,
+    start_date: date | None = None,
+    last4: str | None = None,
+    loan_kind: str | None = None,
     request: Request | None = None,
 ):
     balance = normalize_amount(balance)
+    if acc_type == "loan":
+        balance = abs(balance)
 
     doc = {
         "user_id": ObjectId(user_id),
@@ -158,6 +185,7 @@ async def create_account(
         "bank_name": bank_name,
         "type": acc_type,
         "balance": balance,
+        "last4": normalize_last4(last4),
         "created_at": _now(),
         "updated_at": _now(),
         "deleted_at": None,
@@ -176,6 +204,22 @@ async def create_account(
             payment_due_date=payment_due_date,
         )
     )
+    if acc_type == "loan":
+        from app.helpers.accounts_ui import normalize_loan_kind
+        from app.services.loans import loan_fields
+
+        doc["loan_kind"] = normalize_loan_kind(loan_kind, name=doc.get("name"))
+        doc.update(
+            loan_fields(
+                outstanding=balance,
+                original_principal=original_principal,
+                interest_rate=interest_rate,
+                emi_amount=emi_amount,
+                emi_day=emi_day,
+                tenure_months=tenure_months,
+                start_date=start_date,
+            )
+        )
 
     try:
         result = await db.accounts.insert_one(doc)
@@ -211,6 +255,15 @@ async def create_account(
         },
     )
 
+    await upsert_notification(
+        user_id=ObjectId(user_id),
+        **account_created_payload(
+            account_id=str(result.inserted_id),
+            name=doc.get("name") or bank_name,
+            acc_type=acc_type,
+        ),
+    )
+
     return result.inserted_id
 
 
@@ -218,11 +271,18 @@ async def create_account(
 # UPDATE (NAME ONLY)
 # ======================================================
 
+_BANK_TYPES = {"savings", "current", "wallet", "cash", "investment", "other"}
+
+
 async def update_account_name(
     *,
     user_id: str,
     account_id: str,
     name: str,
+    last4: str | None = None,
+    bank_name: str | None = None,
+    acc_type: str | None = None,
+    balance: float | None = None,
     request: Request | None = None,
 ):
     account_oid = ObjectId(account_id)
@@ -233,10 +293,25 @@ async def update_account_name(
     )
     if not account:
         raise NotFoundError("Account not found or access denied")
+    if account.get("type") in {"credit_card", "loan"}:
+        raise ValidationError("Use the card or loan editor for this account")
+
+    updates = {"name": name.strip(), "updated_at": _now()}
+    if last4 is not None:
+        updates["last4"] = normalize_last4(last4)
+    if bank_name is not None and bank_name.strip():
+        updates["bank_name"] = bank_name.strip()
+    if acc_type:
+        key = acc_type.strip().lower()
+        if key not in _BANK_TYPES:
+            raise ValidationError("Choose a bank, wallet, cash, or investment type")
+        updates["type"] = key
+    if balance is not None:
+        updates["balance"] = normalize_amount(balance)
 
     await db.accounts.update_one(
         {"_id": account_oid},
-        {"$set": {"name": name, "updated_at": _now()}}
+        {"$set": updates}
     )
 
     await audit_log(
@@ -246,8 +321,20 @@ async def update_account_name(
         meta={
             "account_id": str(account_oid),
             "old_name": account["name"],
-            "new_name": name,
+            "new_name": updates["name"],
+            "last4": updates.get("last4", account.get("last4")),
+            "bank_name": updates.get("bank_name", account.get("bank_name")),
+            "type": updates.get("type", account.get("type")),
         },
+    )
+
+    await upsert_notification(
+        user_id=user_oid,
+        **account_updated_payload(
+            account_id=str(account_oid),
+            stamp=_now().strftime("%Y%m%d%H%M%S"),
+            name=updates["name"],
+        ),
     )
 
 
@@ -303,6 +390,10 @@ async def update_credit_card_settings(
     due_day: int | None,
     bill_generation_date: date | datetime | None,
     payment_due_date: date | datetime | None,
+    last4: str | None = None,
+    name: str | None = None,
+    bank_name: str | None = None,
+    outstanding: float | None = None,
     request: Request | None = None,
 ):
     account_oid = ObjectId(account_id)
@@ -328,6 +419,14 @@ async def update_credit_card_settings(
         "payment_due_date": _normalize_optional_due_date(payment_due_date),
         "updated_at": _now(),
     }
+    if last4 is not None:
+        updates["last4"] = normalize_last4(last4)
+    if name is not None and name.strip():
+        updates["name"] = name.strip()
+    if bank_name is not None and bank_name.strip():
+        updates["bank_name"] = bank_name.strip()
+    if outstanding is not None:
+        updates["balance"] = -abs(normalize_amount(outstanding))
 
     await db.accounts.update_one({"_id": account_oid}, {"$set": updates})
 
@@ -567,4 +666,13 @@ async def delete_account(
             "account_type": account["type"],
             "balance_at_delete": account["balance"],
         },
+    )
+
+    await upsert_notification(
+        user_id=user_oid,
+        **account_deleted_payload(
+            account_id=str(account_oid),
+            stamp=_now().strftime("%Y%m%d%H%M%S"),
+            name=account.get("name") or "Account",
+        ),
     )

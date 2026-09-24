@@ -15,11 +15,13 @@ Logout user based on auth provider:
 import urllib.parse
 import secrets
 import re
+import logging
 from datetime import datetime, timedelta, timezone
 
 from bson import ObjectId
 from fastapi import APIRouter, Request, Form, HTTPException
 from fastapi.responses import RedirectResponse, HTMLResponse, JSONResponse
+import httpx
 
 from app.core.config import settings
 from app.core.csrf import verify_csrf_token
@@ -31,6 +33,7 @@ from app.services.auth import (
     reset_user_password,
 )
 from app.services.audit import audit_log
+from app.services.sessions import record_login_session, revoke_current_session
 from app.services.admin_settings import get_admin_settings
 from app.services.metrics import (
     mark_user_logged_in,
@@ -52,6 +55,7 @@ from app.helpers.phone import (
 from app.web.templates import templates
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 PASSKEY_LOGIN_SESSION_KEY = "passkey_login_pending"
 PASSKEY_REAUTH_SESSION_KEY = "passkey_reauth_pending"
 PASSKEY_CHALLENGE_TTL_SECONDS = 5 * 60
@@ -60,6 +64,13 @@ TELEGRAM_LOGIN_OTP_TTL_MINUTES = 10
 TELEGRAM_LOGIN_OTP_MAX_ATTEMPTS = 3
 TELEGRAM_LOGIN_PHONE_REGEX = re.compile(r"^\+?[0-9]{8,15}$")
 TELEGRAM_LOGIN_OTP_REGEX = re.compile(r"^\d{6}$")
+
+
+def _is_mobile_device(request: Request) -> bool:
+    """Detect if request is from a mobile device based on User-Agent"""
+    user_agent = request.headers.get("user-agent", "").lower()
+    mobile_keywords = ["mobile", "android", "iphone", "ipad", "windows phone", "blackberry", "opera mini"]
+    return any(keyword in user_agent for keyword in mobile_keywords)
 
 
 async def _sync_user_metrics_on_login(user_id: str):
@@ -279,7 +290,7 @@ async def login_page(request: Request):
     auth_state = await _auth_settings_state()
     return templates.TemplateResponse(
         request=request,
-        name="login.html",
+        name="pages/auth/login.html",
         context={"request": request, "auth_state": auth_state},
     )
 
@@ -328,6 +339,7 @@ async def local_login(
         return RedirectResponse("/login?auth=failed&error=invalid", status_code=303)
 
     request.session["user"] = _session_user_payload(user)
+    await record_login_session(request, str(user["_id"]), method="password")
     await _sync_user_metrics_on_login(str(user["_id"]))
 
     if user.get("must_reset_password"):
@@ -482,6 +494,7 @@ async def passkey_login_verify(request: Request):
 
     request.session["user"] = _session_user_payload(user)
     request.session.pop(PASSKEY_LOGIN_SESSION_KEY, None)
+    await record_login_session(request, str(user.get("_id")), method="passkey")
 
     await audit_log(
         action="PASSKEY_LOGIN_SUCCESS",
@@ -942,6 +955,7 @@ async def login_telegram_verify_otp(
         return RedirectResponse("/help-support?account=disabled", status_code=303)
 
     request.session["user"] = _session_user_payload(user)
+    await record_login_session(request, str(user.get("_id")), method="telegram")
     await update_last_login(str(user.get("_id")))
     await _sync_user_metrics_on_login(str(user.get("_id")))
 
@@ -980,22 +994,27 @@ async def callback(request: Request, code: str, state: str | None = None):
     client_id = str(auth_state.get("client_id") or settings.FT_GOOGLE_CLIENT_ID).strip()
     client_secret = str(auth_state.get("client_secret") or settings.FT_GOOGLE_CLIENT_SECRET or "").strip()
 
-    async with get_async_http_client() as client:
-        resp = await client.post(
-            token_url,
-            data={
-                "grant_type": "authorization_code",
-                "client_id": client_id,
-                **({"client_secret": client_secret} if client_secret else {}),
-                "code": code,
-                "redirect_uri": callback_uri,
-            },
-        )
-        resp.raise_for_status()
-        token = resp.json()
-        id_token = token.get("id_token")
-        if not id_token:
-            return RedirectResponse("/login?auth=failed&error=oauth_token", status_code=303)
+    try:
+        async with get_async_http_client() as client:
+            resp = await client.post(
+                token_url,
+                data={
+                    "grant_type": "authorization_code",
+                    "client_id": client_id,
+                    **({"client_secret": client_secret} if client_secret else {}),
+                    "code": code,
+                    "redirect_uri": callback_uri,
+                },
+            )
+            resp.raise_for_status()
+            token = resp.json()
+            id_token = token.get("id_token")
+            if not id_token:
+                return RedirectResponse("/login?auth=failed&error=oauth_token", status_code=303)
+    except httpx.HTTPError:
+        logger.exception("OAuth token exchange failed for callback_uri=%s", callback_uri)
+        msg = urllib.parse.quote_plus("Google sign-in could not be completed. Please try again.")
+        return RedirectResponse(f"/login?auth=failed&error=oauth_token_exchange&msg={msg}", status_code=303)
 
     try:
         user = await authenticate_oauth_user(
@@ -1010,6 +1029,7 @@ async def callback(request: Request, code: str, state: str | None = None):
         raise
 
     request.session["user"] = _session_user_payload(user)
+    await record_login_session(request, str(user["_id"]), method="google")
     await _sync_user_metrics_on_login(str(user["_id"]))
 
     return RedirectResponse("/?auth=success", status_code=303)
@@ -1022,7 +1042,7 @@ async def reset_password_page(request: Request):
 
     return templates.TemplateResponse(
         request=request,
-        name="reset_password.html",
+        name="pages/auth/reset_password.html",
         context={"request": request},
     )
 
@@ -1047,7 +1067,7 @@ async def reset_password_submit(
     if password != confirm_password:
         return templates.TemplateResponse(
             request=request,
-            name="reset_password.html",
+            name="pages/auth/reset_password.html",
             context={"request": request, "error": "Passwords do not match"},
         )
 
@@ -1078,7 +1098,7 @@ async def logout(request: Request):
         },
     )
 
-    # ---- Clear session ----
+    await revoke_current_session(request)
     request.session.clear()
     await _sync_user_metrics_on_logout(user_id)
 

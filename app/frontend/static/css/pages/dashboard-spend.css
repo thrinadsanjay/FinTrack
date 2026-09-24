@@ -1,0 +1,221 @@
+/* Isolated Spending by Category panel — donut only */
+
+.dash-panel.dash-spend {
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
+  height: 100%;
+  container-type: inline-size;
+  container-name: spend;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+[data-theme="dark"] .dash-spend {
+  background: var(--ft-elevated);
+}
+
+.dash-spend__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  flex: 0 0 auto;
+  margin-bottom: 10px;
+}
+
+.dash-spend__head h2 {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dash-spend .dash-ico {
+  width: 22px;
+  height: 22px;
+  font-size: 0.68rem;
+}
+
+.dash-spend__head p {
+  margin: 3px 0 0;
+  color: var(--ft-muted);
+  font-size: 0.6875rem;
+}
+
+.dash-spend__period {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--ft-border);
+  background: var(--ft-inset);
+  color: var(--ft-ink-soft);
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.dash-spend__period i {
+  font-size: 0.55rem;
+  opacity: 0.7;
+}
+
+.dash-spend__body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  container-type: size;
+  container-name: spend-body;
+}
+
+.dash-spend__chart {
+  position: relative;
+  width: min(280px, 92%);
+  aspect-ratio: 1;
+  height: auto;
+  max-height: 100%;
+  flex-shrink: 1;
+  cursor: pointer;
+}
+
+@supports (width: 1cqmin) {
+  .dash-spend__chart {
+    width: min(96cqmin, 100%);
+    max-width: 100%;
+  }
+}
+
+.dash-spend__svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.dash-spend__svg circle {
+  fill: none;
+  transform: rotate(-90deg);
+  transform-origin: 70px 70px;
+  transition: opacity 180ms ease, stroke-width 180ms ease;
+}
+
+.dash-spend__center {
+  position: absolute;
+  inset: 18%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  pointer-events: none;
+}
+
+.dash-spend__center span {
+  margin-bottom: 4px;
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ft-faint);
+}
+
+.dash-spend__center strong {
+  font-size: clamp(1rem, 7cqi, 1.2rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  color: var(--ft-ink);
+  font-variant-numeric: tabular-nums;
+  max-width: 100%;
+  white-space: nowrap;
+}
+
+.dash-spend__tip {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 70;
+  min-width: 108px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--ft-border);
+  background: var(--ft-elevated);
+  box-shadow: 0 6px 22px rgba(50, 45, 40, 0.06);
+  pointer-events: none;
+  text-align: center;
+}
+
+.dash-spend__tip[hidden] { display: none; }
+
+.dash-spend__tip strong {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 650;
+  color: var(--ft-ink);
+}
+
+.dash-spend__tip span,
+.dash-spend__tip em {
+  display: block;
+  font-style: normal;
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ft-muted);
+}
+
+.dash-spend__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-height: 0;
+  text-align: center;
+}
+
+.dash-spend__empty strong {
+  color: var(--ft-ink);
+  font-size: 0.86rem;
+  font-weight: 650;
+}
+
+.dash-spend__empty p {
+  margin: 0;
+  max-width: 240px;
+  color: var(--ft-muted);
+  font-size: 0.74rem;
+  line-height: 1.4;
+}
+
+.dash-spend__add {
+  color: var(--ft-accent);
+  font-size: 0.76rem;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.dash-spend__add:hover,
+.dash-spend__add:focus-visible {
+  color: var(--ft-accent-hover);
+}
+
+.dash-spend__add:focus-visible {
+  outline: 2px solid var(--ft-focus);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dash-spend__svg circle {
+    transition: none;
+  }
+}

@@ -1,0 +1,265 @@
+{% extends "base/base.html" %}
+{% block title %}Recurring · {{ FT_APP_NAME }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/pages/transactions-activity.css?v={{ FT_APP_VERSION }}-tx13">
+<link rel="stylesheet" href="/static/css/pages/transactions-recurring.css?v={{ FT_APP_VERSION }}-head3">
+{% endblock %}
+
+{% block content %}
+{% set f = filters or {} %}
+{% set q_type = '&tx_type=' ~ f.tx_type if f.tx_type else '' %}
+{% set q_acc = '&account_id=' ~ f.account_id if f.account_id else '' %}
+{% set q_search = '&search=' ~ f.search|urlencode if f.search else '' %}
+{% set q_rest = (q_type ~ q_acc ~ q_search).lstrip('&') %}
+
+{% macro status_href(value, rest='') -%}
+{%- if value == 'all' -%}
+/recurring{% if rest %}?{{ rest }}{% endif %}
+{%- else -%}
+/recurring?status={{ value }}{% if rest %}&{{ rest }}{% endif %}
+{%- endif -%}
+{%- endmacro %}
+
+{% macro filter_hiddens() %}
+<input type="hidden" name="status" value="{{ (filters.status if filters else 'all') or 'all' }}">
+<input type="hidden" name="tx_type" value="{{ filters.tx_type if filters else '' }}">
+<input type="hidden" name="account_id" value="{{ filters.account_id if filters else '' }}">
+<input type="hidden" name="search" value="{{ filters.search if filters else '' }}">
+{% endmacro %}
+
+<section class="rcr" data-recurring-page {% if edit_rule %}data-open-edit="1"{% endif %} {% if open_add %}data-open-add-on-load="1"{% endif %}>
+  <header class="rcr-hero">
+    <div>
+      <h1>Recurring</h1>
+    </div>
+    <div class="rcr-hero__actions">
+      <button type="button" class="ft-btn ft-btn--primary" data-open-add>
+        <i class="fa-solid fa-plus" aria-hidden="true"></i> New recurring
+      </button>
+    </div>
+  </header>
+
+  {% if error %}
+  <div class="ft-alert ft-alert--error">{{ error }}</div>
+  {% endif %}
+
+  <div class="rcr-kpis" role="list">
+    <a class="rcr-kpi is-active{% if f.status == 'active' %} is-selected{% endif %}" href="{{ status_href('active', q_rest) }}" role="listitem">
+      <span class="rcr-kpi__label">Active</span>
+      <strong class="rcr-kpi__value">{{ stats.active }}</strong>
+      {% if stats.next_due_label %}<span class="rcr-kpi__hint">Next {{ stats.next_due_label }}</span>{% endif %}
+    </a>
+    <div class="rcr-kpi is-soon" role="listitem">
+      <span class="rcr-kpi__label">Due soon</span>
+      <strong class="rcr-kpi__value">{{ stats.due_soon }}</strong>
+      <span class="rcr-kpi__hint">Next 7 days</span>
+    </div>
+    <a class="rcr-kpi is-paused{% if f.status == 'paused' %} is-selected{% endif %}" href="{{ status_href('paused', q_rest) }}" role="listitem">
+      <span class="rcr-kpi__label">Paused</span>
+      <strong class="rcr-kpi__value">{{ stats.paused }}</strong>
+      <span class="rcr-kpi__hint">On hold</span>
+    </a>
+    <a class="rcr-kpi is-ended{% if f.status == 'ended' %} is-selected{% endif %}" href="{{ status_href('ended', q_rest) }}" role="listitem">
+      <span class="rcr-kpi__label">Ended</span>
+      <strong class="rcr-kpi__value">{{ stats.ended }}</strong>
+      <span class="rcr-kpi__hint">Stopped</span>
+    </a>
+    <div class="rcr-kpi is-month" role="listitem">
+      <span class="rcr-kpi__label">This month</span>
+      <strong class="rcr-kpi__value rcr-kpi__money">
+        <span class="is-credit">↑ ₹ {{ stats.month_in | money }}</span>
+        <span class="is-debit">↓ ₹ {{ stats.month_out | money }}</span>
+        <span class="is-transfer">⇄ ₹ {{ stats.month_transfer | money }}</span>
+      </strong>
+      <span class="rcr-kpi__hint">Due soon + this month</span>
+    </div>
+  </div>
+
+  <form method="get" action="/recurring" class="rcr-toolbar">
+    <div class="rcr-toolbar__search">
+      <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+      <input class="ft-input" id="search" name="search" value="{{ f.search or '' }}" placeholder="Search name, account, category…">
+    </div>
+    <select class="ft-select" id="tx_type" name="tx_type" aria-label="Type" onchange="this.form.submit()">
+      <option value="">All types</option>
+      <option value="credit" {% if f.tx_type == 'credit' %}selected{% endif %}>Income</option>
+      <option value="debit" {% if f.tx_type == 'debit' %}selected{% endif %}>Expense</option>
+      <option value="transfer" {% if f.tx_type == 'transfer' %}selected{% endif %}>Transfer</option>
+    </select>
+    <select class="ft-select" id="account_id" name="account_id" aria-label="Account" onchange="this.form.submit()">
+      <option value="">All accounts</option>
+      {% for acc in accounts %}
+      <option value="{{ acc._id }}" {% if f.account_id == acc._id|string %}selected{% endif %}>{{ acc.name or acc.bank_name }}</option>
+      {% endfor %}
+    </select>
+    <input type="hidden" name="status" value="{{ f.status or 'all' }}">
+    <div class="rcr-pills" role="tablist" aria-label="Status">
+      {% for item in [('all','All'),('active','Active'),('paused','Paused'),('ended','Ended')] %}
+      <a class="rcr-pill{% if (f.status or 'all') == item[0] %} is-on{% endif %}" href="{{ status_href(item[0], q_rest) }}">{{ item[1] }}</a>
+      {% endfor %}
+    </div>
+    <button class="ft-btn ft-btn--secondary" type="submit">
+      <i class="fa-solid fa-filter" aria-hidden="true"></i> Filter
+    </button>
+    {% if active_filter_count %}
+    <a class="ft-btn ft-btn--ghost" href="/recurring">Clear</a>
+    {% endif %}
+  </form>
+
+  <div class="rcr-legend" aria-label="Transaction type legend">
+    <span class="rcr-legend__item is-credit">Income</span>
+    <span class="rcr-legend__item is-debit">Expense</span>
+    <span class="rcr-legend__item is-transfer">Transfer</span>
+  </div>
+
+  {% if not rules %}
+  <div class="rcr-empty">
+    <i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i>
+    <p class="rcr-empty__title">No recurring rules in this view</p>
+    <p class="rcr-empty__copy">Create a recurring rule to schedule it here.</p>
+    <button type="button" class="ft-btn ft-btn--primary" data-open-add>New recurring</button>
+  </div>
+  {% else %}
+  <div class="rcr-board">
+    {% for col in columns %}
+    {% if not col.empty or (f.status or 'all') == 'all' %}
+    <section class="rcr-col is-{{ col.tone }}" data-col="{{ col.id }}">
+      <header class="rcr-col__head">
+        <div class="rcr-col__title">
+          <i class="fa-solid {{ col.icon }}" aria-hidden="true"></i>
+          <span>{{ col.title }}</span>
+        </div>
+        <span class="rcr-col__count">{{ col.count }}</span>
+      </header>
+      <div class="rcr-col__body">
+        {% if col.empty %}
+        <div class="rcr-col-empty">{{ col.empty_copy }}</div>
+        {% else %}
+        <ul class="rcr-cards">
+          {% for rule in col.rows %}
+          <li class="rcr-card is-{{ rule.type_key }}{% if rule.is_overdue %} is-overdue{% endif %}{% if rule.status == 'paused' %} is-paused{% endif %}{% if rule.status == 'ended' %} is-ended{% endif %}">
+            <div class="rcr-card__icon" aria-hidden="true">
+              <i class="fa-solid {{ rule.type_icon }}"></i>
+            </div>
+            <div class="rcr-card__main">
+              <div class="rcr-card__topline">
+                <span class="rcr-card__title">{{ rule.display_title }}</span>
+                <span class="rcr-card__amount">{% if rule.type_key == 'credit' %}+{% elif rule.type_key == 'debit' %}−{% endif %}₹ {{ rule.amount | money }}</span>
+              </div>
+              <div class="rcr-card__meta">
+                <span>{{ rule.account_label }}</span>
+                {% if rule.category_label %}<span>{{ rule.category_label }}</span>{% endif %}
+              </div>
+              <div class="rcr-card__tags">
+                <span class="ft-badge {% if rule.status == 'active' %}ft-badge--positive{% elif rule.status == 'paused' %}ft-badge--warning{% endif %}">{{ rule.status }}</span>
+                <span class="ft-badge">{{ rule.type_label }}</span>
+                <span class="ft-badge">{{ rule.frequency_label }}</span>
+                {% if rule.mode_label %}<span class="ft-badge">{{ rule.mode_label }}</span>{% endif %}
+              </div>
+              <div class="rcr-card__due{% if rule.is_overdue %} is-overdue{% endif %}">
+                <i class="fa-solid {% if rule.is_overdue %}fa-triangle-exclamation{% else %}fa-clock{% endif %}" aria-hidden="true"></i>
+                <span>{{ rule.relative_due }}</span>
+                {% if rule.next_date_label %}<span class="rcr-card__due-date">{{ rule.next_date_label }}</span>{% endif %}
+                {% if rule.last_date_label %}<span class="rcr-card__due-date">Last {{ rule.last_date_label }}</span>{% endif %}
+              </div>
+              <div class="rcr-card__actions">
+                {% if rule.status == 'active' %}
+                <form method="post" action="/recurring/pause">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                  <input type="hidden" name="recurring_id" value="{{ rule.id }}">
+                  {{ filter_hiddens() }}
+                  <button class="ft-btn ft-btn--ghost ft-btn--sm" type="submit">Pause</button>
+                </form>
+                {% elif rule.status == 'paused' %}
+                <form method="post" action="/recurring/resume">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                  <input type="hidden" name="recurring_id" value="{{ rule.id }}">
+                  {{ filter_hiddens() }}
+                  <button class="ft-btn ft-btn--ghost ft-btn--sm" type="submit">Resume</button>
+                </form>
+                {% endif %}
+                {% if rule.status != 'ended' %}
+                <button
+                  type="button"
+                  class="ft-btn ft-btn--ghost ft-btn--sm"
+                  data-recurring-edit
+                  data-id="{{ rule.id }}"
+                  data-amount="{{ rule.amount }}"
+                  data-description="{{ rule.description or '' }}"
+                  data-frequency="{{ rule.frequency or 'monthly' }}"
+                  data-end-date="{{ rule.end_date_iso }}"
+                >Edit</button>
+                <form method="post" action="/recurring/end" onsubmit="return confirm('End this recurring rule? It will stop posting new transactions.');">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                  <input type="hidden" name="recurring_id" value="{{ rule.id }}">
+                  {{ filter_hiddens() }}
+                  <button class="ft-btn ft-btn--ghost ft-btn--sm rcr-btn-danger" type="submit">End</button>
+                </form>
+                {% endif %}
+              </div>
+            </div>
+          </li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </div>
+      <footer class="rcr-col__foot">
+        <span class="rcr-sum is-credit" title="Income"><i class="fa-solid fa-arrow-up" aria-hidden="true"></i> ₹ {{ col.income | money }}</span>
+        <span class="rcr-sum is-debit" title="Expense"><i class="fa-solid fa-arrow-down" aria-hidden="true"></i> ₹ {{ col.expense | money }}</span>
+        <span class="rcr-sum is-transfer" title="Transfer"><i class="fa-solid fa-right-left" aria-hidden="true"></i> ₹ {{ col.transfer | money }}</span>
+      </footer>
+    </section>
+    {% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>
+
+<dialog class="rcr-dialog" data-recurring-edit-dialog>
+  <form method="post" action="/recurring/edit" class="rcr-dialog__card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+    <input type="hidden" name="recurring_id" data-edit-id value="{{ edit_rule.id if edit_rule else '' }}">
+    {{ filter_hiddens() }}
+    <header class="rcr-dialog__head">
+      <h3>Edit recurring</h3>
+      <button type="button" class="rcr-dialog__close" data-dialog-close aria-label="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+    </header>
+    <div class="rcr-dialog__body">
+      <p class="rcr-dialog__hint">Amount, description, and schedule can be updated. Category stays with the original rule.</p>
+      <div class="ft-field">
+        <label for="edit_description">Description</label>
+        <input class="ft-input" id="edit_description" name="description" data-edit-description value="{{ edit_rule.description if edit_rule else '' }}">
+      </div>
+      <div class="ft-field">
+        <label for="edit_amount">Amount</label>
+        <input class="ft-input" id="edit_amount" name="amount" type="number" step="0.01" min="0.01" data-edit-amount value="{{ edit_rule.amount if edit_rule else '' }}" required>
+      </div>
+      <div class="ft-field">
+        <label for="edit_frequency">Frequency</label>
+        <select class="ft-select" id="edit_frequency" name="frequency" data-edit-frequency required>
+          {% for value, label in frequency_options %}
+          <option value="{{ value }}" {% if edit_rule and edit_rule.frequency == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="ft-field">
+        <label for="edit_end_date">End date <span class="rcr-optional">(optional)</span></label>
+        <input class="ft-input" id="edit_end_date" name="end_date" type="date" data-edit-end-date value="{{ edit_rule.end_date_iso if edit_rule else '' }}">
+      </div>
+    </div>
+    <footer class="rcr-dialog__foot">
+      <button type="button" class="ft-btn ft-btn--ghost" data-dialog-close>Cancel</button>
+      <button type="submit" class="ft-btn ft-btn--primary">Save changes</button>
+    </footer>
+  </form>
+</dialog>
+
+{% set force_recurring = true %}
+{% include "pages/transactions/_add_drawer.html" %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/transactions.js?v={{ FT_APP_VERSION }}-tx10" defer></script>
+<script src="/static/js/transactions_recurring.js?v={{ FT_APP_VERSION }}-rcr2" defer></script>
+{% endblock %}

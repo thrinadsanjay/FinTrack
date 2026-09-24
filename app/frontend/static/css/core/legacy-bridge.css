@@ -1,0 +1,124 @@
+/* Bridge legacy admin.css variables → FinTrack Burnt Copper tokens */
+:root {
+  --color-primary: var(--ft-accent);
+  --color-primary-strong: var(--ft-accent-hover);
+  --color-surface: var(--ft-raised);
+  --color-surface-strong: var(--ft-surface);
+  --color-surface-muted: var(--ft-inset);
+  --color-border: var(--ft-border);
+  --color-text: var(--ft-ink);
+  --color-muted: var(--ft-muted);
+  --color-shadow: rgba(18, 21, 26, 0.18);
+  --color-danger: var(--ft-negative);
+  --color-success: var(--ft-positive);
+  --color-warning: var(--ft-warning);
+  --color-info: var(--ft-info);
+  --page-sticky-top: var(--ft-shell-header);
+  --page-viewport-offset: calc(var(--ft-shell-header) + 1rem);
+  --radius-md: var(--ft-radius);
+  --radius-lg: var(--ft-radius-lg);
+}
+
+[data-theme="dark"] {
+  --color-shadow: rgba(0, 0, 0, 0.45);
+}
+
+.btn-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 38px;
+  padding: 0 0.9rem;
+  border-radius: var(--ft-radius);
+  border: 1px solid var(--ft-border);
+  background: var(--ft-raised);
+  color: var(--ft-ink);
+  font-weight: 600;
+  font-size: 0.875rem;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.btn-action:hover {
+  border-color: var(--ft-border-strong);
+  background: var(--ft-inset);
+}
+
+.btn-action.ok,
+.btn-action.primary {
+  background: var(--ft-accent);
+  border-color: transparent;
+  color: var(--ft-accent-on, #fff);
+}
+
+.btn-action.warn {
+  background: var(--ft-warning-soft);
+  border-color: transparent;
+  color: var(--ft-warning);
+}
+
+.btn-action.danger {
+  background: var(--ft-negative-soft);
+  border-color: transparent;
+  color: var(--ft-negative);
+}
+
+.btn-icon {
+  width: 38px;
+  padding: 0;
+}
+
+.form-alert {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  padding: 0.75rem 1rem;
+  border-radius: var(--ft-radius);
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+}
+
+.form-alert-error {
+  background: var(--ft-negative-soft);
+  color: var(--ft-negative);
+}
+
+.form-alert-success {
+  background: var(--ft-positive-soft);
+  color: var(--ft-positive);
+}
+
+.form-alert-info {
+  background: var(--ft-info-soft);
+  color: var(--ft-info);
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 0.65rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: var(--ft-inset);
+  color: var(--ft-ink-soft);
+}
+
+.status-pill.up {
+  background: var(--ft-positive-soft);
+  color: var(--ft-positive);
+}
+
+.status-pill.down {
+  background: var(--ft-negative-soft);
+  color: var(--ft-negative);
+}
+
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}

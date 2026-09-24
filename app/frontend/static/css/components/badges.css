@@ -1,0 +1,38 @@
+.ft-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  background: var(--ft-inset);
+  color: var(--ft-ink-soft);
+  border: 1px solid var(--ft-border);
+}
+
+.ft-badge--accent {
+  background: var(--ft-accent-soft);
+  color: var(--ft-accent-ink);
+  border-color: transparent;
+}
+
+.ft-badge--positive {
+  background: var(--ft-positive-soft);
+  color: var(--ft-positive);
+  border-color: transparent;
+}
+
+.ft-badge--negative {
+  background: var(--ft-negative-soft);
+  color: var(--ft-negative);
+  border-color: transparent;
+}
+
+.ft-badge--warning {
+  background: var(--ft-warning-soft);
+  color: var(--ft-warning);
+  border-color: transparent;
+}

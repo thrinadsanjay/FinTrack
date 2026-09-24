@@ -1,0 +1,41 @@
+<article class="dash-panel dash-largest ft-reveal" style="--delay:400ms" aria-labelledby="dash-largest-title">
+  <div class="dash-panel__head">
+    <div>
+      <h2 id="dash-largest-title">
+        <span class="dash-ico"><i class="fa-solid fa-arrow-trend-up" aria-hidden="true"></i></span>
+        Largest movements
+      </h2>
+    </div>
+    <a class="dash-link" href="/transactions/list">View all</a>
+  </div>
+
+  {% if largest_items %}
+  <div class="dash-largest__head" aria-hidden="true">
+    <span>Date</span><span>Description</span><span>Amount</span>
+  </div>
+  <div class="dash-largest__body">
+    {% for tx in largest_items %}
+    {% set tx_when = tx.created_at or tx.transaction_date or tx.date %}
+    {% set tx_cat = tx.category_name or (tx.category.name if tx.category is mapping else none) %}
+    <a class="dash-largest__row" href="/transactions/list">
+      <time datetime="{{ tx_when | dateformat('%Y-%m-%d') if tx_when else '' }}">
+        {{ tx_when | dateformat('%d %b') if tx_when else '—' }}
+      </time>
+      <span>
+        <strong>{{ tx.description or 'Transaction' }}</strong>
+        <small>{{ tx_cat or tx.account_name or 'Account' }}</small>
+      </span>
+      <b class="ft-money{% if tx.type == 'credit' %} is-credit{% endif %}">
+        {% if tx.type == 'credit' %}+{% elif tx.type == 'transfer' %}{% else %}−{% endif %}₹ {{ (tx.amount or 0) | money }}
+      </b>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="dash-largest__empty">
+    <i class="fa-solid fa-circle-check" aria-hidden="true"></i>
+    <strong>No movements this month</strong>
+    <span>Posted transactions will appear here, largest first.</span>
+  </div>
+  {% endif %}
+</article>

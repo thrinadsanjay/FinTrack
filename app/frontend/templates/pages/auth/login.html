@@ -1,0 +1,146 @@
+{% extends "base/auth-base.html" %}
+{% block title %}Sign in · {{ FT_APP_NAME }}{% endblock %}
+
+{% block content %}
+{% set query = request.query_params %}
+{% set auth_cfg = auth_state or {} %}
+{% set login_state = (login_state or query.get('auth') or '')|string %}
+{% set error_code = (login_error or query.get('error') or '')|string %}
+{% set info_message = (login_message or query.get('msg') or query.get('message') or '')|string %}
+{% set telegram_sent = login_state == 'telegram_otp_sent' %}
+{% set local_enabled = auth_cfg.get('local_enabled', True) %}
+{% set oauth_enabled = auth_cfg.get('oauth_enabled', False) %}
+{% set oauth_configured = auth_cfg.get('oauth_configured', False) %}
+{% set google_enabled = auth_cfg.get('google_enabled', False) %}
+{% set telegram_enabled = auth_cfg.get('telegram_enabled', False) %}
+{% set sso_label = auth_cfg.get('sso_label', 'Continue with Google') %}
+{% set oauth_href = '/login/oauth?idp=google' if google_enabled else '/login/oauth' %}
+{% set local_open = local_enabled and (query.get('panel') == 'local' or (not telegram_sent and query.get('panel') != 'telegram')) %}
+{% set telegram_open = telegram_enabled and (telegram_sent or error_code.startswith('telegram_') or query.get('panel') == 'telegram') %}
+{% if not local_open and local_enabled and not telegram_open %}
+  {% set local_open = true %}
+{% endif %}
+{% set phone_country = (query.get('country') or query.get('telegram_country') or auth_cfg.get('default_telegram_country') or 'IN')|upper %}
+{% set phone_local = query.get('phone_local') or query.get('mobile_local') or '' %}
+{% set selected_country_code = phone_country %}
+
+<div class="ft-auth" data-login-page data-login-state="{{ login_state }}" data-login-error="{{ error_code }}">
+  <section class="ft-auth__hero" aria-label="{{ FT_APP_NAME }}">
+    <div class="ft-auth__hero-inner">
+      <div class="ft-auth__brand">
+        <img class="ft-auth__logo" src="/static/icons/FinTracker_exact.svg" alt="">
+      </div>
+      <h1 class="ft-auth__wordmark">{{ FT_APP_NAME }}</h1>
+      <p class="ft-auth__tagline">Your money, clarified — balances, bills, and cashflow in one calm workspace.</p>
+    </div>
+  </section>
+
+  <section class="ft-auth__panel">
+    <div class="ft-auth__card">
+      <h1>Sign in</h1>
+      <p class="ft-muted">Use a configured method to open your finance workspace.</p>
+
+      {% if not oauth_enabled and auth_cfg.get('auth_enabled') and not oauth_configured and not local_enabled and not telegram_enabled %}
+      <div class="ft-alert ft-alert--error" style="margin-bottom: 1rem;">Google sign-in is enabled but no Google client ID is configured.</div>
+      {% endif %}
+
+      {% if error_code %}
+      <div class="ft-alert ft-alert--error" style="margin-bottom: 1rem;">{{ info_message or 'Sign-in failed. Please try again.' }}</div>
+      {% elif info_message %}
+      <div class="ft-alert ft-alert--success" style="margin-bottom: 1rem;">{{ info_message }}</div>
+      {% endif %}
+
+      {% if oauth_enabled %}
+      <div class="ft-auth__oauth">
+        <a class="ft-btn ft-btn--secondary ft-btn--block" href="{{ oauth_href }}">
+          <img src="/static/icons/google.svg" alt="" width="18" height="18">
+          {{ sso_label }}
+        </a>
+      </div>
+      {% if local_enabled or telegram_enabled %}
+      <div class="ft-auth__divider">or</div>
+      {% endif %}
+      {% endif %}
+
+      {% if local_enabled or telegram_enabled %}
+        {% if local_enabled and telegram_enabled %}
+        <div class="ft-auth__switcher" role="tablist" aria-label="Sign-in methods">
+          <button type="button" class="{% if local_open %}is-active{% endif %}" data-local-toggle aria-selected="{{ 'true' if local_open else 'false' }}">Password</button>
+          <button type="button" class="{% if telegram_open %}is-active{% endif %}" data-telegram-open aria-selected="{{ 'true' if telegram_open else 'false' }}">Telegram</button>
+        </div>
+        {% endif %}
+
+        {% if local_enabled %}
+        <div data-local-panel {% if local_enabled and telegram_enabled and not local_open %}hidden{% endif %}>
+          <form method="post" action="/login/local" class="ft-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+            <div class="ft-field">
+              <label for="username">Username</label>
+              <input class="ft-input" id="username" name="username" type="text" autocomplete="username" placeholder="Your username" value="{{ request.query_params.get('username', '') }}" required>
+            </div>
+            <div class="ft-field">
+              <label for="password">Password</label>
+              <div class="ft-password">
+                <input class="ft-input" id="password" name="password" type="password" autocomplete="current-password" placeholder="Your password" required>
+                <button type="button" class="ft-icon-btn ft-password__toggle" data-password-toggle aria-label="Show password">
+                  <i class="fa-regular fa-eye" aria-hidden="true"></i>
+                </button>
+              </div>
+            </div>
+            <button class="ft-btn ft-btn--primary ft-btn--block" type="submit">Sign in</button>
+          </form>
+          <p class="ft-auth__footer"><a href="/forgot-password">Forgot password?</a></p>
+        </div>
+        {% endif %}
+
+        {% if telegram_enabled %}
+        <div data-telegram-panel {% if not telegram_open %}hidden{% endif %}>
+          {% if telegram_sent %}
+          <form method="post" action="/login/telegram/verify-otp" class="ft-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+            <input type="hidden" name="country" value="{{ phone_country }}">
+            <input type="hidden" name="phone_local" value="{{ phone_local }}">
+            <div class="ft-field">
+              <label for="otp">One-time code</label>
+              <input class="ft-input" id="otp" name="otp" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code" required>
+            </div>
+            <button class="ft-btn ft-btn--primary ft-btn--block" type="submit">Verify &amp; sign in</button>
+          </form>
+          {% else %}
+          <form method="post" action="/login/telegram/send-otp" class="ft-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+            <div class="ft-field">
+              <label for="telegram_country">Country</label>
+              <select class="ft-select" id="telegram_country" name="country">
+                {% include "pages/auth/partials/phone_country_options.html" %}
+              </select>
+            </div>
+            <div class="ft-field">
+              <label for="phone_local">Mobile number</label>
+              <input class="ft-input" id="phone_local" name="phone_local" type="tel" autocomplete="tel-national" placeholder="Mobile number" value="{{ phone_local }}" required>
+            </div>
+            <button class="ft-btn ft-btn--primary ft-btn--block" type="submit">Send code via Telegram</button>
+          </form>
+          {% endif %}
+        </div>
+        {% endif %}
+      {% endif %}
+
+      <div style="margin-top: 1.25rem; display: flex; justify-content: center;">
+        <button type="button" class="ft-btn ft-btn--ghost ft-btn--sm" data-passkey-login>
+          <i class="fa-solid fa-fingerprint" aria-hidden="true"></i>
+          Use passkey
+        </button>
+      </div>
+
+      <p class="ft-auth__footer">
+        Need help? <a href="/help-support">Contact support</a>
+      </p>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/login.js?v={{ FT_APP_VERSION }}" defer></script>
+{% endblock %}

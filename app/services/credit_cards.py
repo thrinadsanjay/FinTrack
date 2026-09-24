@@ -745,6 +745,8 @@ async def update_bill(*, user_id: str, card_id: str, bill_id: str, payload: Any,
         updates["minimum_due"] = _normalize_amount(payload.minimum_due)
     elif payload.final_amount is not None:
         updates["minimum_due"] = calculate_minimum_due(final_amount=final_amount)
+    if getattr(payload, "due_date", None) is not None:
+        updates["due_date"] = _to_utc(getattr(payload, "due_date"))
     if payload.note is not None:
         updates["note"] = payload.note.strip()
 

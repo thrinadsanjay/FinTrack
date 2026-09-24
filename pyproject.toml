@@ -1,0 +1,17 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = [
+    # Starlette's TestClient on Python 3.12+ (upstream deprecation, not ours).
+    "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+extend-exclude = ["archive"]
+
+[tool.ruff.lint]
+# Correctness-only gate: pyflakes (undefined names, unused imports/vars) and syntax errors.
+# Widen gradually (e.g. "B", "ASYNC") once the codebase is clean for them.
+select = ["F", "E9"]

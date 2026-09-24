@@ -1,0 +1,110 @@
+.ft-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ft-space-2);
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  font-weight: 600;
+  font-size: 0.875rem;
+  letter-spacing: -0.01em;
+  transition:
+    background var(--ft-duration) var(--ft-ease),
+    border-color var(--ft-duration) var(--ft-ease),
+    color var(--ft-duration) var(--ft-ease),
+    box-shadow var(--ft-duration) var(--ft-ease);
+}
+
+.ft-btn:hover {
+  cursor: pointer;
+}
+
+.ft-btn:focus-visible {
+  outline: 2px solid var(--ft-focus);
+  outline-offset: 2px;
+}
+
+.ft-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ft-btn--primary {
+  background: var(--ft-accent);
+  color: var(--ft-accent-on);
+}
+
+.ft-btn--primary:hover {
+  background: var(--ft-accent-hover);
+}
+
+.ft-btn--primary:active {
+  background: var(--ft-accent-active);
+}
+
+.ft-btn--secondary {
+  background: transparent;
+  border-color: var(--ft-border-strong);
+  color: var(--ft-ink);
+}
+
+.ft-btn--secondary:hover {
+  background: var(--ft-hover);
+  border-color: var(--ft-border-strong);
+}
+
+.ft-btn--ghost {
+  background: transparent;
+  color: var(--ft-ink-soft);
+}
+
+.ft-btn--ghost:hover {
+  background: var(--ft-hover);
+  color: var(--ft-ink);
+}
+
+.ft-btn--danger {
+  background: var(--ft-negative);
+  color: #fff;
+}
+
+.ft-btn--danger:hover {
+  filter: brightness(1.05);
+}
+
+.ft-btn--block {
+  width: 100%;
+}
+
+.ft-btn--sm {
+  min-height: 32px;
+  padding: 0 12px;
+  font-size: 0.8125rem;
+}
+
+.ft-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  color: var(--ft-muted);
+  background: transparent;
+  border: 0;
+  transition:
+    background var(--ft-duration) var(--ft-ease),
+    color var(--ft-duration) var(--ft-ease);
+}
+
+.ft-icon-btn:hover {
+  background: var(--ft-hover);
+  color: var(--ft-ink);
+}
+
+.ft-icon-btn:focus-visible {
+  outline: 2px solid var(--ft-focus);
+  outline-offset: 2px;
+}

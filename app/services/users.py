@@ -48,15 +48,24 @@ async def create_local_user(
     *,
     username: str,
     password: str,
-    email: str,
+    email: str | None = None,
+    first_name: str | None = None,
+    last_name: str | None = None,
+    phone: str | None = None,
     is_admin: bool = False,
     must_reset_password: bool = False,
 ):
+    first = str(first_name or "").strip()
+    last = str(last_name or "").strip()
+    email_value = str(email or "").strip()
+    phone_value = str(phone or "").strip()
     user = {
         "username": username,
         "auth_provider": "local",
         "password_hash": hash_password(password),
-        "email": email,
+        "first_name": first,
+        "last_name": last,
+        "full_name": compose_full_name(first, last),
         "is_admin": is_admin,
         "is_active": True,
         "must_reset_password": must_reset_password,
@@ -64,6 +73,10 @@ async def create_local_user(
         "last_login_at": None,
         "deleted_at": None,
     }
+    if email_value:
+        user["email"] = email_value
+    if phone_value:
+        user["phone"] = phone_value
 
     result = await db.users.insert_one(user)
     user["_id"] = result.inserted_id
@@ -71,7 +84,7 @@ async def create_local_user(
     await audit_log(
         action="USER_CREATED_LOCAL",
         user={"user_id": str(result.inserted_id), "username": username},
-        meta={"email": email},
+        meta={"email": email_value or None},
     )
 
     return user
@@ -169,6 +182,16 @@ async def get_user_by_email_any(email: str) -> Optional[dict]:
     return await db.users.find_one({
         **query,
         "deleted_at": None,
+    })
+
+
+async def get_user_by_username_any(username: str) -> Optional[dict]:
+    value = str(username or "").strip()
+    if not value:
+        return None
+    return await db.users.find_one({
+        "deleted_at": None,
+        "username": {"$regex": f"^{re.escape(value)}$", "$options": "i"},
     })
 
 
@@ -302,13 +325,105 @@ async def link_oauth_identity_to_user(
 # PASSWORD RESET
 # ======================================================
 
-async def update_user_password(user_id: str, new_password: str):
+def split_person_name(user_doc: dict | None) -> tuple[str, str]:
+    doc = user_doc or {}
+    first = str(doc.get("first_name") or "").strip()
+    last = str(doc.get("last_name") or "").strip()
+    if first or last:
+        return first, last
+    full = str(doc.get("full_name") or "").strip()
+    if not full:
+        return "", ""
+    parts = full.split(None, 1)
+    return parts[0], (parts[1] if len(parts) > 1 else "")
+
+
+def compose_full_name(first_name: str | None, last_name: str | None) -> str:
+    return " ".join(part for part in [str(first_name or "").strip(), str(last_name or "").strip()] if part)
+
+
+async def get_tx_preferred_view(user_id: str) -> str:
+    if not ObjectId.is_valid(user_id):
+        return "list"
+    doc = await db.users.find_one({"_id": ObjectId(user_id), "deleted_at": None}, {"tx_preferred_view": 1})
+    view = str((doc or {}).get("tx_preferred_view") or "list").strip().lower()
+    return view if view in {"list", "board"} else "list"
+
+
+async def set_tx_preferred_view(user_id: str, view: str) -> str:
+    chosen = str(view or "").strip().lower()
+    if chosen not in {"list", "board"}:
+        raise RuntimeError("Choose List or Board.")
+    if not ObjectId.is_valid(user_id):
+        raise RuntimeError("Invalid user.")
+    await db.users.update_one(
+        {"_id": ObjectId(user_id), "deleted_at": None},
+        {"$set": {"tx_preferred_view": chosen, "updated_at": _now()}},
+    )
+    return chosen
+
+
+async def update_user_account(
+    *,
+    user_id: str,
+    first_name: str | None = None,
+    last_name: str | None = None,
+    email: str | None = None,
+    phone: str | None = None,
+):
+    if not ObjectId.is_valid(user_id):
+        raise RuntimeError("Invalid user.")
+
+    first = str(first_name or "").strip()
+    last = str(last_name or "").strip()
+    email_value = str(email or "").strip()
+    phone_value = str(phone or "").strip()
+    update_set: dict = {
+        "first_name": first,
+        "last_name": last,
+        "full_name": compose_full_name(first, last),
+        "updated_at": _now(),
+    }
+    update_unset: dict = {}
+    if email_value:
+        update_set["email"] = email_value
+    else:
+        update_unset["email"] = ""
+    if phone_value:
+        update_set["phone"] = phone_value
+    else:
+        update_unset["phone"] = ""
+
+    update_op: dict = {"$set": update_set}
+    if update_unset:
+        update_op["$unset"] = update_unset
+
+    result = await db.users.update_one(
+        {"_id": ObjectId(user_id), "deleted_at": None},
+        update_op,
+    )
+    if result.matched_count == 0:
+        raise RuntimeError("User not found.")
+
+    await audit_log(
+        action="USER_ACCOUNT_UPDATED",
+        user={"user_id": user_id},
+        meta={
+            "first_name": first,
+            "last_name": last,
+            "email": email_value or None,
+            "phone": phone_value or None,
+        },
+    )
+
+
+async def update_user_password(user_id: str, new_password: str, *, must_reset_password: bool = False):
     result = await db.users.update_one(
         {"_id": ObjectId(user_id), "deleted_at": None},
         {
             "$set": {
                 "password_hash": hash_password(new_password),
-                "must_reset_password": False,
+                "must_reset_password": must_reset_password,
                 "updated_at": _now(),
             }
         },
@@ -320,6 +435,7 @@ async def update_user_password(user_id: str, new_password: str):
     await audit_log(
         action="USER_PASSWORD_RESET",
         user={"user_id": user_id},
+        meta={"must_reset_password": must_reset_password},
     )
 
 

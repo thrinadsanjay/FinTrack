@@ -1,0 +1,134 @@
+{% extends "base/base.html" %}
+{% block title %}Dashboard · {{ FT_APP_NAME }}{% endblock %}
+
+{% block content %}
+{% set display_name = user.username or user.full_name or "there" %}
+{% set plan = planning or {} %}
+{% set health = plan.health or {} %}
+{% set safe = plan.safe_to_spend or {} %}
+{% set worth = plan.net_worth or {} %}
+{% set cards_stats = plan.credit_cards or {} %}
+{% set cc_visual = (summary.credit_card_summary or {}) %}
+{% set card_list = cc_visual.cards or cards_stats.cards or [] %}
+{% set savings = plan.savings_rate if plan.savings_rate is not none else summary.savings_rate %}
+{% set has_activity = transactions and transactions|length > 0 %}
+{% set hour = now.hour if now else 9 %}
+{% if hour < 12 %}
+  {% set greeting = "Good morning" %}
+{% elif hour < 17 %}
+  {% set greeting = "Good afternoon" %}
+{% elif hour < 21 %}
+  {% set greeting = "Good evening" %}
+{% else %}
+  {% set greeting = "Good night" %}
+{% endif %}
+{% set acc_ns = namespace(accounts=[], rest=0, donut=[], total=0) %}
+{% for acc in summary.account_balances or [] %}
+  {% if acc.type not in ['credit_card', 'loan'] %}
+    {% set acc_ns.accounts = acc_ns.accounts + [acc] %}
+    {% set acc_ns.total = acc_ns.total + (acc.balance or 0) %}
+  {% endif %}
+{% endfor %}
+{% set acc_ns.donut = acc_ns.accounts[:4] %}
+{% if acc_ns.accounts|length > 4 %}
+  {% for acc in acc_ns.accounts[4:] %}
+    {% set _rest = acc.balance or 0 %}
+    {% if _rest > 0 %}
+      {% set acc_ns.rest = acc_ns.rest + _rest %}
+    {% endif %}
+  {% endfor %}
+  {% if acc_ns.rest %}
+    {% set acc_ns.donut = acc_ns.donut + [{"name": "Others", "balance": acc_ns.rest, "type": "other"}] %}
+  {% endif %}
+{% endif %}
+{% set donut_accounts = acc_ns.donut %}
+{% set balance_total = acc_ns.total %}
+{% set spend_cats = summary.top_spending_categories or [] %}
+{% set monthly_ns = namespace(has=false) %}
+{% for row in summary.trend_monthly or [] %}
+  {% if (row.income or 0) or (row.expense or 0) %}
+    {% set monthly_ns.has = true %}
+  {% endif %}
+{% endfor %}
+{% set has_month_flow = (summary.month_income or 0) or (summary.month_expense or 0) %}
+{% set has_cashflow = has_month_flow or monthly_ns.has %}
+{% set cashflow_default = "month" %}
+{% set calendar_events = (plan.calendar.upcoming if plan.calendar else []) or [] %}
+{% set health_score = health.score %}
+{% set health_band = (health.band or '') | lower %}
+{% set health_delta = (health_score - health.previous_score) if (health_score is not none and health.previous_score is not none) else none %}
+{% set net_pct = worth.percent_change %}
+{% set savings_delta = summary.savings_rate_change %}
+{% set account_count = acc_ns.accounts|length %}
+{% set largest_month = now.strftime('%Y-%m') if now else '' %}
+{% set largest_source = summary.largest_transactions or [] %}
+{% set largest_built = namespace(rows=[]) %}
+{% for tx in largest_source %}
+  {% if (tx.amount or 0)|abs > 0 %}
+    {% set largest_built.rows = largest_built.rows + [tx] %}
+  {% endif %}
+{% endfor %}
+{% if not largest_built.rows %}
+  {% for tx in transactions or [] %}
+    {% set tx_stamp = tx.created_at or tx.transaction_date or tx.date %}
+    {% set tx_month = tx_stamp.strftime('%Y-%m') if tx_stamp else '' %}
+    {% if (not largest_month or tx_month == largest_month or not tx_month) and (tx.amount or 0)|abs > 0 %}
+      {% set largest_built.rows = largest_built.rows + [tx] %}
+    {% endif %}
+  {% endfor %}
+{% endif %}
+{% set largest_items = largest_built.rows | sort(attribute='amount', reverse=True) %}
+
+<section
+  class="dash dash-command"
+  data-dashboard
+  data-trend='{{ (summary.trend_daily or []) | tojson }}'
+  data-monthly='{{ (summary.trend_monthly or []) | tojson }}'
+  data-accounts='{{ donut_accounts | tojson }}'
+  data-categories='{{ spend_cats | tojson }}'
+  data-cashflow-default="{{ cashflow_default }}"
+  data-month-income="{{ summary.month_income or 0 }}"
+  data-month-expense="{{ summary.month_expense or 0 }}"
+  data-current-balance="{{ balance_total }}"
+>
+  <section class="dash-command__summary dash-span-12" aria-label="Financial snapshot">
+    {% include "pages/dashboard/partials/_balance.html" %}
+    {% include "pages/dashboard/partials/_kpi_club.html" %}
+  </section>
+
+  <section class="dash-command__flow dash-span-12" aria-label="Cash flow and recent activity">
+    {% include "pages/dashboard/partials/_cashflow.html" %}
+    {% include "pages/dashboard/partials/_activity.html" %}
+  </section>
+
+  <section class="dash-command__insights dash-span-12" aria-label="Accounts and spending insights">
+    {% include "pages/dashboard/partials/_accounts.html" %}
+    {% include "pages/dashboard/partials/_cards.html" %}
+    {% include "pages/dashboard/partials/_spend.html" %}
+    {% include "pages/dashboard/partials/_weekly.html" %}
+  </section>
+
+  <section class="dash-command__planning dash-span-12" aria-label="Planning and large transactions">
+    {% include "pages/dashboard/partials/_calendar.html" %}
+    {% include "pages/dashboard/partials/_forecast.html" %}
+    {% include "pages/dashboard/partials/_largest.html" %}
+  </section>
+</section>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/pages/dashboard-balance.css?v={{ FT_APP_VERSION }}-bal19">
+<link rel="stylesheet" href="/static/css/pages/dashboard-cashflow.css?v={{ FT_APP_VERSION }}-flow6">
+<link rel="stylesheet" href="/static/css/pages/dashboard-cards.css?v={{ FT_APP_VERSION }}-cards11">
+<link rel="stylesheet" href="/static/css/pages/dashboard-spend.css?v={{ FT_APP_VERSION }}-spend13">
+<link rel="stylesheet" href="/static/css/pages/dashboard-calendar.css?v={{ FT_APP_VERSION }}-cal9">
+<link rel="stylesheet" href="/static/css/pages/dashboard-health.css?v={{ FT_APP_VERSION }}-health9">
+<link rel="stylesheet" href="/static/css/pages/dashboard-club.css?v={{ FT_APP_VERSION }}-club12">
+<link rel="stylesheet" href="/static/css/pages/dashboard-shell.css?v={{ FT_APP_VERSION }}-shell2">
+<link rel="stylesheet" href="/static/css/pages/dashboard-float.css?v={{ FT_APP_VERSION }}-float1">
+<link rel="stylesheet" href="/static/css/pages/dashboard-command.css?v={{ FT_APP_VERSION }}-cmd23">
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/dashboard.js?v={{ FT_APP_VERSION }}-dash50" defer></script>
+{% endblock %}

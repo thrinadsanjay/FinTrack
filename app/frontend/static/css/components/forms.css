@@ -1,0 +1,125 @@
+.ft-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ft-space-2);
+}
+
+.ft-field[hidden],
+[hidden] {
+  display: none !important;
+}
+
+.ft-field label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--ft-ink-soft);
+}
+
+.ft-input,
+.ft-select,
+.ft-textarea {
+  width: 100%;
+  min-height: 38px;
+  padding: 0.5rem 0.8rem;
+  border: 1px solid var(--ft-border);
+  border-radius: 10px;
+  background: var(--ft-raised);
+  color: var(--ft-ink);
+  transition:
+    border-color var(--ft-duration) var(--ft-ease),
+    box-shadow var(--ft-duration) var(--ft-ease);
+}
+
+.ft-textarea {
+  min-height: 96px;
+  padding-top: 0.75rem;
+  resize: vertical;
+}
+
+.ft-input::placeholder,
+.ft-textarea::placeholder {
+  color: var(--ft-faint);
+}
+
+.ft-input:focus,
+.ft-select:focus,
+.ft-textarea:focus {
+  border-color: var(--ft-accent);
+  box-shadow: 0 0 0 3px var(--ft-accent-soft);
+  outline: none;
+}
+
+.ft-password {
+  position: relative;
+}
+
+.ft-password .ft-input {
+  padding-right: 2.75rem;
+}
+
+.ft-password__toggle {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.ft-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ft-space-4);
+}
+
+.ft-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ft-space-3);
+  margin-top: var(--ft-space-2);
+}
+
+.ft-date {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  width: 100%;
+  min-width: 10.5rem;
+  max-width: 14rem;
+}
+
+.ft-date__native {
+  position: absolute !important;
+  width: 0 !important;
+  height: 0 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  border: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  clip: rect(0 0 0 0);
+}
+
+.ft-date__display {
+  width: 100%;
+  padding-right: 2.4rem;
+}
+
+.ft-date__picker {
+  position: absolute;
+  top: 50%;
+  right: 0.2rem;
+  transform: translateY(-50%);
+  width: 2rem;
+  height: 2rem;
+  border: 0;
+  background: transparent;
+  color: var(--ft-muted);
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.ft-date__picker:hover {
+  color: var(--ft-accent);
+  background: color-mix(in srgb, var(--ft-accent) 10%, transparent);
+}

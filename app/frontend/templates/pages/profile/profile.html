@@ -1,0 +1,304 @@
+{% extends "base/base.html" %}
+{% block title %}Profile · {{ FT_APP_NAME }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/pages/profile.css?v={{ FT_APP_VERSION }}-head1">
+{% endblock %}
+
+{% block content %}
+{% set display_name = profile.full_name or profile.username or user.username or 'User' %}
+{% set avatar_letter = display_name|first|upper %}
+{% set provider = profile.auth_provider or user.auth_provider or 'local' %}
+
+<section class="prf" data-profile-page>
+  <header class="prf-top">
+    <h1>Profile</h1>
+  </header>
+
+  {% if reset_password_error %}
+  <div class="ft-alert ft-alert--error">{{ reset_password_error }}</div>
+  {% endif %}
+  {% if reset_password_updated %}
+  <div class="ft-alert ft-alert--success">Password updated.</div>
+  {% endif %}
+
+  <article class="prf-banner">
+    <div class="prf-banner__wave" aria-hidden="true"></div>
+    <div class="prf-banner__main">
+      <div class="prf-banner__avatar-wrap">
+        <span class="prf-banner__avatar" aria-hidden="true">{{ avatar_letter }}</span>
+      </div>
+      <div class="prf-banner__info">
+        <div class="prf-banner__name-row">
+          <h2>{{ display_name }}</h2>
+          {% if profile.is_admin %}<span class="ft-badge ft-badge--positive">Administrator</span>{% endif %}
+        </div>
+        {% if profile.email %}<p class="prf-banner__email">{{ profile.email }}</p>{% endif %}
+        <p class="prf-banner__provider">{{ profile.auth_source_label or (provider | title) }}</p>
+      </div>
+    </div>
+    <div class="prf-banner__meta">
+      {% if profile.member_since %}
+      <div>
+        <span class="prf-banner__meta-label"><i class="fa-regular fa-calendar" aria-hidden="true"></i> Member since</span>
+        <strong>{{ profile.member_since | localtime(request) | datetimeformat('%d %b %Y') }}</strong>
+      </div>
+      {% endif %}
+      {% if profile.last_login_at %}
+      <div>
+        <span class="prf-banner__meta-label"><i class="fa-regular fa-clock" aria-hidden="true"></i> Last login</span>
+        <strong>{{ profile.last_login_at | localtime(request) | datetimeformat }}</strong>
+      </div>
+      {% endif %}
+    </div>
+  </article>
+
+  <div class="prf-kpis" id="overview">
+    <a class="prf-kpi" href="/accounts">
+      <span class="prf-kpi__icon is-accounts"><i class="fa-solid fa-wallet" aria-hidden="true"></i></span>
+      <div>
+        <span class="prf-kpi__label">Accounts</span>
+        <strong class="prf-kpi__value">{{ profile.stats.accounts_count }}</strong>
+        <span class="prf-kpi__hint">Total accounts</span>
+      </div>
+    </a>
+    <a class="prf-kpi" href="/transactions/list">
+      <span class="prf-kpi__icon is-tx"><i class="fa-solid fa-right-left" aria-hidden="true"></i></span>
+      <div>
+        <span class="prf-kpi__label">Tx this month</span>
+        <strong class="prf-kpi__value">{{ profile.stats.tx_this_month }}</strong>
+        <span class="prf-kpi__hint">Transactions</span>
+      </div>
+    </a>
+    <a class="prf-kpi" href="/recurring">
+      <span class="prf-kpi__icon is-recurring"><i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i></span>
+      <div>
+        <span class="prf-kpi__label">Recurring</span>
+        <strong class="prf-kpi__value">{{ profile.stats.recurring_active }}</strong>
+        <span class="prf-kpi__hint">Active plans</span>
+      </div>
+    </a>
+    <div class="prf-kpi">
+      <span class="prf-kpi__icon is-alerts"><i class="fa-regular fa-bell" aria-hidden="true"></i></span>
+      <div>
+        <span class="prf-kpi__label">Unread alerts</span>
+        <strong class="prf-kpi__value">{{ profile.stats.unread_notifications }}</strong>
+        <span class="prf-kpi__hint">{% if profile.stats.unread_notifications %}Need review{% else %}No new alerts{% endif %}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="prf-layout">
+    <div class="prf-col">
+      <article class="prf-card">
+        <header class="prf-card__head">
+          <div>
+            <h2>Identity</h2>
+            <p>How FinTracker recognizes your account.</p>
+          </div>
+        </header>
+        <dl class="prf-meta">
+          <div><dt>Username</dt><dd>{{ profile.username or user.username }}</dd></div>
+          <div><dt>Auth provider</dt><dd>{{ provider }}</dd></div>
+          {% if profile.email %}
+          <div><dt>Email</dt><dd><a href="mailto:{{ profile.email }}">{{ profile.email }}</a></dd></div>
+          {% endif %}
+          {% if profile.phone %}<div><dt>Phone</dt><dd>{{ profile.phone }}</dd></div>{% endif %}
+          <div>
+            <dt>Status</dt>
+            <dd>
+              {% if profile.is_active %}<span class="ft-badge ft-badge--positive">Active</span>{% else %}<span class="ft-badge ft-badge--warning">Disabled</span>{% endif %}
+              {% if profile.is_admin %}<span class="ft-badge ft-badge--accent">Admin</span>{% endif %}
+            </dd>
+          </div>
+          {% if profile.member_since %}
+          <div><dt>Member since</dt><dd>{{ profile.member_since | localtime(request) | datetimeformat }}</dd></div>
+          {% endif %}
+          {% if profile.last_login_at %}
+          <div><dt>Last login</dt><dd>{{ profile.last_login_at | localtime(request) | datetimeformat }}</dd></div>
+          {% endif %}
+        </dl>
+      </article>
+
+      <article class="prf-card" id="telegram">
+        <header class="prf-card__head">
+          <div>
+            <h2>Telegram</h2>
+            <p>Link Telegram for OTPs and alerts.</p>
+          </div>
+          {% if profile.telegram_chat_id %}
+          <span class="ft-badge ft-badge--positive">Linked</span>
+          {% elif profile.telegram_enabled %}
+          <span class="ft-badge ft-badge--warning">Not linked</span>
+          {% else %}
+          <span class="ft-badge">Disabled</span>
+          {% endif %}
+        </header>
+
+        {% if profile.telegram_enabled %}
+          {% if profile.telegram_chat_id %}
+          <div class="prf-telegram-linked">
+            <p class="prf-muted">
+              Linked{% if profile.telegram_username %} as <strong>@{{ profile.telegram_username }}</strong>{% endif %}
+              {% if profile.telegram_mobile %} · {{ profile.telegram_mobile }}{% endif %}.
+            </p>
+            <button type="button" class="ft-btn ft-btn--secondary" data-telegram-unlink>Unlink Telegram</button>
+          </div>
+          {% else %}
+          <div class="prf-telegram" data-telegram-link>
+            <ol class="prf-steps">
+              <li>Open {% if profile.telegram_bot_username %}<a href="https://t.me/{{ profile.telegram_bot_username }}" target="_blank" rel="noopener">@{{ profile.telegram_bot_username }}</a>{% else %}your FinTracker bot{% endif %} and send <code>/register</code>.</li>
+              <li>Enter the mobile number used with Telegram, then send OTP.</li>
+              <li>Enter the 6-digit code to finish linking.</li>
+            </ol>
+            <div class="prf-form">
+              <div class="ft-field">
+                <label for="telegram_mobile">Mobile</label>
+                <input class="ft-input" id="telegram_mobile" type="tel" placeholder="+91…" data-telegram-mobile value="{{ profile.telegram_mobile or '' }}">
+              </div>
+              <div class="prf-form__row" data-telegram-otp-row hidden>
+                <div class="ft-field">
+                  <label for="telegram_otp">OTP</label>
+                  <input class="ft-input" id="telegram_otp" type="text" inputmode="numeric" maxlength="6" placeholder="6-digit code" data-telegram-otp>
+                </div>
+                <button type="button" class="ft-btn ft-btn--primary" data-telegram-verify>Verify OTP</button>
+              </div>
+              <div class="prf-telegram-actions">
+                <button type="button" class="ft-btn ft-btn--primary" data-telegram-send>Send OTP</button>
+                {% if profile.telegram_bot_username %}
+                <a class="ft-btn ft-btn--ghost" href="https://t.me/{{ profile.telegram_bot_username }}" target="_blank" rel="noopener" data-telegram-bot>Open bot</a>
+                {% endif %}
+              </div>
+              <p class="prf-hint" data-telegram-status hidden></p>
+            </div>
+          </div>
+          {% endif %}
+        {% else %}
+        <p class="prf-muted">Telegram linking is not enabled on this server yet. An administrator can turn on the Telegram bot under Settings when the bot token is ready.</p>
+        <a class="ft-btn ft-btn--secondary" href="/help-support">
+          <i class="fa-solid fa-gear" aria-hidden="true"></i> Contact support
+        </a>
+        {% endif %}
+      </article>
+    </div>
+
+    <div class="prf-col">
+      <article class="prf-card prf-card--tall" id="security">
+        <header class="prf-card__head">
+          <div>
+            <h2>Security</h2>
+            <p>Password and biometric sign-in.</p>
+          </div>
+        </header>
+
+        <div class="prf-section">
+          <h3>Change password</h3>
+          {% if provider == 'local' %}
+          <form method="post" action="/profile/reset-password" class="prf-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+            <div class="ft-field">
+              <label for="current_password">Current password</label>
+              <div class="prf-input">
+                <i class="fa-solid fa-lock" aria-hidden="true"></i>
+                <input class="ft-input" id="current_password" name="current_password" type="password" autocomplete="current-password" required>
+                <button type="button" class="prf-input__eye" data-toggle-password="current_password" aria-label="Show password"><i class="fa-regular fa-eye" aria-hidden="true"></i></button>
+              </div>
+            </div>
+            <div class="ft-field">
+              <label for="new_password">New password</label>
+              <div class="prf-input">
+                <i class="fa-solid fa-lock" aria-hidden="true"></i>
+                <input class="ft-input" id="new_password" name="new_password" type="password" autocomplete="new-password" minlength="8" required>
+                <button type="button" class="prf-input__eye" data-toggle-password="new_password" aria-label="Show password"><i class="fa-regular fa-eye" aria-hidden="true"></i></button>
+              </div>
+            </div>
+            <div class="ft-field">
+              <label for="confirm_password">Confirm password</label>
+              <div class="prf-input">
+                <i class="fa-solid fa-lock" aria-hidden="true"></i>
+                <input class="ft-input" id="confirm_password" name="confirm_password" type="password" autocomplete="new-password" minlength="8" required>
+                <button type="button" class="prf-input__eye" data-toggle-password="confirm_password" aria-label="Show password"><i class="fa-regular fa-eye" aria-hidden="true"></i></button>
+              </div>
+            </div>
+            <button class="ft-btn ft-btn--primary ft-btn--block" type="submit">Update password</button>
+          </form>
+          {% else %}
+          <p class="prf-muted">Password changes are managed by your OAuth provider.</p>
+          <a class="ft-btn ft-btn--secondary" href="{{ profile.password_reset_url }}" target="_blank" rel="noopener">Open provider security</a>
+          {% endif %}
+        </div>
+
+        <div class="prf-section" data-biometric-controls data-passkey-count="{{ profile.passkey_count }}" data-biometric-enabled="{{ 'true' if profile.biometric_enabled else 'false' }}">
+          <div class="prf-section__row">
+            <div>
+              <h3>Passkeys / biometric</h3>
+              <p class="prf-muted" data-biometric-status-text>
+                {% if profile.passkey_count and profile.biometric_enabled %}
+                  Biometric login is enabled.
+                {% elif profile.passkey_count %}
+                  Passkeys are registered but biometric login is disabled.
+                {% else %}
+                  Not registered — add a passkey before enabling biometric login.
+                {% endif %}
+              </p>
+            </div>
+            <label class="prf-toggle">
+              <input type="checkbox" data-biometric-toggle {% if profile.biometric_enabled %}checked{% endif %} {% if not profile.passkey_count %}disabled{% endif %}>
+              <span class="prf-toggle__track" aria-hidden="true"><span class="prf-toggle__thumb"></span></span>
+              <span class="prf-toggle__label">{% if profile.passkey_count and profile.biometric_enabled %}Enabled{% elif profile.passkey_count %}Disabled{% else %}Not registered{% endif %}</span>
+            </label>
+          </div>
+          <div class="prf-passkey-bar">
+            <span class="ft-badge {% if profile.passkey_count %}ft-badge--positive{% endif %}" data-biometric-count>
+              {{ profile.passkey_count }} passkey{% if profile.passkey_count != 1 %}s{% endif %}
+            </span>
+            <div class="prf-passkey-actions">
+              <button type="button" class="ft-btn ft-btn--secondary ft-btn--sm" data-passkey-register data-passkey-count="{{ profile.passkey_count }}">Add passkey</button>
+              <button type="button" class="ft-btn ft-btn--ghost ft-btn--sm prf-btn-danger" data-biometric-delete-all {% if not profile.passkey_count %}disabled{% endif %}>Remove all</button>
+            </div>
+          </div>
+        </div>
+      </article>
+    </div>
+  </div>
+
+  <article class="prf-card is-danger" id="danger">
+    <header class="prf-card__head">
+      <div class="prf-danger-title">
+        <span class="prf-danger-icon" aria-hidden="true"><i class="fa-solid fa-shield-halved"></i></span>
+        <div>
+          <h2>Danger zone</h2>
+          <p>Disable or soft-delete your FinTracker account.</p>
+        </div>
+      </div>
+    </header>
+    <div class="prf-danger-grid">
+      <div class="prf-danger">
+        <div>
+          <h3>Disable account</h3>
+          <p class="prf-muted">You will be signed out and cannot sign in until an admin reactivates you.</p>
+        </div>
+        <form method="post" action="/profile/account/disable" onsubmit="return confirm('Disable your account?');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+          <button class="ft-btn ft-btn--secondary prf-btn-outline-danger" type="submit">Disable</button>
+        </form>
+      </div>
+      <div class="prf-danger">
+        <div>
+          <h3>Delete account</h3>
+          <p class="prf-muted">Soft-deletes your account. This cannot be undone from the UI.</p>
+        </div>
+        <form method="post" action="/profile/account/delete" onsubmit="return confirm('Soft-delete your account? This cannot be undone from the UI.');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+          <button class="ft-btn ft-btn--danger" type="submit">Delete</button>
+        </form>
+      </div>
+    </div>
+    <p class="prf-muted">Need help instead? <a href="/help-support">Contact support</a>.</p>
+  </article>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/profile.js?v={{ FT_APP_VERSION }}" defer></script>
+{% endblock %}

@@ -21,9 +21,12 @@ def build_transactions_query(
     subcategory_code: str | None = None,
     search: str | None = None,
     amount: float | None = None,
+    account_ids_for_search: list | None = None,
+    tz: ZoneInfo | None = None,
 ) -> dict:
     user_oid = ObjectId(user_id)
     now = datetime.now(timezone.utc)
+    zone = tz or APP_ZONE
 
     query: dict = {
         "user_id": user_oid,
@@ -59,29 +62,40 @@ def build_transactions_query(
         query["subcategory.code"] = subcategory_code
     if amount is not None:
         query["amount"] = amount
+
     if search:
-        query["description"] = {"$regex": re.escape(search), "$options": "i"}
+        search_or: list[dict] = [
+            {"description": {"$regex": re.escape(search), "$options": "i"}},
+        ]
+        normalized = search.replace(",", "").strip()
+        try:
+            search_or.append({"amount": float(normalized)})
+        except ValueError:
+            pass
+        if account_ids_for_search:
+            search_or.append({"account_id": {"$in": list(account_ids_for_search)}})
+        query["$and"].append({"$or": search_or})
 
     if date_from or date_to:
         created_at_filter: dict = {}
         if date_from:
-            local_start = datetime.fromisoformat(date_from).replace(
-                hour=0,
-                minute=0,
-                second=0,
-                microsecond=0,
-                tzinfo=APP_ZONE,
-            )
-            created_at_filter["$gte"] = local_start.astimezone(timezone.utc)
+            from app.core.time import parse_user_date
+
+            start_day = parse_user_date(date_from)
+            if start_day:
+                local_start = datetime(
+                    start_day.year, start_day.month, start_day.day, 0, 0, 0, 0, tzinfo=zone
+                )
+                created_at_filter["$gte"] = local_start.astimezone(timezone.utc)
         if date_to:
-            local_end = datetime.fromisoformat(date_to).replace(
-                hour=23,
-                minute=59,
-                second=59,
-                microsecond=999999,
-                tzinfo=APP_ZONE,
-            )
-            created_at_filter["$lte"] = local_end.astimezone(timezone.utc)
+            from app.core.time import parse_user_date
+
+            end_day = parse_user_date(date_to)
+            if end_day:
+                local_end = datetime(
+                    end_day.year, end_day.month, end_day.day, 23, 59, 59, 999999, tzinfo=zone
+                )
+                created_at_filter["$lte"] = local_end.astimezone(timezone.utc)
         query["created_at"] = created_at_filter
 
     return query

@@ -1,0 +1,23 @@
+<header class="dash-top dash-span-12 ft-reveal" style="--delay:0ms">
+  <div class="dash-greet">
+    <p class="dash-eyebrow">Live snapshot</p>
+    <h1><span data-greeting>{{ greeting }}</span>, {{ display_name }} <span aria-hidden="true">👋</span></h1>
+    <p>
+      {% if account_count == 0 %}
+        Add an account to start your live snapshot.
+      {% elif not has_activity %}
+        Add a few transactions to bring this snapshot to life.
+      {% else %}
+        Here’s your latest snapshot for today.
+      {% endif %}
+    </p>
+  </div>
+  <div class="dash-top__aside">
+    <a class="ft-btn ft-btn--primary" href="/transactions/add">
+      <i class="fa-solid fa-plus" aria-hidden="true"></i> New Transaction
+    </a>
+    <a class="ft-btn ft-btn--secondary" href="/transaction-inbox">
+      <i class="fa-solid fa-inbox" aria-hidden="true"></i> Inbox
+    </a>
+  </div>
+</header>

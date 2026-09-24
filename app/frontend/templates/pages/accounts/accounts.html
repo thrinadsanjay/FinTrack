@@ -1,0 +1,601 @@
+{% extends "base/base.html" %}
+{% block title %}Accounts · {{ FT_APP_NAME }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/pages/accounts.css?v={{ FT_APP_VERSION }}-hold14">
+{% endblock %}
+
+{% block content %}
+{% set created = request.query_params.get('created') %}
+{% set created_balance = request.query_params.get('balance') %}
+{% set created_kind = request.query_params.get('kind') %}
+{% set kpis = kpis or {} %}
+{% set rows = holdings or [] %}
+{% set loan_kind_options = loan_kinds or [
+  ('home', 'Home Loan', 'fa-house-chimney'),
+  ('personal', 'Personal Loan', 'fa-user'),
+  ('auto', 'Auto Loan', 'fa-car'),
+  ('two_wheeler', 'Two-wheeler Loan', 'fa-motorcycle'),
+  ('education', 'Education Loan', 'fa-graduation-cap'),
+  ('gold', 'Gold Loan', 'fa-gem'),
+  ('business', 'Business Loan', 'fa-briefcase'),
+  ('lap', 'Loan Against Property', 'fa-building'),
+  ('credit', 'Credit Card Loan', 'fa-credit-card'),
+  ('other', 'Other Loan', 'fa-file-invoice-dollar'),
+] %}
+
+<section
+  class="acc"
+  data-accounts-page
+  data-created="{{ created or '' }}"
+  data-created-balance="{{ created_balance or '' }}"
+  data-created-kind="{{ created_kind or '' }}"
+  data-open-view="{{ open_view or '' }}"
+  data-holdings-group="{{ holdings_group or '' }}"
+>
+  <header class="acc-hero">
+    <h1>Accounts</h1>
+    <div class="acc-hero__actions">
+      <button type="button" class="ft-btn ft-btn--primary" data-open-add>
+        <i class="fa-solid fa-plus" aria-hidden="true"></i> Add account
+      </button>
+    </div>
+  </header>
+
+  {% if error %}
+  <div class="ft-alert ft-alert--error">{{ error }}</div>
+  {% endif %}
+
+  <section class="acc-kpis" aria-label="Account snapshot">
+    <article class="acc-kpi is-cash">
+      <span>Total cash</span>
+      <strong class="ft-money">₹ {{ (kpis.total_cash or 0) | money }}</strong>
+      <em>{{ kpis.bank_count or 0 }} banks · loans excluded</em>
+    </article>
+    <article class="acc-kpi is-card">
+      <span>Card outstanding</span>
+      <strong class="ft-money">₹ {{ (kpis.card_outstanding or 0) | money }}</strong>
+      <em>{{ kpis.card_count or 0 }} cards</em>
+    </article>
+    <article class="acc-kpi is-credit">
+      <span>Available credit</span>
+      <strong class="ft-money">₹ {{ (kpis.available_credit or 0) | money }}</strong>
+    </article>
+    <article class="acc-kpi is-loan">
+      <span>Loans outstanding</span>
+      <strong class="ft-money">₹ {{ (kpis.loans_outstanding or 0) | money }}</strong>
+      <em>{{ kpis.loan_count or 0 }} loan{{ '' if kpis.loan_count == 1 else 's' }} · not in cash</em>
+    </article>
+    <article class="acc-kpi is-util">
+      <span>Utilization</span>
+      <strong>{{ (kpis.utilization or 0) }}%</strong>
+      <em>Weighted</em>
+      <i class="acc-kpi__bar" style="--pct: {{ [kpis.utilization or 0, 100] | min }}%"></i>
+    </article>
+  </section>
+
+  <nav class="acc-tabs" role="tablist" aria-label="Account groups">
+    <button type="button" class="is-active" data-holdings-tab="all" role="tab" aria-selected="true">All</button>
+    <button type="button" data-holdings-tab="bank" role="tab" aria-selected="false">Banks &amp; wallets</button>
+    <button type="button" data-holdings-tab="card" role="tab" aria-selected="false">Credit cards</button>
+    <button type="button" data-holdings-tab="loan" role="tab" aria-selected="false">Loans</button>
+  </nav>
+
+  <section class="acc-table-card">
+    <header class="acc-table-card__head">
+      <h2>Holdings</h2>
+    </header>
+    {% if rows %}
+    <div class="acc-table-wrap">
+      <table class="acc-table">
+        <thead>
+          <tr>
+            <th>Institution</th>
+            <th>Type</th>
+            <th>Account</th>
+            <th>Balance</th>
+            <th>Activity</th>
+            <th>Status</th>
+            <th>Utilization</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for acc in rows %}
+          <tr data-holding-row data-group="{{ acc.group }}" data-id="{{ acc.id }}"{% if acc.row_alert %} class="is-watch"{% endif %}>
+            <td>
+              <div class="acc-inst">
+                <i class="fa-solid {{ acc.type_icon }} acc-type-ico is-{{ acc.group }}" aria-hidden="true"></i>
+                <span class="acc-logo">
+                  <img src="{{ acc.logo_url }}" alt="" width="32" height="32">
+                </span>
+                <strong>{{ acc.display_name }}</strong>
+              </div>
+            </td>
+            <td><span class="acc-badge{% if acc.group == 'card' %} is-card{% elif acc.group == 'loan' %} is-loan{% endif %}">{{ acc.type_label | upper }}</span></td>
+            <td class="acc-mono">{{ acc.mask }}</td>
+            <td>
+              <strong class="ft-money{% if acc.amount_kind == 'liability' %} is-debit{% endif %}">
+                {% if acc.amount_kind == 'liability' %}−{% endif %}₹ {{ (acc.display_amount or 0) | money }}
+              </strong>
+            </td>
+            <td>
+              {% if acc.group == 'loan' %}
+                <strong class="ft-money">₹ {{ (acc.emi_amount or 0) | money }}</strong>
+                {% if acc.activity_secondary %}<small>Due {{ acc.activity_secondary }}</small>{% endif %}
+              {% else %}
+                {{ acc.activity_label }}
+              {% endif %}
+            </td>
+            <td><span class="acc-status is-{{ acc.status_key }}">{{ acc.status_label }}</span></td>
+            <td class="acc-util">{% if acc.utilization is not none %}{{ acc.utilization }}%{% else %}—{% endif %}</td>
+            <td>
+              <details class="acc-menu">
+                <summary class="ft-icon-btn" aria-label="Account actions"><i class="fa-solid fa-ellipsis-vertical"></i></summary>
+                <div class="acc-menu__panel">
+                  <button type="button" data-view-account="{{ acc.id }}" data-kind="{{ acc.kind }}">View</button>
+                  <button type="button" data-edit-account="{{ acc.id }}" data-kind="{{ acc.kind }}">Edit</button>
+                  <form method="post" action="/accounts/delete" onsubmit="return confirm('Delete this account?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                    <input type="hidden" name="account_id" value="{{ acc.id }}">
+                    <button type="submit" class="is-danger">Delete</button>
+                  </form>
+                </div>
+              </details>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="acc-empty">
+      <p>No accounts yet. Add a bank, wallet, card, or loan to start tracking.</p>
+    </div>
+    {% endif %}
+  </section>
+</section>
+
+<aside class="acc-drawer" data-add-drawer hidden>
+  <div class="acc-drawer__panel" role="dialog" aria-modal="true" aria-labelledby="acc-add-title">
+    <header class="acc-drawer__head">
+      <h2 id="acc-add-title">Add account</h2>
+      <button type="button" class="ft-icon-btn" data-close-add aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+    </header>
+
+    <div class="acc-kind-switch" role="tablist" aria-label="Account kind">
+      <button type="button" class="is-active" data-kind-tab="bank" role="tab" aria-selected="true">Bank / wallet</button>
+      <button type="button" data-kind-tab="credit_card" role="tab" aria-selected="false">Credit card</button>
+      <button type="button" data-kind-tab="loan" role="tab" aria-selected="false">Loan</button>
+    </div>
+
+    <form method="post" action="/accounts/add" class="acc-form" data-account-form="bank">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+      <input type="hidden" name="acc_type" data-bank-type-value value="savings">
+      <div class="acc-form__grid">
+        <div class="ft-field acc-form__span">
+          <label for="bank_name">Bank / institution</label>
+          <div class="acc-input">
+            <i class="fa-solid fa-building-columns" aria-hidden="true"></i>
+            <input class="ft-input" id="bank_name" name="bank_name" required placeholder="e.g. HDFC Bank" data-bank-name autocomplete="organization">
+          </div>
+        </div>
+        <div class="ft-field">
+          <label for="acc_type_bank">Type</label>
+          <div class="acc-input">
+            <i class="fa-solid fa-wallet" aria-hidden="true"></i>
+            <select class="ft-select" id="acc_type_bank" data-bank-type required>
+              {% for code, label in account_types %}
+                {% if code not in ['credit_card', 'loan'] %}
+                <option value="{{ code }}">{{ label }}</option>
+                {% endif %}
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="ft-field">
+          <label for="bank_last4">Last 4 digits <em>(optional)</em></label>
+          <div class="acc-input">
+            <i class="fa-solid fa-hashtag" aria-hidden="true"></i>
+            <input class="ft-input" id="bank_last4" name="last4" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" placeholder="e.g. 0821" autocomplete="off">
+          </div>
+        </div>
+        <div class="ft-field acc-form__span">
+          <label for="name">Display name</label>
+          <div class="acc-input">
+            <i class="fa-regular fa-user" aria-hidden="true"></i>
+            <input class="ft-input" id="name" name="name" placeholder="Auto-filled from bank + type" data-display-name autocomplete="off">
+          </div>
+        </div>
+        <div class="ft-field acc-form__span">
+          <label for="balance">Opening balance</label>
+          <div class="acc-input">
+            <span class="acc-input__prefix">₹</span>
+            <input class="ft-input" id="balance" name="balance" type="number" step="0.01" value="0.00" required data-balance>
+          </div>
+        </div>
+      </div>
+      <p class="acc-form__note">Opening balance is a starting snapshot. Everyday spend still comes from transactions.</p>
+      <div class="acc-form__actions">
+        <button type="button" class="ft-btn ft-btn--secondary" data-close-add>Cancel</button>
+        <button type="submit" class="ft-btn ft-btn--primary" data-save-account>Create account</button>
+      </div>
+    </form>
+
+    <form method="post" action="/accounts/add" class="acc-form" data-account-form="credit_card" hidden>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+      <input type="hidden" name="acc_type" value="credit_card">
+      <input type="hidden" name="balance" value="0" data-cc-balance>
+      <div class="acc-form__grid">
+        <div class="ft-field acc-form__span">
+          <label for="cc_bank_name">Issuer / bank</label>
+          <div class="acc-input">
+            <i class="fa-solid fa-building-columns" aria-hidden="true"></i>
+            <input class="ft-input" id="cc_bank_name" name="bank_name" required placeholder="e.g. HDFC Bank" data-cc-bank autocomplete="organization">
+          </div>
+        </div>
+        <div class="ft-field acc-form__span">
+          <label for="cc_name">Card display name</label>
+          <div class="acc-input">
+            <i class="fa-regular fa-user" aria-hidden="true"></i>
+            <input class="ft-input" id="cc_name" name="name" placeholder="Auto-filled from issuer" data-cc-display autocomplete="off">
+          </div>
+        </div>
+        <div class="ft-field">
+          <label for="credit_limit">Credit limit</label>
+          <div class="acc-input">
+            <span class="acc-input__prefix">₹</span>
+            <input class="ft-input" id="credit_limit" name="credit_limit" type="number" step="0.01" min="0" required data-cc-limit>
+          </div>
+        </div>
+        <div class="ft-field">
+          <label for="outstanding">Outstanding</label>
+          <div class="acc-input">
+            <span class="acc-input__prefix">₹</span>
+            <input class="ft-input" id="outstanding" type="number" step="0.01" min="0" value="0.00" required data-cc-outstanding>
+          </div>
+        </div>
+        <div class="ft-field">
+          <label for="card_network">Card network</label>
+          <div class="acc-input">
+            <i class="fa-regular fa-credit-card" aria-hidden="true"></i>
+            <select class="ft-select" id="card_network" name="card_network" data-cc-network>
+              {% for code, label in card_networks %}
+              <option value="{{ code }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="ft-field">
+          <label for="cc_last4">Last 4 digits <em>(optional)</em></label>
+          <div class="acc-input">
+            <i class="fa-solid fa-hashtag" aria-hidden="true"></i>
+            <input class="ft-input" id="cc_last4" name="last4" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" placeholder="e.g. 4821" autocomplete="off">
+          </div>
+        </div>
+        <div class="ft-field acc-form__span acc-form__inline">
+          <label for="due_day">Due day of month</label>
+          <div class="acc-input">
+            <i class="fa-regular fa-calendar" aria-hidden="true"></i>
+            <input class="ft-input" id="due_day" name="due_day" type="number" min="1" max="31" placeholder="e.g. 5" data-cc-due-day>
+          </div>
+        </div>
+      </div>
+      <p class="acc-form__note">Available credit and utilisation update from limit and outstanding.</p>
+      <div class="acc-form__actions">
+        <button type="button" class="ft-btn ft-btn--secondary" data-close-add>Cancel</button>
+        <button type="submit" class="ft-btn ft-btn--primary" data-save-cc>Create credit card</button>
+      </div>
+    </form>
+
+    <form method="post" action="/accounts/add" class="acc-form" data-account-form="loan" data-loan-calc hidden>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+      <input type="hidden" name="acc_type" value="loan">
+      <div class="acc-form__grid">
+        <div class="ft-field">
+          <label for="loan_bank">Lender</label>
+          <div class="acc-input">
+            <i class="fa-solid fa-building-columns" aria-hidden="true"></i>
+            <input class="ft-input" id="loan_bank" name="bank_name" required placeholder="e.g. HDFC Bank" data-loan-bank>
+          </div>
+        </div>
+        <div class="ft-field">
+          <label for="loan_name">Display name</label>
+          <div class="acc-input">
+            <i class="fa-solid fa-file-invoice-dollar" data-loan-icon aria-hidden="true"></i>
+            <input class="ft-input" id="loan_name" name="name" placeholder="Auto-filled from lender + type" data-loan-name>
+          </div>
+        </div>
+        <div class="ft-field">
+          <label for="loan_kind">Loan type</label>
+          <div class="acc-input">
+            <i class="fa-solid fa-list" aria-hidden="true"></i>
+            <select class="ft-select" id="loan_kind" name="loan_kind" required data-loan-kind>
+              <option value="" disabled selected>Select loan type</option>
+              {% for code, label, icon in loan_kind_options %}
+              <option value="{{ code }}" data-icon="{{ icon }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="ft-field">
+          <label for="loan_last4">Last 4 digits <em>(optional)</em></label>
+          <div class="acc-input">
+            <i class="fa-solid fa-hashtag" aria-hidden="true"></i>
+            <input class="ft-input" id="loan_last4" name="last4" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" placeholder="e.g. 1092" autocomplete="off">
+          </div>
+        </div>
+        <div class="ft-field">
+          <label for="loan_outstanding">Current outstanding</label>
+          <div class="acc-input">
+            <span class="acc-input__prefix">₹</span>
+            <input class="ft-input" id="loan_outstanding" name="balance" type="number" step="0.01" min="0" required data-loan-balance>
+          </div>
+        </div>
+        <div class="ft-field">
+          <label for="loan_principal">Original principal</label>
+          <div class="acc-input">
+            <span class="acc-input__prefix">₹</span>
+            <input class="ft-input" id="loan_principal" name="original_principal" type="number" step="0.01" min="0" data-loan-principal>
+          </div>
+        </div>
+        <div class="ft-field">
+          <label for="loan_rate">Interest rate (% p.a.)</label>
+          <div class="acc-input">
+            <i class="fa-solid fa-percent" aria-hidden="true"></i>
+            <input class="ft-input" id="loan_rate" name="interest_rate" type="number" step="0.01" min="0" required data-loan-rate>
+          </div>
+        </div>
+        <div class="ft-field">
+          <label for="loan_emi">EMI amount</label>
+          <div class="acc-input">
+            <span class="acc-input__prefix">₹</span>
+            <input class="ft-input" id="loan_emi" name="emi_amount" type="number" step="0.01" min="0" required data-loan-emi>
+          </div>
+        </div>
+        <div class="ft-field">
+          <label for="loan_day">EMI day of month</label>
+          <div class="acc-input">
+            <i class="fa-regular fa-calendar" aria-hidden="true"></i>
+            <input class="ft-input" id="loan_day" name="emi_day" type="number" min="1" max="31" required value="5">
+          </div>
+        </div>
+        <div class="ft-field">
+          <label for="loan_tenure">Tenure (months)</label>
+          <div class="acc-input">
+            <i class="fa-regular fa-clock" aria-hidden="true"></i>
+            <input class="ft-input" id="loan_tenure" name="tenure_months" type="number" min="1" placeholder="Optional" data-loan-tenure>
+          </div>
+        </div>
+      </div>
+      <p class="acc-form__note" data-loan-calc-hint>Fill principal, rate, and either EMI or tenure — the other is suggested and stays editable.</p>
+      <div class="acc-form__actions">
+        <button type="button" class="ft-btn ft-btn--secondary" data-close-add>Cancel</button>
+        <button type="submit" class="ft-btn ft-btn--primary">Create loan</button>
+      </div>
+    </form>
+  </div>
+</aside>
+
+{% for acc in rows %}
+<dialog class="acc-dialog acc-dialog--view{% if acc.kind == 'loan' %} acc-dialog--wide{% endif %}" data-view-dialog="{{ acc.id }}">
+  <div class="acc-view">
+    <header class="acc-view__head">
+      <span class="acc-view__logo">
+        <img src="{{ acc.logo_url }}" alt="" width="40" height="40">
+      </span>
+      <div class="acc-view__titles">
+        <h3>{{ acc.display_name }}</h3>
+        <p>
+          <i class="fa-solid {{ acc.type_icon }} acc-type-ico is-{{ acc.group }}" aria-hidden="true"></i>
+          {{ acc.type_label }} · {{ acc.institution or acc.bank_name or acc.display_name }} · {{ acc.mask }}
+        </p>
+      </div>
+      <span class="acc-status is-{{ acc.status_key }}">{{ acc.status_label }}</span>
+      <button type="button" class="ft-icon-btn" data-close-dialog aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+    </header>
+
+    <div class="acc-view__hero">
+      <span>{{ acc.amount_label or ('Outstanding' if acc.kind in ['credit_card', 'loan'] else 'Available balance') }}</span>
+      <strong class="ft-money{% if acc.amount_kind == 'liability' %} is-debit{% elif acc.amount_kind == 'loan' %} is-loan{% endif %}">
+        {% if acc.amount_kind == 'liability' %}−{% endif %}₹ {{ (acc.display_amount or 0) | money }}
+      </strong>
+      {% if acc.kind == 'credit_card' %}
+      <em>Available ₹ {{ (acc.available_credit or 0) | money }} · Limit ₹ {{ (acc.credit_limit or 0) | money }}</em>
+      {% elif acc.kind == 'loan' %}
+      <em>Not included in Total cash · {{ acc.activity_label }}</em>
+      {% else %}
+      <em>{{ acc.activity_label }}</em>
+      {% endif %}
+    </div>
+
+    <dl class="acc-view__facts">
+      {% if acc.view_facts %}
+        {% for fact in acc.view_facts %}
+        <div>
+          <dt>{{ fact.label }}</dt>
+          <dd>{% if fact.money %}₹ {{ (fact.value or 0) | money }}{% else %}{{ fact.value }}{% endif %}</dd>
+        </div>
+        {% endfor %}
+      {% elif acc.kind == 'credit_card' %}
+        <div><dt>Issuer</dt><dd>{{ acc.bank_name or acc.display_name }}</dd></div>
+        <div><dt>Network</dt><dd>{{ acc.card_network_label or (acc.card_network or '—')|replace('_',' ')|title }}</dd></div>
+        <div><dt>Card number</dt><dd>{{ acc.mask }}</dd></div>
+        <div><dt>Credit limit</dt><dd>₹ {{ (acc.credit_limit or 0) | money }}</dd></div>
+        <div><dt>Available credit</dt><dd>₹ {{ (acc.available_credit or 0) | money }}</dd></div>
+        <div><dt>Utilisation</dt><dd>{% if acc.utilization is not none %}{{ acc.utilization }}%{% else %}—{% endif %}</dd></div>
+        <div><dt>Payment due</dt><dd>{{ acc.activity_label }}</dd></div>
+        <div><dt>Status</dt><dd>{{ acc.status_label }}</dd></div>
+      {% elif acc.kind == 'loan' %}
+        <div><dt>Lender</dt><dd>{{ acc.bank_name or acc.display_name }}</dd></div>
+        <div><dt>Loan type</dt><dd>{{ acc.type_label }}</dd></div>
+        <div><dt>Account</dt><dd>{{ acc.mask }}</dd></div>
+        <div><dt>Interest rate</dt><dd>{{ acc.interest_rate or 0 }}% p.a.</dd></div>
+        <div><dt>EMI amount</dt><dd>₹ {{ (acc.emi_amount or 0) | money }}</dd></div>
+        <div><dt>Next EMI</dt><dd>{{ acc.activity_label }}</dd></div>
+        <div><dt>Tenure</dt><dd>{% if acc.tenure_months %}{{ acc.tenure_months }} months{% else %}—{% endif %}</dd></div>
+        <div><dt>Status</dt><dd>{{ acc.status_label }}</dd></div>
+      {% else %}
+        <div><dt>Institution</dt><dd>{{ acc.bank_name or acc.display_name }}</dd></div>
+        <div><dt>Account type</dt><dd>{{ acc.type_label }}</dd></div>
+        <div><dt>Account</dt><dd>{{ acc.mask }}</dd></div>
+        <div><dt>Last activity</dt><dd>{{ acc.activity_label }}</dd></div>
+        <div><dt>Status</dt><dd>{{ acc.status_label }}</dd></div>
+      {% endif %}
+    </dl>
+
+    {% if acc.kind == 'loan' %}
+      {% set cert = loan_certificates.get(acc.id) or acc.certificate or {} %}
+      <section class="acc-view__cert">
+        <h4>Interest certificate</h4>
+        <p>Reducing-balance EMI: interest is added, then the EMI is deducted.</p>
+        <div class="acc-cert">
+          <div><span>Original principal</span><strong class="ft-money">₹ {{ (cert.original_principal or 0) | money }}</strong></div>
+          <div><span>Outstanding</span><strong class="ft-money">₹ {{ (cert.outstanding or 0) | money }}</strong></div>
+          <div><span>Principal paid</span><strong class="ft-money is-credit">₹ {{ (cert.principal_paid or 0) | money }}</strong></div>
+          <div><span>Interest paid</span><strong class="ft-money">₹ {{ (cert.interest_paid or 0) | money }}</strong></div>
+          <div><span>Total paid</span><strong class="ft-money">₹ {{ (cert.total_paid or 0) | money }}</strong></div>
+          <div><span>EMIs posted</span><strong>{{ cert.emis_paid or 0 }}</strong></div>
+        </div>
+        {% if cert.ledger %}
+        <table class="acc-cert-table">
+          <thead><tr><th>Cycle</th><th>Interest</th><th>Principal</th><th>EMI</th><th>Outstanding</th></tr></thead>
+          <tbody>
+            {% for line in cert.ledger %}
+            <tr>
+              <td>{{ line.cycle_date }}</td>
+              <td class="ft-money">₹ {{ (line.interest or 0) | money }}</td>
+              <td class="ft-money">₹ {{ (line.principal or 0) | money }}</td>
+              <td class="ft-money">₹ {{ (line.payment or 0) | money }}</td>
+              <td class="ft-money">₹ {{ (line.outstanding_after or 0) | money }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="acc-view__empty">No EMI cycles posted yet. Interest and principal will appear here after the first EMI.</p>
+        {% endif %}
+      </section>
+      <form method="post" action="/accounts/loan/pay-emi" class="acc-dialog__actions">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+        <input type="hidden" name="account_id" value="{{ acc.id }}">
+        <button type="button" class="ft-btn ft-btn--secondary" data-close-dialog>Close</button>
+        <button type="submit" class="ft-btn ft-btn--primary">Record EMI now</button>
+      </form>
+    {% else %}
+      <div class="acc-dialog__actions">
+        <button type="button" class="ft-btn ft-btn--primary" data-close-dialog>Done</button>
+      </div>
+    {% endif %}
+  </div>
+</dialog>
+
+<dialog class="acc-dialog acc-dialog--edit" data-edit-dialog="{{ acc.id }}">
+  {% if acc.kind == 'loan' %}
+  <form method="post" action="/accounts/loan/update" class="acc-dialog__card acc-dialog__form acc-edit" data-loan-calc>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+    <input type="hidden" name="account_id" value="{{ acc.id }}">
+    <h3>Edit loan</h3>
+    <label>Lender<input class="ft-input" name="bank_name" value="{{ acc.bank_name or '' }}" required></label>
+    <label>Display name<input class="ft-input" name="name" value="{{ acc.display_name }}"></label>
+    <label>Loan type
+      <select class="ft-select" name="loan_kind">
+        {% for code, label, icon in loan_kind_options %}
+        <option value="{{ code }}" {% if (acc.loan_kind or 'other') == code %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Last 4 digits<input class="ft-input" name="last4" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" value="{{ acc.last4 or '' }}" placeholder="Optional"></label>
+    <label>Current outstanding<input class="ft-input" name="outstanding" type="number" step="0.01" min="0" value="{{ acc.display_amount or 0 }}" data-loan-balance></label>
+    <label>Original principal<input class="ft-input" name="original_principal" type="number" step="0.01" min="0" value="{{ acc.original_principal or acc.certificate.original_principal or '' }}" data-loan-principal></label>
+    <label>Interest rate (% p.a.)<input class="ft-input" name="interest_rate" type="number" step="0.01" min="0" value="{{ acc.interest_rate or 0 }}" data-loan-rate></label>
+    <label>EMI amount<input class="ft-input" name="emi_amount" type="number" step="0.01" min="0" value="{{ acc.emi_amount or 0 }}" data-loan-emi></label>
+    <label>EMI day<input class="ft-input" name="emi_day" type="number" min="1" max="31" value="{{ acc.emi_day or 5 }}"></label>
+    <label>Tenure (months)<input class="ft-input" name="tenure_months" type="number" min="1" value="{{ acc.tenure_months or '' }}" data-loan-tenure></label>
+    <p class="acc-form__note" data-loan-calc-hint>Change EMI or tenure and the other is suggested from principal and rate.</p>
+    <div class="acc-dialog__actions">
+      <button type="button" class="ft-btn ft-btn--secondary" data-close-dialog>Cancel</button>
+      <button type="submit" class="ft-btn ft-btn--primary">Save</button>
+    </div>
+  </form>
+  {% elif acc.kind == 'credit_card' %}
+  <form method="post" action="/accounts/credit-card/update" class="acc-dialog__card acc-dialog__form acc-edit">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+    <input type="hidden" name="account_id" value="{{ acc.id }}">
+    <h3>Edit card</h3>
+    <label>Issuer / bank<input class="ft-input" name="bank_name" value="{{ acc.bank_name or '' }}" required></label>
+    <label>Display name<input class="ft-input" name="name" value="{{ acc.display_name }}"></label>
+    <label>Credit limit<input class="ft-input" name="credit_limit" type="number" step="0.01" value="{{ acc.credit_limit or 0 }}"></label>
+    <label>Outstanding<input class="ft-input" name="outstanding" type="number" step="0.01" min="0" value="{{ acc.outstanding or 0 }}"></label>
+    <label>Network
+      <select class="ft-select" name="card_network">
+        {% for code, label in card_networks %}
+        <option value="{{ code }}" {% if (acc.card_network or '') == code %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Last 4 digits<input class="ft-input" name="last4" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" value="{{ acc.last4 or '' }}" placeholder="Optional"></label>
+    <label>Due day<input class="ft-input" name="due_day" type="number" min="1" max="31" value="{{ acc.due_day or 5 }}"></label>
+    <p class="acc-form__note">Available credit and utilisation update from limit and outstanding.</p>
+    <div class="acc-dialog__actions">
+      <button type="button" class="ft-btn ft-btn--secondary" data-close-dialog>Cancel</button>
+      <button type="submit" class="ft-btn ft-btn--primary">Save</button>
+    </div>
+  </form>
+  {% else %}
+  <form method="post" action="/accounts/rename" class="acc-dialog__card acc-dialog__form acc-edit" data-edit-bank>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+    <input type="hidden" name="account_id" value="{{ acc.id }}">
+    <h3>Edit account</h3>
+    <label>Institution<input class="ft-input" name="bank_name" value="{{ acc.bank_name or '' }}" required></label>
+    <label>Display name<input class="ft-input" name="name" value="{{ acc.display_name }}" required></label>
+    <label>Type
+      <select class="ft-select" name="acc_type">
+        {% for code, label in account_types %}
+          {% if code not in ['credit_card', 'loan'] %}
+          <option value="{{ code }}" {% if acc.type_key == code %}selected{% endif %}>{{ label }}</option>
+          {% endif %}
+        {% endfor %}
+      </select>
+    </label>
+    <label>Last 4 digits<input class="ft-input" name="last4" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" value="{{ acc.last4 or '' }}" placeholder="Optional"></label>
+    <label>Current balance<input class="ft-input" name="balance" type="number" step="0.01" value="{{ acc.display_amount or 0 }}"></label>
+    <p class="acc-form__note">Balance is a correction. Everyday spend still comes from transactions.</p>
+    <div class="acc-dialog__actions">
+      <button type="button" class="ft-btn ft-btn--secondary" data-close-dialog>Cancel</button>
+      <button type="submit" class="ft-btn ft-btn--primary">Save</button>
+    </div>
+  </form>
+  {% endif %}
+</dialog>
+{% endfor %}
+
+<dialog class="acc-dialog" data-balance-dialog>
+  <form method="dialog" class="acc-dialog__card">
+    <div class="acc-dialog__icon" aria-hidden="true"><i class="fa-solid fa-rupee-sign"></i></div>
+    <h3 data-dialog-title>Confirm opening balance</h3>
+    <p class="acc-dialog__copy" data-dialog-copy>You’re about to create this account with the balance below.</p>
+    <div class="acc-dialog__amount ft-money" data-dialog-amount>₹ 0.00</div>
+    <div class="acc-dialog__actions">
+      <button type="submit" value="cancel" class="ft-btn ft-btn--secondary">Go back</button>
+      <button type="submit" value="confirm" class="ft-btn ft-btn--primary">Confirm &amp; save</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog class="acc-dialog" data-success-dialog>
+  <form method="dialog" class="acc-dialog__card">
+    <div class="acc-dialog__icon acc-dialog__icon--ok" aria-hidden="true"><i class="fa-solid fa-check"></i></div>
+    <h3>Account created</h3>
+    <p class="acc-dialog__copy" data-success-copy>Your account is ready.</p>
+    <div class="acc-dialog__amount ft-money" data-success-amount>₹ 0.00</div>
+    <div class="acc-dialog__actions">
+      <button type="submit" value="ok" class="ft-btn ft-btn--primary">Done</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/accounts.js?v={{ FT_APP_VERSION }}-hold8" defer></script>
+{% endblock %}

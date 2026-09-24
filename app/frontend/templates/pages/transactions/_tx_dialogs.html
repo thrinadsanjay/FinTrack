@@ -1,0 +1,74 @@
+{% set spend_accounts = spend_accounts or accounts %}
+{% for tx in view_rows or [] %}
+<dialog class="txa-dialog" data-view-dialog="{{ tx._id }}">
+  <div class="txa-view">
+    <header class="txa-view__head">
+      <span class="txa-view__mark is-{{ tx.type_key }}"><i class="fa-solid {{ tx.icon }}" aria-hidden="true"></i></span>
+      <div>
+        <h3>{{ tx.display_title }}</h3>
+        <p>{{ tx.type_label }} · {{ tx.account_name }} · {{ tx.day_date_label }}</p>
+      </div>
+      <span class="txa-status {% if tx.is_deleted %}is-watch{% elif tx.is_failed %}is-watch{% else %}is-ok{% endif %}">{{ tx.status_info or 'Posted' }}</span>
+      <button type="button" class="ft-icon-btn" data-close-dialog aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+    </header>
+    <div class="txa-view__hero">
+      <span>Amount</span>
+      <strong class="ft-money is-{{ tx.type_key }}">{% if tx.type_key == 'credit' %}+{% elif tx.type_key == 'debit' %}−{% endif %}₹ {{ tx.amount | money }}</strong>
+      <em>{{ tx.local_time }}{% if tx.mode_label %} · {{ tx.mode_label }}{% endif %}</em>
+    </div>
+    <dl class="txa-view__facts">
+      <div><dt>Account</dt><dd>{{ tx.account_name }}</dd></div>
+      <div><dt>Category</dt><dd>{% if tx.is_transfer %}Self transfer{% else %}{{ tx.category_name or '—' }}{% endif %}</dd></div>
+      <div><dt>Subcategory</dt><dd>{{ tx.subcategory_name or '—' }}</dd></div>
+      <div><dt>Payment mode</dt><dd>{{ tx.mode_label }}</dd></div>
+      <div><dt>Date</dt><dd>{{ tx.day_date_label }}</dd></div>
+      <div><dt>Time</dt><dd>{{ tx.local_time or '—' }}</dd></div>
+    </dl>
+    <div class="txa-dialog__actions">
+      <button type="button" class="ft-btn ft-btn--primary" data-close-dialog>Done</button>
+    </div>
+  </div>
+</dialog>
+{% endfor %}
+
+<dialog class="txa-dialog" data-tx-edit-dialog>
+  <form method="post" action="/transactions/edit" class="txa-dialog__card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+    <input type="hidden" name="return_view" value="{{ tx_view or 'list' }}">
+    <input type="hidden" name="transaction_id" data-edit-id>
+    <input type="hidden" name="category_code" data-edit-category>
+    <input type="hidden" name="subcategory_code" data-edit-subcategory>
+    <h3>Edit transaction</h3>
+    <label>Account
+      <select class="ft-select" name="account_id" data-edit-account required>
+        {% for acc in spend_accounts %}
+        <option value="{{ acc._id }}">{{ acc.name or acc.bank_name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Amount<input class="ft-input" name="amount" type="number" step="0.01" min="0.01" data-edit-amount required></label>
+    <label>Description<input class="ft-input" name="description" data-edit-description></label>
+    <div class="txa-dialog__actions">
+      <button type="button" class="ft-btn ft-btn--secondary" data-dialog-close>Cancel</button>
+      <button type="submit" class="ft-btn ft-btn--primary">Save changes</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog class="txa-dialog" data-tx-emi-dialog>
+  <form method="post" action="/transactions/convert-to-emi" class="txa-dialog__card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+    <input type="hidden" name="return_view" value="{{ tx_view or 'list' }}">
+    <input type="hidden" name="transaction_id" data-emi-id>
+    <h3>Convert to EMI</h3>
+    <p class="txa-hint" data-emi-hint></p>
+    <label>Title<input class="ft-input" name="emi_title" data-emi-title></label>
+    <label>Tenure (months)<input class="ft-input" name="emi_tenure_months" type="number" min="2" value="6" required></label>
+    <label>Interest rate (% p.a.)<input class="ft-input" name="emi_interest_rate" type="number" step="0.01" min="0" value="0"></label>
+    <label>Processing fee (%)<input class="ft-input" name="emi_processing_fee_rate" type="number" step="0.01" min="0" value="0"></label>
+    <div class="txa-dialog__actions">
+      <button type="button" class="ft-btn ft-btn--secondary" data-dialog-close>Cancel</button>
+      <button type="submit" class="ft-btn ft-btn--primary">Convert</button>
+    </div>
+  </form>
+</dialog>

@@ -1,0 +1,188 @@
+{% set notifications = notifications | default([]) %}
+{% set notif_unread = notifications.unread_count if notifications.unread_count is defined else (notifications | selectattr("is_read", "equalto", false) | list | length) %}
+{% set display_name = user.username or user.full_name or "User" %}
+{% set avatar_letter = display_name|first|upper %}
+
+<header class="ft-header">
+  <div class="ft-header__left">
+    <button
+      type="button"
+      class="ft-icon-btn ft-header__menu"
+      data-sidebar-open
+      aria-label="Open navigation"
+      title="Menu"
+    >
+      <i class="fa-solid fa-bars" aria-hidden="true"></i>
+    </button>
+    <button type="button" class="ft-header__search" data-search-open>
+      <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+      <span>Search transactions, accounts, categories…</span>
+      <kbd>Ctrl K</kbd>
+    </button>
+  </div>
+
+  <div class="ft-header__actions">
+    <button
+      type="button"
+      class="ft-theme-switch ft-theme-switch--header"
+      data-theme-toggle
+      aria-pressed="false"
+      aria-label="Switch theme"
+      title="Switch theme"
+    >
+      <span class="ft-theme-switch__thumb" aria-hidden="true"></span>
+      <i class="fa-solid fa-sun" aria-hidden="true"></i>
+      <i class="fa-solid fa-moon" aria-hidden="true"></i>
+    </button>
+
+    <div class="ft-header-slot">
+      <button
+        type="button"
+        class="ft-icon-btn ft-notif-btn"
+        data-notif-toggle
+        aria-expanded="false"
+        aria-haspopup="true"
+        aria-label="Notifications"
+        title="Notifications"
+      >
+        <i class="fa-regular fa-bell" aria-hidden="true"></i>
+        <span class="ft-notif-count{% if notif_unread <= 0 %} is-zero{% endif %}" data-notif-count {% if notif_unread <= 0 %}hidden{% endif %}>{{ notif_unread }}</span>
+      </button>
+
+      <div class="ft-menu ft-notif-panel" data-notif-panel role="menu" hidden>
+        <div class="ft-notif-panel__header">
+          <div class="ft-notif-panel__heading">
+            <span class="ft-notif-panel__title">Notifications</span>
+            <span class="ft-notif-panel__unread" data-notif-unread-label {% if notif_unread <= 0 %}hidden{% endif %}>
+              {% if notif_unread == 1 %}1 unread{% else %}{{ notif_unread }} unread{% endif %}
+            </span>
+          </div>
+          <div class="ft-notif-panel__actions">
+            <button type="button" class="ft-notif-action" data-notif-read-all {% if notif_unread <= 0 %}hidden{% endif %}>
+              <i class="fa-solid fa-check-double" aria-hidden="true"></i> Mark all read
+            </button>
+            <button type="button" class="ft-notif-action" data-notif-archive-all {% if not notifications %}hidden{% endif %}>
+              <i class="fa-solid fa-box-archive" aria-hidden="true"></i> Archive all
+            </button>
+          </div>
+        </div>
+        <div class="ft-notif-list" data-notif-list {% if not notifications %}hidden{% endif %}>
+          {% for n in notifications %}
+          {% set notif_dt = n.updated_at or n.created_at %}
+          <div
+            class="ft-notif-item {% if not n.is_read %}is-unread{% endif %}"
+            data-notif-id="{{ n.id }}"
+            data-notif-read="{{ 'true' if n.is_read else 'false' }}"
+          >
+            <span class="ft-notif-item__dot" aria-hidden="true"></span>
+            <div class="ft-notif-item__main">
+              <div class="ft-notif-item__title">{{ n.title }}</div>
+              <div class="ft-notif-item__message">{{ n.message }}</div>
+              {% if notif_dt %}
+              <div class="ft-notif-item__time">{{ notif_dt | datetimeformat }}</div>
+              {% endif %}
+            </div>
+            <div class="ft-notif-item__tools">
+              <button
+                type="button"
+                class="ft-notif-tool ft-notif-bubble"
+                data-notif-mark
+                title="Mark as read"
+                aria-label="Mark as read"
+                {% if n.is_read %}hidden{% endif %}
+              >
+                <i class="fa-solid fa-check" aria-hidden="true"></i>
+              </button>
+              <button
+                type="button"
+                class="ft-notif-tool ft-notif-archive"
+                data-notif-archive
+                title="Archive"
+                aria-label="Archive notification"
+              >
+                <i class="fa-solid fa-box-archive" aria-hidden="true"></i>
+              </button>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        <div class="ft-notif-empty" data-notif-empty {% if notifications %}hidden{% endif %}>
+          <i class="fa-regular fa-bell" aria-hidden="true"></i>
+          <span>You're all caught up.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="ft-header-slot">
+      <button
+        type="button"
+        class="ft-user-chip"
+        data-profile-toggle
+        aria-expanded="false"
+        aria-haspopup="true"
+        aria-label="Account menu"
+      >
+        <span class="ft-avatar" aria-hidden="true">{{ avatar_letter }}</span>
+        <span>{{ display_name }}</span>
+        <i class="fa-solid fa-chevron-down ft-user-chip__caret" aria-hidden="true"></i>
+      </button>
+
+      <div class="ft-menu" data-profile-menu role="menu" hidden>
+        <div class="ft-menu__header">
+          <span class="ft-avatar ft-avatar--lg" aria-hidden="true">{{ avatar_letter }}</span>
+          <div>
+            <div class="ft-menu__title">{{ display_name }}</div>
+            <div class="ft-menu__subtitle">
+              {% if user.is_admin %}Administrator · {% endif %}Signed in
+            </div>
+          </div>
+        </div>
+        <div class="ft-menu__list">
+          <a class="ft-menu__item" href="/profile" role="menuitem">
+            <i class="fa-regular fa-user" aria-hidden="true"></i>
+            <span>Profile</span>
+          </a>
+          <a class="ft-menu__item" href="/security" role="menuitem">
+            <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
+            <span>Security</span>
+          </a>
+          <a class="ft-menu__item" href="/settings/automations" role="menuitem">
+            <i class="fa-solid fa-bolt" aria-hidden="true"></i>
+            <span>Automations</span>
+          </a>
+          <a class="ft-menu__item" href="/profile#telegram" role="menuitem">
+            <i class="fa-brands fa-telegram" aria-hidden="true"></i>
+            <span>Telegram</span>
+          </a>
+          <a class="ft-menu__item" href="/help-support" role="menuitem">
+            <i class="fa-solid fa-life-ring" aria-hidden="true"></i>
+            <span>Help &amp; support</span>
+          </a>
+          <a class="ft-menu__item is-danger" href="/logout" role="menuitem">
+            <i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i>
+            <span>Log out</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="ft-search" data-search-overlay hidden>
+  <div class="ft-search__panel" role="dialog" aria-modal="true" aria-label="Search FinTracker">
+    <form class="ft-search__form" data-search-form>
+      <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+      <input
+        class="ft-search__input"
+        type="search"
+        data-search-input
+        placeholder="Search FinTracker..."
+        autocomplete="off"
+        maxlength="120"
+      >
+      <kbd class="ft-search__kbd">esc</kbd>
+    </form>
+    <div class="ft-search__hint">Transactions, accounts, bills, recurring, credit cards, goals</div>
+    <div class="ft-search__results" data-search-results></div>
+  </div>
+</div>

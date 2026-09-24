@@ -1,317 +1,281 @@
-document.addEventListener("DOMContentLoaded", () => {
-  const txType = document.getElementById("tx_type");
-  const account = document.getElementById("account");
-  const targetWrapper = document.getElementById("target-account-wrapper");
-  const targetAccount = document.getElementById("target_account");
-  const targetLabel = document.getElementById("target-account-label");
-  const description = document.getElementById("description");
-  const amountInput = document.getElementById("amount");
-  const cardPaymentAmounts = document.getElementById("card-payment-amounts");
-  const cardPaymentHint = document.getElementById("card-payment-hint");
-  const cardPaymentButtons = document.querySelectorAll("[data-amount-source]");
+(function () {
+  var form = document.querySelector("[data-tx-form]");
+  if (!form) return;
 
-  const category = document.getElementById("category");
-  const subcategory = document.getElementById("subcategory");
-  const catwrapper = document.getElementById("category-wrapper");
+  var typeSelect = form.querySelector("[data-tx-type-select]") || form.querySelector("#tx_type");
+  var typeRadios = form.querySelectorAll("[data-tx-type]");
+  var categorySelect = form.querySelector("#category_code");
+  var subcategorySelect = form.querySelector("#subcategory_code");
+  var transferOnly = form.querySelectorAll("[data-transfer-only]");
+  var nonTransfer = form.querySelectorAll("[data-non-transfer]");
+  var transferCatFields = form.querySelector("[data-transfer-category-fields]");
+  var transferCategory = form.querySelector("[data-transfer-category]");
+  var transferSubcategory = form.querySelector("[data-transfer-subcategory]");
+  var recurringToggle = form.querySelector("[data-recurring-toggle]");
+  var recurringPanel = form.querySelector("[data-recurring-panel]");
+  var recurringFields = form.querySelectorAll("[data-recurring-field]");
+  var intervalSuffix = form.querySelector("[data-interval-suffix]");
+  var frequencySelect = form.querySelector("#frequency");
+  var startDate = form.querySelector("#start_date");
+  var pastToggle = form.querySelector("[data-past-toggle]");
+  var pastPanel = form.querySelector("[data-past-panel]");
+  var dateField = form.querySelector("[data-past-date]") || form.querySelector("#transaction_date");
+  var categorySection = form.querySelector("[data-category-section]");
+  var categoryHint = form.querySelector("[data-category-hint]");
+  var TRANSFER_CATEGORY = "transfer";
+  var TRANSFER_SUBCATEGORY = "transfer";
 
-  const recurringCheckbox = document.getElementById("isRecurring");
-  const recurringSection = document.getElementById("recurringSection");
-  const recurringFrequency = document.getElementById("recurringFrequency");
-  const recurringStartDate = document.getElementById("recurringStartDate");
-  const recurringEndDate = document.getElementById("recurringEndDate");
-
-  function resetSelect(select, placeholder = "") {
-    select.innerHTML = `<option value="" hidden>${placeholder}</option>`;
+  function currentType() {
+    var checked = form.querySelector("[data-tx-type]:checked");
+    if (checked) return checked.value;
+    return typeSelect ? typeSelect.value : "debit";
   }
 
-  function todayISO() {
-    return new Date().toISOString().split("T")[0];
+  function syncTypeSelect() {
+    if (!typeSelect) return;
+    typeSelect.value = currentType();
   }
 
-  function isFilled(el) {
-    return el.value !== null && el.value !== "";
+  function setCategoryHint(text) {
+    if (categoryHint) categoryHint.textContent = text;
   }
 
-  function optionType(option) {
-    return option?.dataset?.accountType || "";
+  function clearSelect(select, placeholder) {
+    if (!select) return;
+    select.innerHTML = "";
+    var opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = placeholder;
+    select.appendChild(opt);
   }
 
-  function maybeSeedCardPaymentDescription() {
-    if (!description) return;
-    if (txType.value === "card_payment" && description.value.trim() === "") {
-      description.value = "Card Payment";
-      description.dispatchEvent(new Event("change"));
-    }
-  }
-
-  function selectedTargetOption() {
-    return targetAccount?.selectedOptions?.[0] || null;
-  }
-
-  function cardMetric(option, key) {
-    if (!option) return 0;
-    const raw = option.dataset?.[key] || "0";
-    const value = Number.parseFloat(raw);
-    return Number.isFinite(value) ? value : 0;
-  }
-
-  function formatCurrency(value) {
-    return `Rs ${value.toFixed(2)}`;
-  }
-
-  function syncCardPaymentAmountButtons() {
-    if (!cardPaymentAmounts || !cardPaymentHint) return;
-
-    const isCardPayment = txType.value === "card_payment";
-    const option = selectedTargetOption();
-    cardPaymentAmounts.classList.toggle("is-hidden", !isCardPayment);
-
-    if (!isCardPayment) {
-      return;
-    }
-
-    const minimumDue = cardMetric(option, "minimumDue");
-    const statementBalance = cardMetric(option, "statementBalance");
-    const outstanding = cardMetric(option, "currentOutstanding");
-
-    cardPaymentButtons.forEach((button) => {
-      const source = button.dataset.amountSource;
-      if (source === "other") {
-        button.disabled = false;
-        button.textContent = "Other";
-        return;
-      }
-      const amount = source === "minimum_due" ? minimumDue : statementBalance;
-      button.disabled = !option || amount <= 0;
-      button.textContent = `${source === "minimum_due" ? "Minimum due" : "Statement balance"} · ${formatCurrency(amount)}`;
+  function fillSelect(select, items, placeholder) {
+    clearSelect(select, placeholder);
+    (items || []).forEach(function (item) {
+      var code = item.code || item.id || item.value;
+      var label = item.name || item.label || code;
+      if (!code) return;
+      var opt = document.createElement("option");
+      opt.value = code;
+      opt.textContent = label;
+      select.appendChild(opt);
     });
+  }
 
-    if (!option) {
-      cardPaymentHint.textContent = "Pick a card to load payment suggestions.";
+  function setTransferCategoryMode(enabled) {
+    if (!transferCatFields || !transferCategory || !transferSubcategory) return;
+    transferCategory.disabled = !enabled;
+    transferSubcategory.disabled = !enabled;
+    if (enabled) {
+      transferCategory.value = TRANSFER_CATEGORY;
+      transferSubcategory.value = TRANSFER_SUBCATEGORY;
+    }
+    if (categorySelect) categorySelect.disabled = enabled;
+    if (subcategorySelect) subcategorySelect.disabled = enabled;
+  }
+
+  async function loadCategories() {
+    var type = currentType();
+    if (type === "transfer") {
+      applySelfTransferDefaults();
       return;
     }
 
-    cardPaymentHint.textContent = `Outstanding: ${formatCurrency(outstanding)}`;
-  }
-
-  function applyCardPaymentAmount(source) {
-    if (!amountInput) return;
-    const option = selectedTargetOption();
-    if (!option) return;
-
-    if (source === "other") {
-      amountInput.focus();
-      amountInput.select();
-      return;
-    }
-
-    const amount = source === "minimum_due"
-      ? cardMetric(option, "minimumDue")
-      : cardMetric(option, "statementBalance");
-
-    if (amount <= 0) return;
-
-    amountInput.value = amount.toFixed(2);
-    amountInput.dispatchEvent(new Event("change"));
-    amountInput.focus();
-  }
-
-  document.querySelectorAll(".form-field input, .form-field select").forEach((field) => {
-    const wrapper = field.closest(".form-field");
-
-    const updateState = () => {
-      if (isFilled(field)) {
-        wrapper.classList.add("field--active");
-        wrapper.classList.remove("field--idle");
-      } else {
-        wrapper.classList.add("field--idle");
-        wrapper.classList.remove("field--active");
-      }
-    };
-
-    field.addEventListener("focus", () => {
-      wrapper.classList.add("field--active");
-      wrapper.classList.remove("field--idle");
-    });
-
-    field.addEventListener("blur", updateState);
-    field.addEventListener("change", updateState);
-
-    if (field.value) updateState();
-  });
-
-  txType.addEventListener("change", async () => {
-    const rawType = txType.value;
-    const categoryType = rawType === "card_payment" ? "transfer" : rawType;
-
-    maybeSeedCardPaymentDescription();
-    resetSelect(category);
-    resetSelect(subcategory);
-
-    if (!rawType) return;
-
-    const requiresCategory = !(rawType === "transfer" || rawType === "card_payment");
-    category.required = requiresCategory;
-    subcategory.required = requiresCategory;
+    setTransferCategoryMode(false);
+    if (categorySection) categorySection.hidden = false;
+    setCategoryHint("Showing " + (type === "credit" ? "income" : "expense") + " categories from the database.");
+    clearSelect(categorySelect, "Loading…");
+    clearSelect(subcategorySelect, "Select category first");
 
     try {
-      const res = await fetch(`/api/categories?type=${categoryType}`);
-      const data = await res.json();
-
-      data.categories.forEach((cat) => {
-        const opt = document.createElement("option");
-        opt.value = cat.code;
-        opt.textContent = cat.name;
-        category.appendChild(opt);
-      });
-
-      if ((rawType === "transfer" || rawType === "card_payment") && data.categories.length) {
-        category.selectedIndex = 1;
-        category.dispatchEvent(new Event("change"));
-      }
-    } catch (err) {
-      console.error("Failed to load categories", err);
+      var res = await fetch("/api/categories?type=" + encodeURIComponent(type));
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Failed to load categories");
+      var items = Array.isArray(data) ? data : data.categories || [];
+      fillSelect(categorySelect, items, "Select category");
+      if (categorySelect) categorySelect.required = true;
+      if (subcategorySelect) subcategorySelect.required = true;
+    } catch (_err) {
+      clearSelect(categorySelect, "Unable to load categories");
     }
-  });
-
-  category.addEventListener("change", async () => {
-    const categoryCode = category.value;
-    const rawType = txType.value;
-    const categoryType = rawType === "card_payment" ? "transfer" : rawType;
-
-    resetSelect(subcategory);
-    if (!categoryCode || !categoryType) return;
-
-    try {
-      const res = await fetch(`/api/categories/${categoryCode}/subcategories?type=${categoryType}`);
-      const data = await res.json();
-
-      data.subcategories.forEach((sub) => {
-        const opt = document.createElement("option");
-        opt.value = sub.code;
-        opt.textContent = sub.name;
-        subcategory.appendChild(opt);
-      });
-
-      if ((rawType === "transfer" || rawType === "card_payment") && data.subcategories.length) {
-        subcategory.selectedIndex = 1;
-      }
-    } catch (err) {
-      console.error("Failed to load subcategories", err);
-    }
-  });
-
-  function syncCardPaymentOptions() {
-    const isCardPayment = txType.value === "card_payment";
-    const fromValue = account.value;
-
-    Array.from(account.options).forEach((opt) => {
-      if (!opt.value) return;
-      const accType = optionType(opt);
-      opt.hidden = isCardPayment && accType === "credit_card";
-      if (opt.hidden && opt.selected) {
-        account.value = "";
-      }
-    });
-
-    Array.from(targetAccount.options).forEach((opt) => {
-      if (!opt.value) return;
-      const accType = optionType(opt);
-      const hideForTransfer = txType.value === "transfer" && opt.value === fromValue;
-      const hideForCardPayment = isCardPayment && (accType !== "credit_card" || opt.value === fromValue);
-      opt.hidden = hideForTransfer || hideForCardPayment;
-      if (opt.hidden && opt.selected) {
-        targetAccount.value = "";
-      }
-    });
   }
 
-  function updateTransferUI() {
-    const isTransfer = txType.value === "transfer";
-    const isCardPayment = txType.value === "card_payment";
+  async function loadSubcategories() {
+    var type = currentType();
+    if (type === "transfer") return;
+    if (!categorySelect || !subcategorySelect) return;
 
-    if (isTransfer || isCardPayment) {
-      targetWrapper.classList.remove("tohidden");
-      targetAccount.required = true;
-      catwrapper.style.display = "none";
-      category.required = false;
-      subcategory.required = false;
-      if (targetLabel) {
-        targetLabel.textContent = isCardPayment ? "Pay To Card" : "Transfer To";
+    var code = categorySelect.value;
+    if (!code) {
+      clearSelect(subcategorySelect, "Select category first");
+      return;
+    }
+
+    clearSelect(subcategorySelect, "Loading…");
+    try {
+      var res = await fetch(
+        "/api/categories/" +
+          encodeURIComponent(code) +
+          "/subcategories?type=" +
+          encodeURIComponent(type)
+      );
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Failed to load subcategories");
+      var items = Array.isArray(data) ? data : data.subcategories || [];
+      fillSelect(subcategorySelect, items, "Select subcategory");
+    } catch (_err) {
+      clearSelect(subcategorySelect, "Unable to load");
+    }
+  }
+
+  function applySelfTransferDefaults() {
+    setCategoryHint("Self Transfer is applied automatically.");
+    if (categorySection) categorySection.hidden = true;
+    nonTransfer.forEach(function (el) {
+      el.hidden = true;
+    });
+    if (categorySelect) categorySelect.required = false;
+    if (subcategorySelect) subcategorySelect.required = false;
+    setTransferCategoryMode(true);
+  }
+
+  function syncTypeUi() {
+    var type = currentType();
+    var isTransfer = type === "transfer";
+
+    syncTypeSelect();
+
+    transferOnly.forEach(function (el) {
+      el.hidden = !isTransfer;
+      var target = el.querySelector("#target_account_id");
+      if (target) {
+        target.disabled = !isTransfer;
+        if (isTransfer) target.setAttribute("required", "required");
+        else target.removeAttribute("required");
       }
-      maybeSeedCardPaymentDescription();
-      syncCardPaymentOptions();
-      syncCardPaymentAmountButtons();
+    });
+
+    nonTransfer.forEach(function (el) {
+      el.hidden = isTransfer;
+    });
+
+    if (!isTransfer) {
+      setTransferCategoryMode(false);
+      if (categorySelect) categorySelect.required = true;
+      if (subcategorySelect) subcategorySelect.required = true;
+      loadCategories();
     } else {
-      targetWrapper.classList.add("tohidden");
-      targetAccount.required = false;
-      targetAccount.value = "";
-      catwrapper.style.display = "";
-      category.required = true;
-      subcategory.required = true;
-      if (targetLabel) {
-        targetLabel.textContent = "Transfer To";
+      applySelfTransferDefaults();
+    }
+  }
+
+  function syncIntervalSuffix() {
+    if (!frequencySelect || !intervalSuffix) return;
+    var map = {
+      daily: "day(s)",
+      weekly: "week(s)",
+      biweekly: "biweek(s)",
+      monthly: "month(s)",
+      quarterly: "quarter(s)",
+      halfyearly: "half-year(s)",
+      yearly: "year(s)",
+    };
+    intervalSuffix.textContent = map[frequencySelect.value] || "period(s)";
+  }
+
+  function localIsoDate(date) {
+    var month = String(date.getMonth() + 1).padStart(2, "0");
+    var day = String(date.getDate()).padStart(2, "0");
+    return date.getFullYear() + "-" + month + "-" + day;
+  }
+
+  function todayIso() {
+    return localIsoDate(new Date());
+  }
+
+  function clampPastDate() {
+    if (!dateField || !dateField.value) return;
+    if (dateField.value > todayIso()) dateField.value = "";
+  }
+
+  function syncPast() {
+    var on = !!(pastToggle && pastToggle.checked);
+    if (pastPanel) {
+      pastPanel.hidden = !on;
+      pastPanel.setAttribute("aria-hidden", on ? "false" : "true");
+    }
+    if (dateField) {
+      dateField.max = todayIso();
+      dateField.disabled = !on;
+      if (on) {
+        dateField.setAttribute("required", "required");
+        clampPastDate();
+      } else {
+        dateField.removeAttribute("required");
+        dateField.value = "";
+        var shown = dateField.parentNode && dateField.parentNode.querySelector(".ft-date__display");
+        if (shown) shown.value = "";
       }
-      Array.from(account.options).forEach((opt) => {
-        if (opt.value) opt.hidden = false;
-      });
-      Array.from(targetAccount.options).forEach((opt) => {
-        if (opt.value) opt.hidden = false;
-      });
-      syncCardPaymentAmountButtons();
     }
   }
 
-  txType.addEventListener("change", updateTransferUI);
-  account.addEventListener("change", updateTransferUI);
-
-  targetAccount?.addEventListener("change", () => {
-    if (targetAccount.value === account.value) {
-      alert("From and To accounts cannot be the same");
-      targetAccount.value = "";
+  function syncRecurring() {
+    var forced = form.getAttribute("data-force-recurring") === "1";
+    if (forced && recurringToggle && !recurringToggle.checked) recurringToggle.checked = true;
+    var on = forced || !!(recurringToggle && recurringToggle.checked);
+    if (recurringPanel) {
+      recurringPanel.classList.toggle("is-enabled", on);
+      recurringPanel.setAttribute("aria-hidden", on ? "false" : "true");
     }
-    syncCardPaymentAmountButtons();
-  });
-
-  cardPaymentButtons.forEach((button) => {
-    button.addEventListener("click", () => {
-      applyCardPaymentAmount(button.dataset.amountSource || "other");
+    recurringFields.forEach(function (field) {
+      field.disabled = !on;
+      if (on) {
+        if (field.id === "frequency" || field.id === "interval" || field.id === "start_date") {
+          field.setAttribute("required", "required");
+        }
+      } else {
+        field.removeAttribute("required");
+      }
     });
-  });
-
-  function enableRecurring() {
-    recurringSection.style.display = "block";
-    recurringFrequency.required = true;
-    recurringStartDate.required = true;
-
-    if (!recurringStartDate.value) {
-      recurringStartDate.value = todayISO();
+    if (on && startDate && !startDate.value) {
+      startDate.value = todayIso();
     }
+    syncIntervalSuffix();
   }
 
-  function disableRecurring() {
-    recurringSection.style.display = "none";
-    recurringFrequency.required = false;
-    recurringStartDate.required = false;
-
-    recurringFrequency.value = "";
-    recurringStartDate.value = "";
-    recurringEndDate.value = "";
-  }
-
-  if (recurringCheckbox.checked) {
-    enableRecurring();
-  } else {
-    disableRecurring();
-  }
-
-  recurringCheckbox.addEventListener("change", () => {
-    recurringCheckbox.checked ? enableRecurring() : disableRecurring();
+  typeRadios.forEach(function (radio) {
+    radio.addEventListener("change", syncTypeUi);
   });
 
-  updateTransferUI();
-  syncCardPaymentAmountButtons();
-  if (txType.value) {
-    txType.dispatchEvent(new Event("change"));
+  if (categorySelect) {
+    categorySelect.addEventListener("change", loadSubcategories);
   }
-});
+
+  if (recurringToggle) {
+    recurringToggle.addEventListener("change", function () {
+      if (form.getAttribute("data-force-recurring") === "1") {
+        recurringToggle.checked = true;
+      }
+      syncRecurring();
+    });
+    recurringToggle.addEventListener("click", function (event) {
+      if (form.getAttribute("data-force-recurring") === "1") event.preventDefault();
+    });
+  }
+
+  if (pastToggle) {
+    pastToggle.addEventListener("change", syncPast);
+  }
+
+  if (dateField) {
+    dateField.addEventListener("change", clampPastDate);
+  }
+
+  if (frequencySelect) {
+    frequencySelect.addEventListener("change", syncIntervalSuffix);
+  }
+
+  syncTypeUi();
+  syncPast();
+  syncRecurring();
+})();

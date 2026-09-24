@@ -9,6 +9,7 @@ from bson import ObjectId
 
 from app.db.mongo import db
 from app.services.categories import get_categories_by_type, get_subcategories
+from app.services.categorization_engine import categorize_transaction, learn_from_override
 from app.services.transactions import create_transaction
 from app.services.telegram import send_message
 
@@ -19,6 +20,10 @@ BOT_COMMAND_CANCEL = "/cancel"
 BOT_COMMAND_LAST5 = "/last5"
 BOT_COMMAND_BALANCE = "/balance"
 BOT_COMMAND_SUMMARY = "/summary"
+BOT_COMMAND_FORECAST = "/forecast"
+BOT_COMMAND_SAFE = "/safetospend"
+BOT_COMMAND_NETWORTH = "/networth"
+BOT_COMMAND_GOALS = "/goals"
 _AMOUNT_REGEX = re.compile(r"(?<!\w)(\d+(?:\.\d{1,2})?)(?!\w)")
 _FROM_ACCOUNT_REGEX = re.compile(r"\bfrom\s+([a-z0-9][a-z0-9 _\-]{1,40})\b", re.IGNORECASE)
 
@@ -151,8 +156,17 @@ async def _send_help(*, bot_token: str, chat_id: str) -> None:
             "8) Balance - Same as /balance.\n"
             "9) /summary - Show current month summary.\n"
             "10) Summary - Same as /summary.\n"
-            "11) /cancel - Cancel the current transaction flow.\n"
-            "12) Cancel - Same as /cancel.\n\n"
+            "11) /forecast - 30/60/90 day cash forecast.\n"
+            "12) /safetospend - Safe-to-spend amount.\n"
+            "13) /networth - Assets, liabilities, net worth.\n"
+            "14) /goals - Active financial goals.\n"
+            "15) /cancel - Cancel the current transaction flow.\n"
+            "16) Cancel - Same as /cancel.\n\n"
+            "You can also ask in plain language, for example:\n"
+            "- How much can I spend?\n"
+            "- How much did I spend on food this month?\n"
+            "- How are my credit cards?\n"
+            "- What's my net worth?\n\n"
             "Quick entry:\n"
             "- Send text like: '100 swiggy order from kotak'\n"
             "- Bot will auto-detect type/category/subcategory/account and ask for confirmation.\n\n"
@@ -343,26 +357,36 @@ async def _try_quick_transaction_detect(user_id: ObjectId, raw_text: str) -> dic
 
     tx_type = _infer_type(raw_text)
     description = _clean_description(raw_text)
-    category, subcategory = await _pick_category_subcategory(tx_type, description)
-    if not category or not subcategory:
+    mode = _infer_mode(raw_text)
+    preview = await categorize_transaction(
+        user_id=user_id,
+        raw_description=description,
+        amount=float(amount),
+        tx_type=tx_type,
+        mode=mode,
+    )
+    if not preview.get("suggested_category_code") or not preview.get("suggested_subcategory_code"):
         return None
 
     account = await _pick_account(user_id, raw_text)
     if not account:
         return None
-
-    mode = _infer_mode(raw_text)
     return {
         "tx_type": tx_type,
-        "category_code": str(category.get("code") or ""),
-        "category_name": str(category.get("name") or ""),
-        "subcategory_code": str(subcategory.get("code") or ""),
-        "subcategory_name": str(subcategory.get("name") or ""),
+        "category_code": str(preview.get("suggested_category_code") or ""),
+        "category_name": str(preview.get("suggested_category") or ""),
+        "subcategory_code": str(preview.get("suggested_subcategory_code") or ""),
+        "subcategory_name": str(preview.get("suggested_subcategory") or ""),
         "account_id": str(account.get("_id") or ""),
         "account_name": f"{str(account.get('name') or 'Account')} (₹{float(account.get('balance') or 0):.2f})",
         "mode": mode,
         "amount": float(amount),
         "description": description,
+        "suggested_category_code": str(preview.get("suggested_category_code") or ""),
+        "suggested_subcategory_code": str(preview.get("suggested_subcategory_code") or ""),
+        "suggested_category_name": str(preview.get("suggested_category") or ""),
+        "suggested_subcategory_name": str(preview.get("suggested_subcategory") or ""),
+        "suggested_confidence_percent": int(preview.get("confidence_percent") or 0),
     }
 
 
@@ -482,6 +506,57 @@ async def _send_summary(*, bot_token: str, chat_id: str, user_id: ObjectId) -> N
         f"- Transfers: ₹{transfer:.2f}\n"
         f"- Net: ₹{net:.2f}"
     )
+    await send_message(
+        bot_token=bot_token,
+        chat_id=chat_id,
+        text=text,
+        reply_markup=_quick_keyboard(),
+    )
+
+
+async def _send_planning_brief(*, bot_token: str, chat_id: str, user_id: ObjectId, kind: str) -> None:
+    from app.services.planning import get_planning_overlay
+
+    overlay = await get_planning_overlay(str(user_id))
+    if kind == "forecast":
+        forecast = overlay.get("forecast") or {}
+        text = (
+            "Cash flow forecast (scheduled path)\n"
+            f"Today: ₹{float(forecast.get('today') or 0):.2f}\n"
+            f"30 days: ₹{float(forecast.get('d30') or 0):.2f}\n"
+            f"60 days: ₹{float(forecast.get('d60') or 0):.2f}\n"
+            f"90 days: ₹{float(forecast.get('d90') or 0):.2f}\n"
+            f"Lowest: ₹{float(forecast.get('lowest') or 0):.2f}"
+            + (f" on {forecast.get('lowest_date')}" if forecast.get("lowest_date") else "")
+        )
+    elif kind == "safe":
+        safe = overlay.get("safe_to_spend") or {}
+        text = (
+            "Safe to spend\n"
+            f"₹{float(safe.get('amount') or 0):.2f}\n"
+            f"Available cash: ₹{float(safe.get('cash') or 0):.2f}\n"
+            f"Reserved: ₹{float(safe.get('reserved') or 0):.2f}\n"
+            "Credit-card limit is not included."
+        )
+    elif kind == "networth":
+        worth = overlay.get("net_worth") or {}
+        text = (
+            "Net worth\n"
+            f"₹{float(worth.get('amount') or 0):.2f}\n"
+            f"Assets: ₹{float(worth.get('assets') or 0):.2f}\n"
+            f"Liabilities: ₹{float(worth.get('liabilities') or 0):.2f}"
+        )
+    else:
+        goals = overlay.get("goals") or []
+        if not goals:
+            text = "No active goals."
+        else:
+            lines = ["Goals"]
+            for goal in goals:
+                lines.append(
+                    f"- {goal.get('name')}: ₹{float(goal.get('current_amount') or 0):.2f} / ₹{float(goal.get('target_amount') or 0):.2f}"
+                )
+            text = "\n".join(lines)
     await send_message(
         bot_token=bot_token,
         chat_id=chat_id,
@@ -669,6 +744,12 @@ async def _ask_description(*, bot_token: str, chat_id: str, user_id: ObjectId, d
 
 
 async def _ask_confirm(*, bot_token: str, chat_id: str, user_id: ObjectId, data: dict) -> None:
+    suggestion_line = ""
+    if data.get("suggested_category_name") and data.get("suggested_subcategory_name"):
+        suggestion_line = (
+            f"\n- Engine Suggestion: {data.get('suggested_category_name')} / "
+            f"{data.get('suggested_subcategory_name')} ({int(data.get('suggested_confidence_percent') or 0)}%)"
+        )
     summary = (
         "Please confirm transaction:\n"
         f"- Type: {data.get('tx_type')}\n"
@@ -679,6 +760,7 @@ async def _ask_confirm(*, bot_token: str, chat_id: str, user_id: ObjectId, data:
         + f"- Mode: {data.get('mode')}\n"
         + f"- Amount: ₹{float(data.get('amount') or 0):.2f}\n"
         + f"- Description: {data.get('description') or '-'}"
+        + suggestion_line
     )
     options = [TxOption("Confirm", "confirm"), TxOption("Cancel", "cancel")]
     await _save_session(
@@ -710,6 +792,26 @@ async def _finalize_transaction(*, bot_token: str, chat_id: str, user_id: Object
         is_recurring=False,
         request=None,
     )
+    if str(data.get("description") or "").strip():
+        selected_category = {
+            "code": str(data.get("category_code") or ""),
+            "name": str(data.get("category_name") or data.get("category_code") or ""),
+        }
+        selected_subcategory = {
+            "code": str(data.get("subcategory_code") or ""),
+            "name": str(data.get("subcategory_name") or data.get("subcategory_code") or ""),
+        }
+        if (
+            not data.get("suggested_category_code")
+            or str(data.get("suggested_category_code") or "") != str(data.get("category_code") or "")
+            or str(data.get("suggested_subcategory_code") or "") != str(data.get("subcategory_code") or "")
+        ):
+            await learn_from_override(
+                user_id=user_id,
+                raw_description=str(data.get("description") or ""),
+                category=selected_category,
+                subcategory=selected_subcategory,
+            )
     await _clear_session(chat_id=chat_id)
     await send_message(
         bot_token=bot_token,
@@ -728,6 +830,15 @@ async def process_telegram_text(*, bot_token: str, chat_id: str, text: str) -> N
         {"telegram_chat_id": chat_id, "deleted_at": None},
         {"_id": 1, "is_active": 1},
     )
+    linked_count = await db.users.count_documents({"telegram_chat_id": chat_id, "deleted_at": None})
+    if linked_count > 1:
+        await send_message(
+            bot_token=bot_token,
+            chat_id=chat_id,
+            text="This Telegram account is linked to more than one FinTracker user. Unlink extras from Profile before asking for balances.",
+            reply_markup=_quick_keyboard(),
+        )
+        return
     if not user:
         if is_register_command:
             now = _now()
@@ -784,6 +895,22 @@ async def process_telegram_text(*, bot_token: str, chat_id: str, text: str) -> N
         await _send_summary(bot_token=bot_token, chat_id=chat_id, user_id=user_id)
         return
 
+    if normalized in {BOT_COMMAND_FORECAST, "forecast"}:
+        await _send_planning_brief(bot_token=bot_token, chat_id=chat_id, user_id=user_id, kind="forecast")
+        return
+
+    if normalized in {BOT_COMMAND_SAFE, "safe to spend", "safetospend"}:
+        await _send_planning_brief(bot_token=bot_token, chat_id=chat_id, user_id=user_id, kind="safe")
+        return
+
+    if normalized in {BOT_COMMAND_NETWORTH, "net worth", "networth"}:
+        await _send_planning_brief(bot_token=bot_token, chat_id=chat_id, user_id=user_id, kind="networth")
+        return
+
+    if normalized in {BOT_COMMAND_GOALS, "goals"}:
+        await _send_planning_brief(bot_token=bot_token, chat_id=chat_id, user_id=user_id, kind="goals")
+        return
+
     if normalized in {BOT_COMMAND_CANCEL, "cancel"}:
         await _clear_session(chat_id=chat_id)
         await send_message(
@@ -800,6 +927,20 @@ async def process_telegram_text(*, bot_token: str, chat_id: str, text: str) -> N
 
     session = await _load_session(chat_id=chat_id)
     if not session:
+        from app.helpers.telegram_intents import detect_finance_intent
+        from app.services.telegram_query import answer_finance_query, log_bot_query
+
+        intent = detect_finance_intent(raw)
+        if intent:
+            text = await answer_finance_query(user_id=user_id, intent=intent)
+            await log_bot_query(user_id=user_id, intent=str(intent.get("intent") or ""), chat_id=chat_id)
+            await send_message(
+                bot_token=bot_token,
+                chat_id=chat_id,
+                text=text,
+                reply_markup=_quick_keyboard(),
+            )
+            return
         quick = await _try_quick_transaction_detect(user_id, raw)
         if quick:
             await _ask_confirm(bot_token=bot_token, chat_id=chat_id, user_id=user_id, data=quick)
@@ -887,6 +1028,19 @@ async def process_telegram_text(*, bot_token: str, chat_id: str, text: str) -> N
 
     if step == "description":
         data["description"] = "" if normalized == "skip" else raw
+        if data["description"]:
+            preview = await categorize_transaction(
+                user_id=user_id,
+                raw_description=str(data["description"]),
+                amount=float(data.get("amount") or 0),
+                tx_type=str(data.get("tx_type") or "debit"),
+                mode=str(data.get("mode") or "unknown"),
+            )
+            data["suggested_category_code"] = str(preview.get("suggested_category_code") or "")
+            data["suggested_subcategory_code"] = str(preview.get("suggested_subcategory_code") or "")
+            data["suggested_category_name"] = str(preview.get("suggested_category") or "")
+            data["suggested_subcategory_name"] = str(preview.get("suggested_subcategory") or "")
+            data["suggested_confidence_percent"] = int(preview.get("confidence_percent") or 0)
         await _ask_confirm(bot_token=bot_token, chat_id=chat_id, user_id=user_id, data=data)
         return
 

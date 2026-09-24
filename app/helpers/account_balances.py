@@ -19,24 +19,70 @@ def delta_for_edit(tx_type: str, old_amount: float, new_amount: float) -> float:
     return round_money(old_amount - new_amount)
 
 
-async def apply_account_delta(*, db, account_id, delta: float) -> None:
+def _balance_update(delta: float) -> list[dict]:
+    # One pipeline update so the increment and 2dp rounding land atomically.
+    return [
+        {
+            "$set": {
+                "balance": {
+                    "$round": [{"$add": [{"$ifNull": ["$balance", 0]}, delta]}, 2]
+                }
+            }
+        }
+    ]
+
+
+async def apply_account_delta(
+    *,
+    db,
+    account_id,
+    delta: float,
+    session=None,
+    require_funds: bool = False,
+) -> bool:
+    """
+    Atomically add delta to an account balance.
+
+    With require_funds, a negative delta only applies if the balance covers it
+    (check and debit in one write, so concurrent debits cannot overdraw).
+    Returns False when the account is missing or funds are insufficient.
+    """
     delta = round_money(delta)
-    await db.accounts.update_one({"_id": account_id}, {"$inc": {"balance": delta}})
-    await db.accounts.update_one(
-        {"_id": account_id},
-        [{"$set": {"balance": {"$round": ["$balance", 2]}}}],
-    )
+    query: dict = {"_id": account_id}
+    if require_funds and delta < 0:
+        query["balance"] = {"$gte": -delta}
+    result = await db.accounts.update_one(query, _balance_update(delta), session=session)
+    return result.matched_count == 1
 
 
-async def apply_transfer_deltas(*, db, source_account_id, target_account_id, amount: float) -> None:
+async def apply_transfer_deltas(
+    *,
+    db,
+    source_account_id,
+    target_account_id,
+    amount: float,
+    session=None,
+    require_funds: bool = False,
+) -> bool:
+    """
+    Move amount from source to target. Returns False (and changes nothing)
+    when require_funds is set and the source cannot cover a positive amount.
+    Without a session, the source debit is undone if the target credit fails.
+    """
     amount = round_money(amount)
-    await db.accounts.update_one({"_id": source_account_id}, {"$inc": {"balance": -amount}})
-    await db.accounts.update_one({"_id": target_account_id}, {"$inc": {"balance": amount}})
-    await db.accounts.update_one(
-        {"_id": source_account_id},
-        [{"$set": {"balance": {"$round": ["$balance", 2]}}}],
+    debited = await apply_account_delta(
+        db=db,
+        account_id=source_account_id,
+        delta=-amount,
+        session=session,
+        require_funds=require_funds,
     )
-    await db.accounts.update_one(
-        {"_id": target_account_id},
-        [{"$set": {"balance": {"$round": ["$balance", 2]}}}],
-    )
+    if not debited:
+        return False
+    try:
+        await apply_account_delta(db=db, account_id=target_account_id, delta=amount, session=session)
+    except Exception:
+        if session is None:
+            await apply_account_delta(db=db, account_id=source_account_id, delta=amount)
+        raise
+    return True

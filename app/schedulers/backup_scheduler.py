@@ -1,5 +1,6 @@
 import logging
 
+from app.schedulers.job_lock import singleton_job
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -11,6 +12,7 @@ logger = logging.getLogger(__name__)
 BACKUP_JOB_ID = "automatic-backups"
 
 
+@singleton_job("automatic-backups", lease_seconds=2 * 60 * 60)
 async def run_scheduled_backup() -> None:
     try:
         await run_backup(actor={"username": "scheduler", "auth_provider": "system"})

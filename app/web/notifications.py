@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 from app.core.csrf import verify_csrf_token
 from app.core.guards import login_required
 from app.services.audit import audit_log
-from app.services.notifications import mark_all_read, mark_read_by_ids
+from app.services.notifications import archive_all, archive_by_ids, mark_all_read, mark_read_by_ids
 from app.services.web_push import (
     get_push_public_config,
     save_fcm_token,
@@ -30,6 +30,26 @@ async def mark_notifications_read(request: Request):
     if ids:
         await mark_read_by_ids(user_id=user["user_id"], ids=ids)
         return JSONResponse({"status": "ok", "read": ids})
+
+    return JSONResponse({"status": "noop"})
+
+
+@router.post("/archive")
+@login_required
+async def archive_notifications(request: Request):
+    verify_csrf_token(request, request.headers.get("X-CSRF-Token"))
+    user = request.session.get("user")
+    payload = await request.json()
+    ids = payload.get("ids")
+    mark_all = payload.get("all", False)
+
+    if mark_all:
+        await archive_all(user_id=user["user_id"])
+        return JSONResponse({"status": "ok", "archived": "all"})
+
+    if ids:
+        await archive_by_ids(user_id=user["user_id"], ids=ids)
+        return JSONResponse({"status": "ok", "archived": ids})
 
     return JSONResponse({"status": "noop"})
 

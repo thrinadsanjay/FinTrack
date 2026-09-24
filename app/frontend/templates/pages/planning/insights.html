@@ -1,0 +1,284 @@
+{% extends "base/base.html" %}
+{% block title %}Insights · {{ FT_APP_NAME }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/pages/insights.css?v={{ FT_APP_VERSION }}-ins2">
+{% endblock %}
+
+{% block content %}
+{% macro inr(value) -%}₹ {{ (value or 0) | money }}{%- endmacro %}
+{% set o = outlook %}
+<section class="ins" data-planning-page
+  data-health-history="{{ health_series | tojson | forceescape }}"
+  data-forecast-daily="{{ outlook.chart | tojson | forceescape }}">
+
+  <header class="ins-hero">
+    <h1>Insights</h1>
+  </header>
+
+  <nav class="ins-jump" aria-label="Sections">
+    <a href="#attention"><i class="fa-solid fa-bell" aria-hidden="true"></i> Needs attention{% if feed.attention %} <span>{{ feed.attention | length }}</span>{% endif %}</a>
+    <a href="#month"><i class="fa-regular fa-calendar" aria-hidden="true"></i> This month</a>
+    <a href="#health"><i class="fa-solid fa-heart-pulse" aria-hidden="true"></i> Health</a>
+    <a href="#cash"><i class="fa-solid fa-chart-line" aria-hidden="true"></i> Cash outlook</a>
+  </nav>
+
+  {# ---------------- Needs attention ---------------- #}
+  <section class="ins-section" id="attention" aria-labelledby="ins-attention-title">
+    <header class="ins-section__head">
+      <h2 id="ins-attention-title">Needs attention</h2>
+      <p>Things in your records worth acting on, most urgent first.</p>
+    </header>
+
+    {% if feed.attention %}
+    <ul class="ins-feed">
+      {% for item in feed.attention %}
+      <li class="ins-item is-{{ item.tone }}" data-insight>
+        <span class="ins-item__icon"><i class="fa-solid {{ item.icon }}" aria-hidden="true"></i></span>
+        <div class="ins-item__body">
+          <strong>{{ item.title }}</strong>
+          {% if item.detail %}<p>{{ item.detail }}</p>{% endif %}
+          <p class="ins-item__explain" data-explain-out hidden></p>
+        </div>
+        <div class="ins-item__actions">
+          {% if ai_available and item.explainable %}
+          <button type="button" class="ft-btn ft-btn--ghost ft-btn--sm" data-explain
+            data-key="{{ item.key }}" data-title="{{ item.title }}" data-detail="{{ item.detail }}" data-category="{{ item.category }}">Explain</button>
+          {% endif %}
+          {% if item.href %}
+          <a class="ft-btn ft-btn--secondary ft-btn--sm" href="{{ item.href }}">Review <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a>
+          {% endif %}
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <div class="ins-empty">
+      <i class="fa-solid fa-circle-check" aria-hidden="true"></i>
+      <p><strong>Nothing needs your attention right now.</strong> New items appear here as your transactions, cards and bills build history.</p>
+    </div>
+    {% endif %}
+
+    {% if feed.going_well %}
+    <div class="ins-well">
+      <h3>Going well</h3>
+      <ul>
+        {% for item in feed.going_well[:4] %}
+        <li><i class="fa-solid fa-circle-check" aria-hidden="true"></i><span><strong>{{ item.title }}</strong>{% if item.detail %} — {{ item.detail }}{% endif %}</span></li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+  </section>
+
+  {# ---------------- This month (was Reports) ---------------- #}
+  {% set m = month %}
+  <section class="ins-section" id="month" aria-labelledby="ins-month-title">
+    <header class="ins-section__head ins-section__head--row">
+      <div>
+        <h2 id="ins-month-title">This month vs last month</h2>
+        <p>{{ m.period_label }} compared with all of {{ m.prev_label }} — day {{ m.days_elapsed }} of {{ m.days_in_month }}, so totals are still growing.</p>
+      </div>
+      {% if ai_available and m.has_data %}
+      <button type="button" class="ft-btn ft-btn--secondary ft-btn--sm" data-month-summary>
+        <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> Summarize my month
+      </button>
+      {% endif %}
+    </header>
+
+    {% if m.has_data %}
+    <p class="ins-summary" data-month-summary-out hidden></p>
+
+    <div class="ins-kpis ins-kpis--3">
+      {% for t in m.tiles %}
+      <div class="ins-kpi is-{{ t.tone }}">
+        <span>{{ t.label }}</span>
+        <strong class="{% if t.key == 'saved' and (t.value or 0) < 0 %}is-neg{% endif %}">{% if t.value is not none %}{{ inr(t.value) }}{% else %}—{% endif %}</strong>
+        <em>
+          {% if t.key == 'saved' %}
+            {% if t.rate is not none %}{{ t.rate }}% of income{% endif %}{% if t.prev is not none %}{% if t.rate is not none %} · {% endif %}{{ inr(t.prev) }} in {{ m.prev_label }}{% endif %}
+          {% elif t.change is not none %}
+            <b class="is-{{ t.tone }}">{% if t.change > 0 %}▲{% elif t.change < 0 %}▼{% endif %} {{ t.change | abs | round(0) | int }}%</b> vs {{ inr(t.prev) }} in {{ m.prev_label }}
+          {% elif t.prev is not none %}
+            {{ inr(t.prev) }} in {{ m.prev_label }}
+          {% else %}
+            No {{ m.prev_label }} data
+          {% endif %}
+        </em>
+      </div>
+      {% endfor %}
+    </div>
+
+    {% if m.rising or m.falling %}
+    <div class="ins-grid ins-grid--even">
+      {% for title, rows, tone in [('Spending more on', m.rising, 'up'), ('Spending less on', m.falling, 'down')] %}
+      <div class="ins-panel">
+        <h3>{{ title }}</h3>
+        {% if rows %}
+        <ul class="ins-changes is-{{ tone }}">
+          {% for row in rows %}
+          <li>
+            <div class="ins-changes__top">
+              <span>{{ row.name }}</span>
+              <strong>{% if row.change_pct > 0 %}+{% endif %}{{ row.change_pct | round(0) | int }}%</strong>
+            </div>
+            <div class="ins-changes__bar"><span style="width: {{ row.width }}%"></span></div>
+            <em>{{ inr(row.current) }} now{% if row.previous is not none %} · {{ inr(row.previous) }} in {{ m.prev_label }}{% endif %}</em>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="ins-note">No category {{ 'rose' if tone == 'up' else 'fell' }} by more than 8%.</p>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="ins-empty">
+      <i class="fa-regular fa-calendar" aria-hidden="true"></i>
+      <p><strong>No activity this month yet.</strong> Income and spending comparisons appear once transactions are recorded.</p>
+    </div>
+    {% endif %}
+  </section>
+
+  {# ---------------- Health ---------------- #}
+  <section class="ins-section" id="health" aria-labelledby="ins-health-title">
+    <header class="ins-section__head">
+      <h2 id="ins-health-title">What drives your health score</h2>
+      {% if health.score is not none %}
+      <p>
+        <span class="ins-score is-{{ (health.band or 'insufficient') | lower }}">{{ health.score }}/100 · {{ (health.band or 'insufficient') | health_label }}</span>
+        {% if health.previous_score is defined and health.previous_score is not none %}
+          {% set delta = health.score - health.previous_score %}
+          <span class="ins-delta {% if delta > 0 %}is-up{% elif delta < 0 %}is-down{% endif %}">{% if delta > 0 %}▲ +{{ delta }}{% elif delta < 0 %}▼ {{ delta }}{% else %}No change{% endif %} vs last snapshot</span>
+        {% endif %}
+        Each factor counts equally. Weakest first.
+      </p>
+      {% else %}
+      <p>Not enough activity yet to score. Add accounts and a month of income and expenses.</p>
+      {% endif %}
+    </header>
+
+    {% if health_rows %}
+    <div class="ins-grid">
+      <div class="ins-panel">
+        <ul class="ins-factors">
+          {% for row in health_rows %}
+          <li class="ins-factor is-{{ row.tone }}">
+            <div class="ins-factor__top">
+              <span class="ins-factor__label">{{ row.label }}</span>
+              <span class="ins-factor__score">{{ row.score }}</span>
+            </div>
+            <div class="ins-factor__bar"><span style="width: {{ row.score }}%"></span></div>
+            <p class="ins-factor__meaning">{{ row.meaning }}</p>
+            {% if row.tip %}<p class="ins-factor__tip"><i class="fa-regular fa-lightbulb" aria-hidden="true"></i> {{ row.tip }}</p>{% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% if health_missing %}
+        <p class="ins-note">Not scored yet (no data): {{ health_missing | join(', ') }}.</p>
+        {% endif %}
+      </div>
+      <div class="ins-panel">
+        <h3>What changed</h3>
+        {% if health.reasons %}
+        <ul class="ins-reasons">
+          {% for reason in health.reasons %}<li>{{ reason }}</li>{% endfor %}
+        </ul>
+        {% else %}
+        <p class="ins-note">Changes appear once there are two snapshots to compare.</p>
+        {% endif %}
+        {% if health_series | length > 1 %}
+        <h3>Score trend</h3>
+        <canvas class="ins-chart ins-chart--sm" data-health-chart width="420" height="160" aria-label="Health score trend from 0 to 100"></canvas>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </section>
+
+  {# ---------------- Cash outlook ---------------- #}
+  <section class="ins-section" id="cash" aria-labelledby="ins-cash-title">
+    <header class="ins-section__head">
+      <h2 id="ins-cash-title">Cash outlook · next 90 days</h2>
+      <p>Your cash balance projected from scheduled income, recurring payments, bills and EMIs.</p>
+    </header>
+
+    {% if o.has_data %}
+    <div class="ins-callout is-{{ o.status }}">
+      {% if o.status == 'negative' %}
+        <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+        <p><strong>Cash may run out.</strong> Projected balance drops to {{ inr(o.lowest) }} on {{ o.lowest_date | dateformat('%d %b') }}{% if o.days_to_lowest %} (in {{ o.days_to_lowest }} days){% endif %}. Move money in or reschedule a payment before then.</p>
+      {% elif o.status == 'tight' %}
+        <i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i>
+        <p><strong>Cash gets tight.</strong> Lowest point is {{ inr(o.lowest) }} on {{ o.lowest_date | dateformat('%d %b') }}{% if o.days_to_lowest %} (in {{ o.days_to_lowest }} days){% endif %}. Avoid large one-off spends before then.</p>
+      {% else %}
+        <i class="fa-solid fa-circle-check" aria-hidden="true"></i>
+        <p><strong>Cash stays healthy.</strong> Your balance doesn’t fall below {{ inr(o.lowest) }} in the next 90 days.</p>
+      {% endif %}
+    </div>
+
+    <div class="ins-kpis">
+      <div class="ins-kpi is-low">
+        <span>Lowest point</span>
+        <strong class="{% if (o.lowest or 0) < 0 %}is-neg{% endif %}">{{ inr(o.lowest) }}</strong>
+        <em>{% if o.lowest_date %}{{ o.lowest_date | dateformat('%d %b %Y') }}{% else %}—{% endif %}</em>
+      </div>
+      {% for label, value in [('In 30 days', o.h30), ('In 60 days', o.h60), ('In 90 days', o.h90)] %}
+      <div class="ins-kpi">
+        <span>{{ label }}</span>
+        <strong class="{% if (value or 0) < 0 %}is-neg{% endif %}">{{ inr(value) }}</strong>
+        {% if o.start is not none and value is not none %}
+          {% set diff = value - o.start %}
+          <em class="{% if diff < 0 %}is-neg{% elif diff > 0 %}is-pos{% endif %}">{% if diff > 0 %}+{% endif %}{{ inr(diff) }} vs today</em>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="ins-grid ins-grid--wide">
+      <div class="ins-panel">
+        <h3>Projected balance</h3>
+        <canvas class="ins-chart" data-forecast-chart width="720" height="220" aria-label="Projected cash balance for the next 90 days"></canvas>
+      </div>
+      <div class="ins-panel">
+        <h3>Next 30 days</h3>
+        <div class="ins-flow">
+          <span class="is-pos">In {{ inr(o.inflow_30) }}</span>
+          <span class="is-neg">Out {{ inr(o.outflow_30) }}</span>
+        </div>
+        {% if o.events %}
+        <ul class="ins-events">
+          {% for event in o.events %}
+          <li>
+            <span class="ins-events__date">{{ event.date | dateformat('%d %b') }}</span>
+            <span class="ins-events__label">{{ event.label }}{% if event.certainty and event.certainty != 'scheduled' %} <em>{{ event.certainty }}</em>{% endif %}</span>
+            <strong class="{% if event.amount < 0 %}is-neg{% else %}is-pos{% endif %}">{% if event.amount > 0 %}+{% endif %}{{ inr(event.amount) }}</strong>
+          </li>
+          {% endfor %}
+        </ul>
+        {% if o.more_events %}<a class="ins-more" href="/planning/calendar">+{{ o.more_events }} more in the calendar <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a>{% endif %}
+        {% else %}
+        <p class="ins-note">No scheduled income or payments in the next 30 days.</p>
+        {% endif %}
+      </div>
+    </div>
+    {% else %}
+    <div class="ins-empty">
+      <i class="fa-solid fa-chart-line" aria-hidden="true"></i>
+      <p><strong>No outlook yet.</strong> Add accounts and recurring income or payments to project your cash.</p>
+    </div>
+    {% endif %}
+  </section>
+
+  <p class="ins-disclaimer">Calculated from your FinTracker records. Informational only — not financial advice.</p>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/planning.js?v={{ FT_APP_VERSION }}-ins1" defer></script>
+{% if ai_available %}
+<script src="/static/js/ask.js?v={{ FT_APP_VERSION }}-ins1" defer></script>
+<script src="/static/js/insights.js?v={{ FT_APP_VERSION }}-ins1" defer></script>
+{% endif %}
+{% endblock %}

@@ -34,13 +34,19 @@ class _Collection:
         self.find_one_calls.append(query)
         return self.find_one_result
 
-    async def insert_one(self, doc):
+    async def insert_one(self, doc, session=None):
         self.inserted.append(doc)
         return None
 
-    async def update_one(self, query, update):
+    async def update_one(self, query, update, session=None):
         self.updated.append((query, update))
-        return None
+        return _UpdateResult(matched_count=1)
+
+
+class _UpdateResult:
+    def __init__(self, matched_count):
+        self.matched_count = matched_count
+        self.modified_count = matched_count
 
 
 class _FakeDb:
@@ -126,10 +132,13 @@ class TestSchedulerIdempotency(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(inserted["scheduled_for"], scheduled_for)
         self.assertEqual(inserted["source"], "recurring")
 
-        self.assertEqual(len(accounts.updated), 2)
+        # Single guarded write: funds check, debit and rounding in one update.
+        self.assertEqual(len(accounts.updated), 1)
+        query, update = accounts.updated[0]
+        self.assertEqual(query, {"_id": "aid-1", "balance": {"$gte": 100.0}})
         self.assertEqual(
-            accounts.updated[0],
-            ({"_id": "aid-1"}, {"$inc": {"balance": -100.0}}),
+            update,
+            [{"$set": {"balance": {"$round": [{"$add": [{"$ifNull": ["$balance", 0]}, -100.0]}, 2]}}}],
         )
 
         self.assertEqual(len(recurring.updated), 1)

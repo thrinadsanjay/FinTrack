@@ -131,6 +131,7 @@ class RecurringDepositService:
                 amount=amount,
             ),
         )
+        return result.inserted_id
 
     @staticmethod
     async def list_user_rules(

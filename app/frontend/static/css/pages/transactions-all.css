@@ -1,0 +1,514 @@
+/* Transactions — full-width Jira-style table */
+.ft-content:has(.txl) {
+  padding-left: var(--ft-space-4);
+  padding-right: var(--ft-space-4);
+}
+
+@media (min-width: 960px) {
+  .ft-content:has(.txl) {
+    padding-left: var(--ft-space-5);
+    padding-right: var(--ft-space-5);
+  }
+}
+
+.txl {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: none;
+}
+
+.txl-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.txl-hero h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+  color: var(--ft-ink);
+}
+
+.txl-hero__crumb {
+  display: none;
+}
+
+.txl-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--ft-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ft-raised) 96%, transparent);
+}
+
+.txl-toolbar .ft-input,
+.txl-toolbar .ft-select {
+  min-height: 36px;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.875rem;
+}
+
+.txl-toolbar__search {
+  flex: 1 1 200px;
+  min-width: 160px;
+}
+
+.txl-toolbar .ft-select,
+.txl-toolbar input[type="date"] {
+  flex: 0 1 140px;
+}
+
+.txl-toolbar .ft-btn {
+  min-height: 36px;
+}
+
+.txl-toolbar__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-left: auto;
+}
+
+.txl-count {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: var(--ft-accent-soft);
+  color: var(--ft-accent-ink);
+}
+
+.txl-legend {
+  display: inline-flex;
+  gap: 0.55rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--ft-muted);
+}
+
+.txl-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+}
+
+.txl-legend__item::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+}
+
+.txl-legend__item.is-credit::before { background: var(--ft-positive); }
+.txl-legend__item.is-debit::before { background: var(--ft-negative); }
+.txl-legend__item.is-transfer::before { background: var(--ft-info); }
+
+.txl-board {
+  width: 100%;
+  border: 1px solid var(--ft-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ft-raised) 97%, transparent);
+  overflow-x: auto;
+}
+
+.txl-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  min-width: 860px;
+}
+
+.txl-w-type { width: 9%; }
+.txl-w-amount { width: 12%; }
+.txl-w-desc { width: 24%; }
+.txl-w-account { width: 22%; }
+.txl-w-cat { width: 14%; }
+.txl-w-time { width: 9%; }
+.txl-w-actions { width: 10%; }
+
+.txl-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  padding: 0.65rem 0.85rem;
+  text-align: left;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+  color: var(--ft-muted);
+  background: var(--ft-inset);
+  border-bottom: 1px solid var(--ft-border);
+  white-space: nowrap;
+}
+
+.txl-actions-h {
+  text-align: right;
+}
+
+.txl-group__head td {
+  padding: 0.45rem 0.85rem;
+  background: color-mix(in srgb, var(--ft-inset) 85%, var(--ft-accent-soft));
+  border-top: 1px solid var(--ft-border);
+  border-bottom: 1px solid var(--ft-border);
+}
+
+.txl-group__label {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--ft-ink);
+}
+
+.txl-group__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  margin-left: 0.4rem;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  border: 1px solid var(--ft-border);
+  background: var(--ft-raised);
+  color: var(--ft-muted);
+  vertical-align: middle;
+}
+
+.txl-row td {
+  padding: 0.7rem 0.85rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--ft-border) 80%, transparent);
+  vertical-align: middle;
+  font-size: 0.875rem;
+}
+
+.txl-row {
+  transition: background 120ms ease;
+}
+
+.txl-row:hover {
+  background: color-mix(in srgb, var(--ft-accent-soft) 22%, transparent);
+}
+
+.txl-row td:first-child {
+  box-shadow: inset 3px 0 0 transparent;
+}
+
+.txl-row.is-credit td:first-child {
+  box-shadow: inset 3px 0 0 var(--ft-positive);
+  background: color-mix(in srgb, var(--ft-positive-soft) 14%, transparent);
+}
+
+.txl-row.is-debit td:first-child {
+  box-shadow: inset 3px 0 0 var(--ft-negative);
+  background: color-mix(in srgb, var(--ft-negative-soft) 12%, transparent);
+}
+
+.txl-row.is-transfer td:first-child {
+  box-shadow: inset 3px 0 0 var(--ft-info);
+  background: color-mix(in srgb, var(--ft-info) 7%, transparent);
+}
+
+.txl-row.is-credit {
+  background: color-mix(in srgb, var(--ft-positive-soft) 12%, transparent);
+}
+
+.txl-row.is-debit {
+  background: color-mix(in srgb, var(--ft-negative-soft) 10%, transparent);
+}
+
+.txl-row.is-transfer {
+  background: color-mix(in srgb, var(--ft-info) 6%, transparent);
+}
+
+.txl-row.is-deleted {
+  opacity: 0.62;
+}
+
+.txl-type {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 0.5rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.txl-type.is-credit {
+  color: var(--ft-positive);
+  background: var(--ft-positive-soft);
+}
+
+.txl-type.is-debit {
+  color: var(--ft-negative);
+  background: var(--ft-negative-soft);
+}
+
+.txl-type.is-transfer {
+  color: var(--ft-info);
+  background: rgba(59, 130, 246, 0.18);
+}
+
+.txl-amount {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.txl-row.is-credit .txl-amount { color: var(--ft-positive); }
+.txl-row.is-debit .txl-amount { color: var(--ft-negative); }
+.txl-row.is-transfer .txl-amount { color: var(--ft-info); }
+
+.txl-desc {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.txl-desc__title {
+  font-weight: 650;
+  color: var(--ft-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.txl-desc__status {
+  width: 100%;
+  margin-top: 0.05rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--ft-warning);
+}
+
+.txl-row.is-restored .txl-desc__status {
+  color: var(--ft-accent-ink);
+}
+
+.txl-ellipsis {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ft-ink-soft);
+}
+
+.txl-time {
+  color: var(--ft-faint);
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+.txl-actions-cell {
+  text-align: right;
+}
+
+.txl-tools {
+  display: inline-flex;
+  justify-content: flex-end;
+  gap: 0.2rem;
+}
+
+.txl-icon-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ft-ink-soft);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.txl-icon-btn:hover,
+.txl-icon-btn[aria-expanded="true"] {
+  border-color: var(--ft-border);
+  background: var(--ft-inset);
+  color: var(--ft-accent-ink);
+}
+
+.txl-menu {
+  position: relative;
+  display: inline-flex;
+}
+
+.txl-menu__panel {
+  position: fixed;
+  min-width: 176px;
+  padding: 0.28rem;
+  border-radius: 10px;
+  border: 1px solid var(--ft-border);
+  background: var(--ft-raised);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.35);
+  z-index: 4000;
+  display: none;
+}
+
+.txl-menu__panel.is-open {
+  display: block;
+}
+
+.txl-menu__panel[hidden] {
+  display: none !important;
+}
+
+.txl-menu__item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 34px;
+  padding: 0 0.6rem;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ft-ink-soft);
+  font-weight: 600;
+  font-size: 0.84rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.txl-menu__item:hover {
+  background: var(--ft-inset);
+  color: var(--ft-ink);
+}
+
+.txl-menu__item.is-danger {
+  color: var(--ft-negative);
+}
+
+.txl-menu__empty {
+  padding: 0.5rem 0.6rem;
+  font-size: 0.8rem;
+  color: var(--ft-faint);
+}
+
+.txl-info-pop {
+  position: fixed;
+  z-index: 4100;
+  max-width: min(280px, calc(100vw - 1.25rem));
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--ft-border);
+  background: var(--ft-raised);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.35);
+  color: var(--ft-ink-soft);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  white-space: pre-line;
+}
+
+.txl-info-pop[hidden] {
+  display: none !important;
+}
+
+.txl-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 2rem 1rem;
+  border: 1px dashed var(--ft-border);
+  border-radius: 12px;
+  color: var(--ft-muted);
+}
+
+.txl-dialog {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  max-width: calc(100vw - 2rem);
+}
+
+.txl-dialog::backdrop {
+  background: rgba(8, 12, 20, 0.62);
+}
+
+.txl-dialog__card {
+  width: min(420px, calc(100vw - 2rem));
+  border: 1px solid var(--ft-border);
+  border-radius: var(--ft-radius-xl);
+  background: var(--ft-raised);
+  overflow: hidden;
+}
+
+.txl-dialog__head,
+.txl-dialog__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ft-space-3);
+  padding: var(--ft-space-4);
+}
+
+.txl-dialog__head { border-bottom: 1px solid var(--ft-border); }
+.txl-dialog__foot {
+  border-top: 1px solid var(--ft-border);
+  justify-content: flex-end;
+}
+
+.txl-dialog__body {
+  display: grid;
+  gap: var(--ft-space-3);
+  padding: var(--ft-space-4);
+}
+
+.txl-dialog__hint {
+  font-size: 0.875rem;
+  color: var(--ft-muted);
+}
+
+.txl-dialog__close {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--ft-border);
+  background: var(--ft-inset);
+  color: var(--ft-ink-soft);
+  cursor: pointer;
+}
+
+@media (max-width: 820px) {
+  .txl-legend {
+    display: none;
+  }
+}
+
+[data-theme="dark"] .txl-board,
+[data-theme="dark"] .txl-toolbar {
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="dark"] .txl-row.is-transfer .txl-amount {
+  color: var(--ft-info);
+}
+
+[data-theme="light"] .txl-type.is-transfer {
+  color: var(--ft-info);
+  background: var(--ft-info-soft);
+}

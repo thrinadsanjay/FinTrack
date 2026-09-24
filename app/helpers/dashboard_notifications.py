@@ -3,7 +3,65 @@ from bson import ObjectId
 
 from app.db.mongo import db
 from app.helpers.dashboard_time import start_of_today_utc, app_now
-from app.services.notifications import upsert_notification, list_notifications
+from app.services.notifications import (
+    NotificationInbox,
+    count_unread_notifications,
+    list_notifications,
+    upsert_notification,
+)
+
+
+async def get_bills_due_today(uid: ObjectId) -> list:
+    """Get all bills (credit card + recurring) due today."""
+    today_start = start_of_today_utc()
+    tomorrow_start = today_start + timedelta(days=1)
+    bills = []
+
+    # Credit card bills due today
+    cc_bills_cursor = db.credit_card_bills.find(
+        {
+            "user_id": uid,
+            "due_date": {"$gte": today_start, "$lt": tomorrow_start},
+            "payment_status": "unpaid",
+        }
+    )
+    async for bill in cc_bills_cursor:
+        card = await db.accounts.find_one({"_id": bill.get("card_id")})
+        bills.append({
+            "type": "credit_card_bill",
+            "id": str(bill.get("_id")),
+            "name": f"CC Bill - {card.get('name') if card else 'Credit Card'}",
+            "amount": bill.get("outstanding_amount", 0),
+            "due_date": bill.get("due_date"),
+        })
+
+    # Recurring transactions due today
+    recurring_cursor = db.recurring_deposits.find(
+        {
+            "user_id": uid,
+            "is_active": True,
+            "ended_at": None,
+            "$and": [
+                {"$or": [{"end_date": None}, {"end_date": {"$gte": today_start}}]},
+                {
+                    "$or": [
+                        {"next_run": {"$gte": today_start, "$lt": tomorrow_start}},
+                        {"last_run": {"$gte": today_start, "$lt": tomorrow_start}},
+                    ]
+                },
+            ],
+        }
+    )
+    async for rule in recurring_cursor:
+        bills.append({
+            "type": "recurring",
+            "id": str(rule.get("_id")),
+            "name": rule.get("description", "Recurring transaction"),
+            "amount": rule.get("amount", 0),
+            "due_date": rule.get("next_run"),
+        })
+
+    return bills
 
 
 async def persist_dashboard_notifications(
@@ -115,14 +173,51 @@ async def persist_dashboard_notifications(
         stale_scheduled_today_query["key"]["$nin"] = list(active_scheduled_today_keys)
     await db.notifications.delete_many(stale_scheduled_today_query)
 
+    # Check for bills due today
+    today_start = start_of_today_utc()
+    tomorrow_start = today_start + timedelta(days=1)
+    bills_due_today_cursor = db.credit_card_bills.find(
+        {
+            "user_id": uid,
+            "due_date": {"$gte": today_start, "$lt": tomorrow_start},
+            "payment_status": "unpaid",
+        }
+    )
+
+    active_bill_due_today_keys = set()
+    async for bill in bills_due_today_cursor:
+        bill_id = str(bill.get("_id"))
+        card_id = str(bill.get("card_id"))
+        # Get card details
+        card = await db.accounts.find_one({"_id": card_id})
+        card_name = card.get("name") if card else "Credit Card"
+        key = f"bill_due_today:{bill_id}:{today_key}"
+        active_bill_due_today_keys.add(key)
+        await upsert_notification(
+            user_id=uid,
+            key=key,
+            notif_type="info",
+            title="Bill due today",
+            message=(
+                f"Credit card bill for {card_name} is due today. "
+                f"Outstanding amount: ₹ {bill.get('outstanding_amount', 0)}"
+            ),
+        )
+
+    stale_bill_due_today_query = {"user_id": uid, "key": {"$regex": r"^bill_due_today:"}}
+    if active_bill_due_today_keys:
+        stale_bill_due_today_query["key"]["$nin"] = list(active_bill_due_today_keys)
+    await db.notifications.delete_many(stale_bill_due_today_query)
+
     cutoff = datetime.now(timezone.utc) - timedelta(days=10)
     notifications = await list_notifications(
         user_id=uid,
         unread_only=False,
-        limit=500,
+        limit=40,
         since=cutoff,
         include_unread_outside_since=True,
     )
     for n in notifications:
         n["id"] = str(n["_id"])
-    return notifications
+    unread_count = await count_unread_notifications(user_id=uid)
+    return NotificationInbox(notifications, unread_count=unread_count)

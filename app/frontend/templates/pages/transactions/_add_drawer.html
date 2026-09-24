@@ -1,0 +1,160 @@
+{% set defaults = tx_defaults or {} %}
+{% set spend_accounts = spend_accounts or accounts %}
+{% set force_recurring = force_recurring or false %}
+<aside class="txa-drawer" data-add-drawer {% if not open_add %}hidden{% endif %}>
+  <div class="txa-drawer__panel" role="dialog" aria-modal="true" aria-labelledby="txa-add-title">
+    <header class="txa-drawer__head">
+      <h2 id="txa-add-title">{% if force_recurring %}Add recurring{% else %}Add transaction{% endif %}</h2>
+      <button type="button" class="ft-icon-btn" data-close-add aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+    </header>
+
+    <form method="post" action="/transactions/add" class="txa-form" data-tx-form {% if force_recurring %}data-force-recurring="1"{% endif %}>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+      <input type="hidden" name="return_view" value="{% if force_recurring %}recurring{% else %}{{ tx_view or 'list' }}{% endif %}">
+      {% if force_recurring %}
+      <input type="hidden" name="is_recurring" value="true">
+      {% endif %}
+      {% if defaults.credit_bill_id %}
+      <input type="hidden" name="credit_bill_id" value="{{ defaults.credit_bill_id }}">
+      {% endif %}
+
+      <div class="txa-kind" role="radiogroup" aria-label="Transaction type">
+        <label class="txa-kind__item">
+          <input type="radio" name="tx_type" value="debit" {% if defaults.tx_type != 'credit' and defaults.tx_type != 'transfer' %}checked{% endif %} data-tx-type>
+          <span>Expense</span>
+        </label>
+        <label class="txa-kind__item">
+          <input type="radio" name="tx_type" value="credit" {% if defaults.tx_type == 'credit' %}checked{% endif %} data-tx-type>
+          <span>Income</span>
+        </label>
+        <label class="txa-kind__item">
+          <input type="radio" name="tx_type" value="transfer" {% if defaults.tx_type == 'transfer' %}checked{% endif %} data-tx-type>
+          <span>Transfer</span>
+        </label>
+      </div>
+      <select class="ft-select sr-only" id="tx_type" data-tx-type-select aria-hidden="true" tabindex="-1">
+        <option value="debit" {% if defaults.tx_type != 'credit' and defaults.tx_type != 'transfer' %}selected{% endif %}>debit</option>
+        <option value="credit" {% if defaults.tx_type == 'credit' %}selected{% endif %}>credit</option>
+        <option value="transfer" {% if defaults.tx_type == 'transfer' %}selected{% endif %}>transfer</option>
+      </select>
+
+      <div class="txa-form__grid">
+        <div class="ft-field txa-span-2">
+          <label for="amount">Amount</label>
+          <div class="txa-input">
+            <span>₹</span>
+            <input class="ft-input" id="amount" name="amount" type="number" step="0.01" min="0.01" value="{{ defaults.amount or '' }}" required placeholder="0.00">
+          </div>
+        </div>
+        <div class="ft-field txa-span-2">
+          <label for="account_id_add">Account</label>
+          <select class="ft-select" id="account_id_add" name="account_id" required>
+            {% for acc in spend_accounts %}
+            <option value="{{ acc._id }}" {% if defaults.account_id == acc._id|string %}selected{% endif %}>{{ acc.name or acc.bank_name }} — ₹ {{ acc.balance | money }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="ft-field txa-span-2" data-transfer-only hidden>
+          <label for="target_account_id">To account</label>
+          <select class="ft-select" id="target_account_id" name="target_account_id" disabled>
+            {% for acc in spend_accounts %}
+            <option value="{{ acc._id }}" {% if defaults.target_account_id == acc._id|string %}selected{% endif %}>{{ acc.name or acc.bank_name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="ft-field txa-span-2" data-non-transfer data-category-section>
+          <label for="category_code">Category</label>
+          <select class="ft-select" id="category_code" name="category_code" required>
+            <option value="">Loading…</option>
+          </select>
+          <p class="txa-hint sr-only" data-category-hint></p>
+        </div>
+        <div class="ft-field txa-span-2" data-non-transfer>
+          <label for="subcategory_code">Subcategory</label>
+          <select class="ft-select" id="subcategory_code" name="subcategory_code" required>
+            <option value="">Select category first</option>
+          </select>
+        </div>
+        <div class="ft-field {% if force_recurring %}txa-span-4{% else %}txa-span-2{% endif %}">
+          <label for="mode">Payment mode</label>
+          <select class="ft-select" id="mode" name="mode" required>
+            {% set mode_names = {'upi':'UPI','card':'Card','cash':'Cash','netbanking':'Net Banking','cheque':'Cheque','other':'Other'} %}
+            {% for m in ['upi','card','cash','netbanking','cheque','other'] %}
+            <option value="{{ m }}" {% if defaults.mode == m %}selected{% endif %}>{{ mode_names.get(m, m) }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% if not force_recurring %}
+        <div class="txa-toggle-wrap txa-span-2 txa-past">
+          <span class="txa-toggle__label" id="txa-past-label">Past transaction</span>
+          <div class="txa-past__row">
+            <label class="txa-toggle">
+              <input type="checkbox" data-past-toggle aria-labelledby="txa-past-label" {% if defaults.transaction_date %}checked{% endif %}>
+              <span class="txa-toggle__track" aria-hidden="true"><span class="txa-toggle__thumb"></span></span>
+            </label>
+            <div class="txa-past-date" data-past-panel {% if not defaults.transaction_date %}hidden{% endif %}>
+              <input
+                class="ft-input"
+                id="transaction_date"
+                name="transaction_date"
+                type="date"
+                max="{{ today_iso }}"
+                value="{{ defaults.transaction_date or '' }}"
+                data-past-date
+                aria-label="Date"
+                {% if not defaults.transaction_date %}disabled{% endif %}
+              >
+            </div>
+          </div>
+        </div>
+        {% endif %}
+        <div class="ft-field txa-span-3">
+          <label for="description">Description</label>
+          <input class="ft-input" id="description" name="description" value="{{ defaults.description or '' }}" placeholder="What was this for?">
+        </div>
+        <div class="txa-toggle-wrap txa-toggle-wrap--inline">
+          <span class="txa-toggle__label" id="txa-recurring-label">Recurring</span>
+          <label class="txa-toggle{% if force_recurring %} is-locked{% endif %}">
+            <input type="checkbox" {% if not force_recurring %}name="is_recurring" value="true"{% endif %} data-recurring-toggle aria-labelledby="txa-recurring-label"{% if force_recurring %} checked disabled{% endif %}>
+            <span class="txa-toggle__track" aria-hidden="true"><span class="txa-toggle__thumb"></span></span>
+          </label>
+        </div>
+      </div>
+      <div hidden data-transfer-category-fields>
+        <input type="hidden" name="category_code" value="transfer" data-transfer-category disabled>
+        <input type="hidden" name="subcategory_code" value="transfer" data-transfer-subcategory disabled>
+      </div>
+      <div class="txa-form__recurring{% if force_recurring %} is-enabled{% endif %}" data-recurring-panel aria-hidden="{% if force_recurring %}false{% else %}true{% endif %}">
+        <div class="ft-field">
+          <label for="frequency">Frequency</label>
+          <select class="ft-select" id="frequency" name="frequency" data-recurring-field>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="biweekly">Biweekly</option>
+            <option value="monthly" selected>Monthly</option>
+            <option value="quarterly">Quarterly</option>
+            <option value="halfyearly">Half-yearly</option>
+            <option value="yearly">Yearly</option>
+          </select>
+        </div>
+        <div class="ft-field">
+          <label for="interval">Every <em data-interval-suffix>month(s)</em></label>
+          <input class="ft-input" id="interval" name="interval" type="number" min="1" value="1" data-recurring-field>
+        </div>
+        <div class="ft-field">
+          <label for="start_date">Start date</label>
+          <input class="ft-input" id="start_date" name="start_date" type="date" data-recurring-field>
+        </div>
+        <div class="ft-field">
+          <label for="end_date">End date <em>(optional)</em></label>
+          <input class="ft-input" id="end_date" name="end_date" type="date" data-recurring-field>
+        </div>
+      </div>
+
+      <div class="txa-form__actions">
+        <button type="button" class="ft-btn ft-btn--secondary" data-close-add>Cancel</button>
+        <button type="submit" class="ft-btn ft-btn--primary">{% if force_recurring %}Create recurring{% else %}Save transaction{% endif %}</button>
+      </div>
+    </form>
+  </div>
+</aside>

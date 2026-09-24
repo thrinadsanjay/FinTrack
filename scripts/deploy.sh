@@ -58,7 +58,7 @@ health_check() {
   return 1
 }
 
-restart_backend() {
+restart_app() {
   log "Stopping existing container..."
   docker compose -f "$COMPOSE_FILE" down "$APP_SERVICE" 2>/dev/null || true
 
@@ -80,7 +80,7 @@ restore_backup() {
   log "Restoring backup image ${backup_ref}..."
   docker tag "$backup_ref" "${IMAGE_REPO}:${PROD_TAG}"
 
-  restart_backend
+  restart_app
   sleep "$STARTUP_WAIT_SECONDS"
 
   log "Running rollback health check..."
@@ -128,7 +128,7 @@ docker tag "$target_image" "${IMAGE_REPO}:${PROD_TAG}"
 
 # Restart service
 log "Deploying new version..."
-restart_backend
+restart_app
 
 log "Waiting ${STARTUP_WAIT_SECONDS}s for app startup..."
 sleep "$STARTUP_WAIT_SECONDS"

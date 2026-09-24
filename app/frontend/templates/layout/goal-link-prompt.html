@@ -1,0 +1,54 @@
+{# Shown once after saving an investment transaction/rule (see app/helpers/goal_prompt.py). #}
+{% set gp = goal_prompt %}
+<link rel="stylesheet" href="/static/css/components/goal-prompt.css?v={{ FT_APP_VERSION }}-gp2">
+<dialog class="gp-dialog" data-goal-prompt aria-labelledby="gp-title">
+  <form method="post" action="/planning/goals/link-entry" class="gp-card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+    {% if gp.transaction_id %}<input type="hidden" name="transaction_id" value="{{ gp.transaction_id }}">{% endif %}
+    {% if gp.recurring_id %}<input type="hidden" name="recurring_id" value="{{ gp.recurring_id }}">{% endif %}
+    <input type="hidden" name="next" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+
+    <div class="gp-icon" aria-hidden="true"><i class="fa-solid fa-flag-checkered"></i></div>
+    <h3 id="gp-title">{% if gp.goals %}Link to a goal?{% else %}Track this investment towards a goal?{% endif %}</h3>
+    <p class="gp-copy">
+      <strong>{{ gp.label }}</strong> · ₹ {{ gp.amount | money }}{% if gp.frequency_label %} {{ gp.frequency_label | lower }}{% endif %}
+      was saved as an investment.
+      {% if gp.goals %}{% if gp.recurring_id %}Every future instalment will count towards the goal you pick.{% else %}Count it towards one of your goals?{% endif %}{% endif %}
+    </p>
+
+    {% if not gp.goals %}
+    {# Only account-tracked goals: links would be ignored, so explain the fix instead. #}
+    <p class="gp-note">
+      {% if gp.account_goals | length == 1 %}“{{ gp.account_goals[0] }}” tracks{% else %}Your goals track{% endif %}
+      an account balance, so investments can’t be linked to {% if gp.account_goals | length == 1 %}it{% else %}them{% endif %}.
+      Edit the goal and choose <strong>Track progress with → Investments</strong> to count this and future investments.
+    </p>
+    <div class="gp-step">
+      <button type="button" class="ft-btn ft-btn--ghost" data-gp-no>Not now</button>
+      <a class="ft-btn ft-btn--primary" href="/planning/goals"><i class="fa-solid fa-flag-checkered" aria-hidden="true"></i> Open Goals</a>
+    </div>
+    {% else %}
+    <div class="gp-step" data-gp-step="ask">
+      <button type="button" class="ft-btn ft-btn--ghost" data-gp-no>No</button>
+      <button type="button" class="ft-btn ft-btn--primary" data-gp-yes>Yes, link it</button>
+    </div>
+
+    <div class="gp-step gp-step--pick" data-gp-step="pick" hidden>
+      <div class="ft-field">
+        <label for="gp-goal">Goal</label>
+        <select class="ft-select" id="gp-goal" name="goal_id" required>
+          {% for goal in gp.goals %}
+          <option value="{{ goal.id }}">{{ goal.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="gp-actions">
+        <button type="button" class="ft-btn ft-btn--ghost" data-gp-no>Cancel</button>
+        <button type="submit" class="ft-btn ft-btn--primary"><i class="fa-solid fa-link" aria-hidden="true"></i> Link</button>
+      </div>
+      {% if gp.account_goals %}<p class="gp-hint">Not listed: {{ gp.account_goals | join(', ') }} (tracks an account balance).</p>{% endif %}
+    </div>
+    {% endif %}
+  </form>
+</dialog>
+<script src="/static/js/goal-prompt.js?v={{ FT_APP_VERSION }}-gp1" defer></script>

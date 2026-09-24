@@ -1,0 +1,110 @@
+{% extends "base/base.html" %}
+{% block title %}Financial Calendar · {{ FT_APP_NAME }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/pages/planning.css?v={{ FT_APP_VERSION }}-head2">
+{% endblock %}
+{% block content %}
+{% set selected_detail = bundle.calendar.selected if bundle.calendar else {} %}
+<section class="pln">
+  <header class="pln-hero">
+    <div>
+      <h1>{{ month_label }}</h1>
+    </div>
+    <div class="pln-actions">
+      <a class="ft-btn ft-btn--ghost" href="/planning/calendar?year={{ prev_link[0] }}&month={{ prev_link[1] }}&view={{ view }}&kind={{ kind }}">Prev</a>
+      <a class="ft-btn ft-btn--ghost" href="/planning/calendar?year={{ next_link[0] }}&month={{ next_link[1] }}&view={{ view }}&kind={{ kind }}">Next</a>
+      <a class="ft-btn ft-btn--secondary" href="/planning/calendar?year={{ bundle.calendar.year }}&month={{ bundle.calendar.month }}&view=month&kind={{ kind }}">Month</a>
+      <a class="ft-btn ft-btn--secondary" href="/planning/calendar?year={{ bundle.calendar.year }}&month={{ bundle.calendar.month }}&view=list&kind={{ kind }}">List</a>
+    </div>
+  </header>
+
+  <form method="get" action="/planning/calendar" class="pln-actions">
+    <input type="hidden" name="year" value="{{ bundle.calendar.year }}">
+    <input type="hidden" name="month" value="{{ bundle.calendar.month }}">
+    <input type="hidden" name="view" value="{{ view }}">
+    <select class="ft-select" name="kind" onchange="this.form.submit()" aria-label="Event type">
+      <option value="" {% if not kind %}selected{% endif %}>All types</option>
+      <option value="recurring" {% if kind == 'recurring' %}selected{% endif %}>Recurring</option>
+      <option value="credit_card" {% if kind == 'credit_card' %}selected{% endif %}>Credit cards</option>
+      <option value="emi" {% if kind == 'emi' %}selected{% endif %}>EMIs</option>
+    </select>
+  </form>
+
+  {% if view == 'list' %}
+  <article class="pln-panel">
+    {% for key, events in days_map.items() %}
+      {% for event in events %}
+      <div class="pln-event">
+        <div>
+          <div>{{ event.label }}</div>
+          <div class="pln-certainty">{{ key }} · {{ event.source }} · {{ event.certainty }}</div>
+        </div>
+        <strong>{% if event.amount > 0 %}+{% endif %}₹ {{ event.amount | money }}</strong>
+      </div>
+      {% endfor %}
+    {% else %}
+      <p class="pln-empty">No recorded events this month.</p>
+    {% endfor %}
+  </article>
+  {% else %}
+  <div class="pln-cal">
+    {% for dow in ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}
+    <div class="pln-cal__dow">{{ dow }}</div>
+    {% endfor %}
+    {% for week in month_weeks %}
+      {% for cell in week %}
+        {% if cell %}
+          {% set key = cell.isoformat() %}
+          {% set events = days_map.get(key, []) %}
+          <a class="pln-cal__day {% if cell == today %}is-today{% endif %} {% if cell == selected %}is-selected{% endif %}" href="/planning/calendar?year={{ bundle.calendar.year }}&month={{ bundle.calendar.month }}&day={{ key }}&view=month&kind={{ kind }}">
+            <span class="pln-cal__num">{{ cell.day }}</span>
+            {% for event in events[:3] %}
+            <span class="pln-cal__dot">{{ event.label }}</span>
+            {% endfor %}
+          </a>
+        {% else %}
+          <div class="pln-cal__day is-empty"></div>
+        {% endif %}
+      {% endfor %}
+    {% endfor %}
+  </div>
+  <div class="pln-cal-legend" aria-label="Payment type legend">
+    <span><i class="is-card"></i>Card</span>
+    <span><i class="is-utility"></i>Utility</span>
+    <span><i class="is-subscription"></i>Subscription</span>
+    <span><i class="is-emi"></i>EMI</span>
+    <span><i class="is-income"></i>Income</span>
+  </div>
+  {% endif %}
+
+  <article class="pln-panel">
+    <h2>{{ selected | dateformat('%d %B %Y') }}</h2>
+    {% if selected_detail.events %}
+      {% for event in selected_detail.outflows %}
+      <div class="pln-event">
+        <div>
+          <div>{{ event.label }}</div>
+          <div class="pln-certainty">{{ event.source }} · {{ event.certainty }}</div>
+        </div>
+        <strong>₹ {{ event.amount | abs | money }}</strong>
+      </div>
+      {% endfor %}
+      {% for event in selected_detail.inflows %}
+      <div class="pln-event">
+        <div>
+          <div>{{ event.label }}</div>
+          <div class="pln-certainty">{{ event.source }} · inflow</div>
+        </div>
+        <strong class="is-pos">+ ₹ {{ event.amount | money }}</strong>
+      </div>
+      {% endfor %}
+      <div class="pln-row"><span>Total outflows</span><strong>₹ {{ selected_detail.outflow_total | money }}</strong></div>
+      {% if selected_detail.expected_balance_after is not none %}
+      <div class="pln-row"><span>Expected cash after these events (from today’s cash, not a running ledger)</span><strong>₹ {{ selected_detail.expected_balance_after | money }}</strong></div>
+      {% endif %}
+    {% else %}
+      <p class="pln-empty">No recorded events on this date.</p>
+    {% endif %}
+  </article>
+</section>
+{% endblock %}

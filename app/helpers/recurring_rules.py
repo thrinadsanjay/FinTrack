@@ -1,4 +1,4 @@
-from datetime import datetime, time, timezone
+from datetime import datetime, timezone
 
 from app.helpers.recurring_schedule import (
     SKIP_MISSED_OCCURRENCES,

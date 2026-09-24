@@ -6,7 +6,7 @@ Used by:
 - Services (date range conversion)
 """
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
 
 DEFAULT_TZ = "Asia/Kolkata"
@@ -46,12 +46,29 @@ def utc_to_local(dt, user_tz: ZoneInfo):
     return dt.astimezone(user_tz)
 
 
+def parse_user_date(value: str | None) -> date | None:
+    """Accept ISO (YYYY-MM-DD) or India display (DD/MM/YYYY, DD-MM-YYYY)."""
+    text = str(value or "").strip()
+    if not text:
+        return None
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+        try:
+            return datetime.strptime(text[:10], fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
 def local_date_range_to_utc(date_from: str, date_to: str, user_tz: ZoneInfo):
     """
     Convert local date range → UTC datetime range.
     """
-    start = datetime.fromisoformat(date_from).replace(tzinfo=user_tz)
-    end = datetime.fromisoformat(date_to).replace(tzinfo=user_tz)
+    start_day = parse_user_date(date_from)
+    end_day = parse_user_date(date_to)
+    if start_day is None or end_day is None:
+        raise ValueError("Invalid date range")
+    start = datetime(start_day.year, start_day.month, start_day.day, tzinfo=user_tz)
+    end = datetime(end_day.year, end_day.month, end_day.day, tzinfo=user_tz)
 
     return (
         start.astimezone(timezone.utc),
@@ -67,9 +84,9 @@ def localtime(dt, request):
     return utc_to_local(dt, get_user_timezone(request))
 
 
-def datetimeformat(value, fmt="%d-%m-%Y %I:%M %p"):
+def datetimeformat(value, fmt="%d %b %Y, %I:%M %p"):
     return value.strftime(fmt) if value else ""
 
 
-def dateformat(value, fmt="%d-%m-%Y"):
+def dateformat(value, fmt="%d %b %Y"):
     return value.strftime(fmt) if value else ""

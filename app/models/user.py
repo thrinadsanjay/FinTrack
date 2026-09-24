@@ -25,6 +25,10 @@ class UserInDB(BaseModel):
 
     username: Optional[str] = None
     email: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    full_name: Optional[str] = None
+    phone: Optional[str] = None
 
     auth_provider: AuthProvider
 

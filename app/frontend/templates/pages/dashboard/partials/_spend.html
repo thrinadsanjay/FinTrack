@@ -1,0 +1,76 @@
+{% set spend_ns = namespace(items=[]) %}
+{% for cat in spend_cats or [] %}
+  {% if (cat.total or 0) > 0 %}
+    {% set spend_ns.items = spend_ns.items + [cat] %}
+  {% endif %}
+{% endfor %}
+{% set spend_items = spend_ns.items %}
+{% set spend_total = summary.month_expense or 0 %}
+
+<article
+  class="dash-panel dash-spend ft-reveal"
+  style="--delay:260ms"
+  aria-labelledby="dash-spend-title"
+  data-spend-panel
+  data-categories='{{ spend_items | tojson }}'
+  data-spend-total="{{ spend_total }}"
+>
+  <div class="dash-spend__head">
+    <div>
+      <h2 id="dash-spend-title">
+        <span class="dash-ico"><i class="fa-solid fa-chart-pie" aria-hidden="true"></i></span>
+        Spending by Category
+      </h2>
+    </div>
+    <span class="dash-spend__period">
+      This month
+      <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+    </span>
+  </div>
+
+  {% if spend_items %}
+  <div class="dash-spend__body">
+    <div class="dash-spend__chart" data-chart-open>
+      <svg class="dash-spend__svg" data-donut="spend" viewBox="0 0 140 140" role="img" aria-label="Spending by category"></svg>
+      <div class="dash-spend__center">
+        <span>Total spent</span>
+        <strong>₹ {{ spend_total | money }}</strong>
+      </div>
+      <div class="dash-spend__tip" data-spend-tip hidden></div>
+    </div>
+    <div class="dash-spend__legend" aria-label="Spending categories">
+      {% for item in spend_items[:5] %}
+      <div class="tone-{{ loop.index0 }}">
+        <i aria-hidden="true"></i>
+        <span title="{{ item.name }} · ₹ {{ (item.total or 0) | money }} spent this month">{{ item.name }} · ₹ {{ (item.total or 0) | money }}</span>
+        <b>{{ item.percent or 0 }}%</b>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% else %}
+  <div class="dash-spend__empty">
+    <strong>No spending recorded yet</strong>
+    <p>Add transactions to see where your money goes.</p>
+    <a class="dash-spend__add" href="/transactions/add">Add transaction →</a>
+  </div>
+  {% endif %}
+
+  <div class="dash-chart-pop dash-float-pop is-spend" data-spend-dialog hidden>
+    <div class="dash-float-pop__arrow" aria-hidden="true"></div>
+    <div class="dash-float-pop__head">
+      <div>
+        <strong>Spending by Category</strong>
+        <p>Total spent: ₹ {{ spend_total | money }}</p>
+      </div>
+      <button type="button" class="dash-float-pop__close" data-spend-dialog-close aria-label="Close">
+        <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+      </button>
+    </div>
+    <div class="dash-float-pop__list" data-spend-table></div>
+    <div class="dash-float-pop__foot">
+      <span></span>
+      <a href="/transactions/list">View all transactions <span aria-hidden="true">→</span></a>
+    </div>
+  </div>
+</article>

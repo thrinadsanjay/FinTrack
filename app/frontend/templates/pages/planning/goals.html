@@ -1,0 +1,416 @@
+{% extends "base/base.html" %}
+{% block title %}Goals · {{ FT_APP_NAME }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/pages/goals.css?v={{ FT_APP_VERSION }}-gol1">
+{% endblock %}
+
+{% block content %}
+{% macro money_label(value) -%}₹ {{ (value or 0) | money }}{%- endmacro %}
+
+{% macro status_form(goal, status, label, cls='ft-btn--ghost', confirm_text='') -%}
+<form method="post" action="/planning/goals/{{ goal.id }}/status"{% if confirm_text %} data-confirm="{{ confirm_text }}"{% endif %}>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+  <input type="hidden" name="status" value="{{ status }}">
+  <input type="hidden" name="return_status" value="{{ goal_filter }}">
+  <button class="gol-menu__item" type="submit">{{ label }}</button>
+</form>
+{%- endmacro %}
+
+{# Checkbox picker for recurring rules + one-time investments. Used by the create and link dialogs. #}
+{% macro investment_picker(scope) %}
+<div class="gol-picker" data-picker>
+  <div class="gol-picker__bar">
+    <div class="gol-seg" role="tablist" aria-label="Investment kind">
+      <button type="button" class="gol-seg__btn is-on" data-picker-tab="recurring" role="tab">
+        <i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i> Recurring <span>{{ candidates.recurring | length }}</span>
+      </button>
+      <button type="button" class="gol-seg__btn" data-picker-tab="one_time" role="tab">
+        <i class="fa-solid fa-coins" aria-hidden="true"></i> One-time <span>{{ candidates.one_time | length }}</span>
+      </button>
+    </div>
+    <label class="gol-picker__search">
+      <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+      <input class="ft-input" type="search" placeholder="Search investments…" data-picker-search aria-label="Search investments">
+    </label>
+  </div>
+
+  <div class="gol-picker__panel" data-picker-panel="recurring">
+    {% set invest_rules = candidates.recurring | selectattr('is_investment') | list %}
+    {% if not candidates.recurring %}
+    <p class="gol-picker__empty">No recurring rules yet. Create a SIP or RD under <a href="/recurring">Recurring</a>, then link it here.</p>
+    {% else %}
+    {% if not invest_rules %}
+    <p class="gol-picker__empty">No recurring rules are categorised as investments. Use “Show all” to pick any rule.</p>
+    {% endif %}
+    <ul class="gol-picker__list">
+      {% for rule in candidates.recurring %}
+      <li class="gol-option{% if not rule.is_investment %} is-other{% endif %}" data-option data-search="{{ (rule.name ~ ' ' ~ rule.category ~ ' ' ~ rule.account_name) | lower }}"{% if not rule.is_investment %} hidden{% endif %}>
+        <label>
+          <input type="checkbox" name="recurring_ids" value="{{ rule.id }}" data-kind="recurring" data-monthly="{{ rule.monthly_equivalent }}" data-owner="{{ rule.linked_goal_id or '' }}">
+          <span class="gol-option__body">
+            <span class="gol-option__title">{{ rule.name }}
+              {% if rule.status != 'active' %}<span class="gol-tag is-{{ rule.status }}">{{ rule.status | title }}</span>{% endif %}
+            </span>
+            <span class="gol-option__meta">{{ money_label(rule.amount) }} · {{ rule.frequency_label }} · {{ rule.account_name }}{% if rule.category %} · {{ rule.category }}{% endif %}</span>
+            {% if rule.linked_goal_id %}<span class="gol-option__owner" data-owner-note>Funds “{{ goal_names.get(rule.linked_goal_id, 'another goal') }}”</span>{% endif %}
+          </span>
+          <span class="gol-option__amount">≈ {{ money_label(rule.monthly_equivalent) }}<small>/mo</small></span>
+        </label>
+      </li>
+      {% endfor %}
+    </ul>
+    {% if candidates.recurring | length > invest_rules | length %}
+    <label class="gol-picker__toggle">
+      <input type="checkbox" data-picker-show-all> Show all recurring rules ({{ candidates.recurring | length - invest_rules | length }} not categorised as investments)
+    </label>
+    {% endif %}
+    {% endif %}
+  </div>
+
+  <div class="gol-picker__panel" data-picker-panel="one_time" hidden>
+    {% if not candidates.one_time %}
+    <p class="gol-picker__empty">No one-time investments in the last year. Record a lump sum with category <strong>Investments</strong> (FD, stocks, mutual funds…) and it will appear here.</p>
+    {% else %}
+    <ul class="gol-picker__list">
+      {% for tx in candidates.one_time %}
+      <li class="gol-option" data-option data-search="{{ (tx.description ~ ' ' ~ tx.category ~ ' ' ~ tx.account_name) | lower }}">
+        <label>
+          <input type="checkbox" name="transaction_ids" value="{{ tx.id }}" data-kind="one_time" data-amount="{{ tx.amount }}" data-owner="{{ tx.linked_goal_id or '' }}">
+          <span class="gol-option__body">
+            <span class="gol-option__title">{{ tx.description }}</span>
+            <span class="gol-option__meta">{{ tx.date | dateformat('%d %b %Y') }} · {{ tx.account_name }}{% if tx.category %} · {{ tx.category }}{% endif %}</span>
+            {% if tx.linked_goal_id %}<span class="gol-option__owner" data-owner-note>Funds “{{ goal_names.get(tx.linked_goal_id, 'another goal') }}”</span>{% endif %}
+          </span>
+          <span class="gol-option__amount">{{ money_label(tx.amount) }}</span>
+        </label>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+
+  <p class="gol-picker__summary" data-picker-summary aria-live="polite">Nothing selected</p>
+</div>
+{% endmacro %}
+
+<section class="gol" data-goals-page>
+  <header class="gol-hero">
+    <h1>Goals</h1>
+    <div class="gol-hero__actions">
+      <button type="button" class="ft-btn ft-btn--primary" data-goal-new>
+        <i class="fa-solid fa-plus" aria-hidden="true"></i> New goal
+      </button>
+    </div>
+  </header>
+
+  {% if error %}<div class="ft-alert ft-alert--error">{{ error }}</div>{% endif %}
+
+  <div class="gol-kpis" role="list">
+    <div class="gol-kpi is-active" role="listitem">
+      <span class="gol-kpi__label">Active goals</span>
+      <strong class="gol-kpi__value">{{ stats.active }}</strong>
+      <span class="gol-kpi__hint">{% if stats.behind %}{{ stats.behind }} behind schedule{% else %}All on schedule{% endif %}</span>
+    </div>
+    <div class="gol-kpi is-saved" role="listitem">
+      <span class="gol-kpi__label">Saved so far</span>
+      <strong class="gol-kpi__value">{{ money_label(stats.saved) }}</strong>
+      <span class="gol-kpi__hint">{{ stats.saved_pct }}% of {{ money_label(stats.target) }}</span>
+    </div>
+    <div class="gol-kpi is-invest" role="listitem">
+      <span class="gol-kpi__label">Invested monthly</span>
+      <strong class="gol-kpi__value">{{ money_label(stats.monthly_invested) }}</strong>
+      <span class="gol-kpi__hint">From linked recurring investments</span>
+    </div>
+    <div class="gol-kpi is-need" role="listitem">
+      <span class="gol-kpi__label">Needed monthly</span>
+      <strong class="gol-kpi__value">{{ money_label(stats.required_monthly) }}</strong>
+      <span class="gol-kpi__hint">
+        {% if stats.required_monthly and stats.monthly_invested >= stats.required_monthly %}Covered by your investments
+        {% elif stats.required_monthly %}Gap {{ money_label(stats.required_monthly - stats.monthly_invested) }}/mo
+        {% else %}To hit every target date{% endif %}
+      </span>
+    </div>
+    <div class="gol-kpi is-done" role="listitem">
+      <span class="gol-kpi__label">Completed</span>
+      <strong class="gol-kpi__value">{{ stats.completed }}</strong>
+      <span class="gol-kpi__hint">Goals reached</span>
+    </div>
+  </div>
+
+  <nav class="gol-pills" aria-label="Filter goals">
+    {% for key, label in [('all','All'),('active','Active'),('paused','Paused'),('completed','Completed'),('archived','Archived')] %}
+    <a class="gol-pill{% if goal_filter == key %} is-on{% endif %}" href="/planning/goals{% if key != 'all' %}?status={{ key }}{% endif %}">
+      {{ label }}{% if key in goal_counts %} <span>{{ goal_counts[key] }}</span>{% endif %}
+    </a>
+    {% endfor %}
+  </nav>
+
+  {% if goal_filter == 'archived' %}
+    {% if archived_goals %}
+    <div class="gol-grid">
+      {% for goal in archived_goals %}
+      <article class="gol-card is-archived">
+        <header class="gol-card__head">
+          <span class="gol-card__icon"><i class="fa-solid {{ goal_icons.get(goal.goal_type, 'fa-bullseye') }}" aria-hidden="true"></i></span>
+          <div class="gol-card__title">
+            <h2>{{ goal.name }}</h2>
+            <p>{{ goal_types.get(goal.goal_type, 'Custom Goal') }} · Target {{ money_label(goal.target_amount) }}</p>
+          </div>
+          <form method="post" action="/planning/goals/{{ goal.id }}/status">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+            <input type="hidden" name="status" value="active">
+            <input type="hidden" name="return_status" value="archived">
+            <button class="ft-btn ft-btn--secondary ft-btn--sm" type="submit"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> Restore</button>
+          </form>
+        </header>
+      </article>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="gol-empty">
+      <i class="fa-solid fa-box-archive" aria-hidden="true"></i>
+      <p class="gol-empty__title">No archived goals</p>
+      <p class="gol-empty__copy">Archived goals are kept here so you can restore them later.</p>
+    </div>
+    {% endif %}
+  {% elif not goals %}
+  <div class="gol-empty">
+    <i class="fa-solid fa-flag-checkered" aria-hidden="true"></i>
+    {% if goal_filter == 'all' %}
+    <p class="gol-empty__title">Set your first goal</p>
+    <p class="gol-empty__copy">An emergency fund, a trip, a new laptop — pick a target and date, then link your SIPs, RDs or lump-sum investments. FinTracker tracks every rupee that goes towards it.</p>
+    <button type="button" class="ft-btn ft-btn--primary" data-goal-new><i class="fa-solid fa-plus" aria-hidden="true"></i> New goal</button>
+    {% else %}
+    <p class="gol-empty__title">No {{ goal_filter }} goals</p>
+    <p class="gol-empty__copy"><a href="/planning/goals">View all goals</a></p>
+    {% endif %}
+  </div>
+  {% else %}
+  <div class="gol-grid">
+    {% for goal in goals %}
+    {% set links = goal.links or {} %}
+    {% set target = goal.target_amount or 0 %}
+    {% set base_pct = ((goal.starting_amount or 0) / target * 100) if target and goal.tracking == 'investments' else 0 %}
+    {% set invest_pct = ((links.invested_total or 0) / target * 100) if target and goal.tracking == 'investments' else 0 %}
+    <article class="gol-card is-{{ goal.health }}{% if goal.status == 'paused' %} is-paused{% endif %}" data-goal-card="{{ goal.id }}">
+      <header class="gol-card__head">
+        <span class="gol-card__icon"><i class="fa-solid {{ goal_icons.get(goal.goal_type, 'fa-bullseye') }}" aria-hidden="true"></i></span>
+        <div class="gol-card__title">
+          <h2>{{ goal.name }}</h2>
+          <p>{{ goal_types.get(goal.goal_type, 'Custom Goal') }}{% if goal.target_date %} · by {{ goal.target_date | dateformat('%b %Y') }}{% endif %}</p>
+        </div>
+        <span class="gol-badge is-{{ goal.health }}">{{ goal.health_label }}</span>
+        <details class="gol-menu">
+          <summary class="gol-menu__trigger" aria-label="Goal actions"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></summary>
+          <div class="gol-menu__list">
+            <button type="button" class="gol-menu__item" data-goal-edit="{{ goal.id }}"><i class="fa-solid fa-pen" aria-hidden="true"></i> Edit goal</button>
+            <button type="button" class="gol-menu__item" data-goal-link="{{ goal.id }}"><i class="fa-solid fa-link" aria-hidden="true"></i> Link investments</button>
+            {% if goal.status == 'active' %}
+            {{ status_form(goal, 'paused', 'Pause') }}
+            {{ status_form(goal, 'completed', 'Mark as completed') }}
+            {% elif goal.status == 'paused' %}
+            {{ status_form(goal, 'active', 'Resume') }}
+            {% elif goal.status == 'completed' %}
+            {{ status_form(goal, 'active', 'Reopen') }}
+            {% endif %}
+            {{ status_form(goal, 'archived', 'Archive', confirm_text='Archive “' ~ goal.name ~ '”? You can restore it from the Archived tab.') }}
+          </div>
+        </details>
+      </header>
+
+      <div class="gol-progress">
+        <div class="gol-progress__amounts">
+          <strong>{{ money_label(goal.current_amount) }}</strong>
+          <span>of {{ money_label(target) }}</span>
+          <em>{{ (goal.progress_pct or 0) | round(0) | int }}%</em>
+        </div>
+        <div class="gol-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ (goal.progress_pct or 0) | round(0) | int }}" aria-label="Progress towards {{ goal.name }}">
+          {% if goal.tracking == 'investments' %}
+          <span class="gol-bar__base" style="width: {{ [base_pct, 100] | min }}%"></span>
+          <span class="gol-bar__invest" style="width: {{ [invest_pct, 100 - ([base_pct, 100] | min)] | min }}%"></span>
+          {% else %}
+          <span class="gol-bar__base" style="width: {{ goal.progress_pct or 0 }}%"></span>
+          {% endif %}
+        </div>
+        {% if goal.tracking == 'investments' %}
+        <div class="gol-legend">
+          {% if goal.starting_amount %}<span class="is-base">Already saved {{ money_label(goal.starting_amount) }}</span>{% endif %}
+          <span class="is-invest">Invested {{ money_label(links.invested_total) }}</span>
+        </div>
+        {% endif %}
+      </div>
+
+      <dl class="gol-stats">
+        <div><dt>Remaining</dt><dd>{{ money_label(goal.remaining) }}</dd></div>
+        <div><dt>Needed / month</dt><dd>{% if goal.target_date and not goal.completed %}{{ money_label(goal.required_monthly) }}{% else %}—{% endif %}</dd></div>
+        <div>
+          <dt>{% if goal.pace_source == 'linked' %}Investing / month{% else %}Saving pace{% endif %}</dt>
+          <dd class="{% if goal.on_track is sameas true %}is-pos{% elif goal.on_track is sameas false %}is-neg{% endif %}">{% if goal.monthly_pace is not none %}{{ money_label(goal.monthly_pace) }}{% else %}—{% endif %}</dd>
+        </div>
+      </dl>
+
+      {% if goal.eta_label %}
+      <p class="gol-card__eta">
+        <i class="fa-solid {% if goal.health == 'behind' %}fa-triangle-exclamation{% elif goal.health in ['on_track', 'done'] %}fa-circle-check{% else %}fa-circle-info{% endif %}" aria-hidden="true"></i>
+        <span>{{ goal.eta_label }}{% if goal.pace_source == 'overall' and goal.tracking != 'account' and not goal.completed %} Based on your overall monthly savings — link investments for a goal-specific pace.{% endif %}</span>
+      </p>
+      {% endif %}
+
+      <section class="gol-links">
+        <header class="gol-links__head">
+          <h3>{% if goal.tracking == 'account' %}Tracked account{% else %}Linked investments{% endif %}</h3>
+          {% if goal.tracking != 'account' %}
+          <button type="button" class="ft-btn ft-btn--ghost ft-btn--sm" data-goal-link="{{ goal.id }}">
+            <i class="fa-solid fa-link" aria-hidden="true"></i> {% if links.has_links %}Manage{% else %}Link{% endif %}
+          </button>
+          {% endif %}
+        </header>
+
+        {% if goal.tracking == 'account' %}
+        <p class="gol-links__note"><i class="fa-solid fa-building-columns" aria-hidden="true"></i><span>Progress follows the balance of <strong>{{ account_names.get(goal.linked_account_id, 'the linked account') }}</strong>. Edit the goal to track investments instead.</span></p>
+        {% elif links.has_links %}
+        <ul class="gol-chips">
+          {% for rule in links.rules %}
+          <li class="gol-chip is-{{ rule.status }}">
+            <i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i>
+            <span class="gol-chip__name">{{ rule.name }}</span>
+            <span class="gol-chip__meta">≈ {{ money_label(rule.monthly_equivalent) }}/mo{% if rule.status != 'active' %} · {{ rule.status }}{% endif %} · {{ rule.posted_count }} paid</span>
+          </li>
+          {% endfor %}
+          {% if links.one_time_count %}
+          <li class="gol-chip is-one-time">
+            <i class="fa-solid fa-coins" aria-hidden="true"></i>
+            <span class="gol-chip__name">{{ links.one_time_count }} one-time</span>
+            <span class="gol-chip__meta">{{ money_label(links.one_time_total) }}</span>
+          </li>
+          {% endif %}
+        </ul>
+        {% if links.recent %}
+        <details class="gol-recent">
+          <summary>Recent contributions</summary>
+          <ul>
+            {% for row in links.recent %}
+            <li>
+              <span class="gol-recent__date">{{ row.date | dateformat('%d %b %Y') }}</span>
+              <span class="gol-recent__desc">{{ row.description }}</span>
+              <span class="gol-recent__amt">+ {{ money_label(row.amount) }}</span>
+            </li>
+            {% endfor %}
+          </ul>
+        </details>
+        {% endif %}
+        {% else %}
+        <button type="button" class="gol-links__empty" data-goal-link="{{ goal.id }}">
+          <i class="fa-solid fa-circle-plus" aria-hidden="true"></i>
+          <span>Link a SIP, RD or lump-sum investment to track this goal automatically.</span>
+        </button>
+        {% endif %}
+      </section>
+    </article>
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>
+
+<script type="application/json" id="goals-data">{{ goals_json | tojson }}</script>
+
+{# ---------- Create / edit goal ---------- #}
+<dialog class="gol-dialog gol-dialog--wide" data-goal-dialog>
+  <form method="post" action="/planning/goals" class="gol-dialog__card" data-goal-form>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+    <input type="hidden" name="return_status" value="{{ goal_filter }}">
+    <header class="gol-dialog__head">
+      <h3 data-goal-dialog-title>New goal</h3>
+      <button type="button" class="gol-dialog__close" data-dialog-close aria-label="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+    </header>
+    <div class="gol-dialog__body">
+      <fieldset class="gol-types">
+        <legend>Goal type</legend>
+        {% for key, label in goal_types.items() %}
+        <label class="gol-type">
+          <input type="radio" name="goal_type" value="{{ key }}"{% if loop.first %} checked{% endif %}>
+          <span><i class="fa-solid {{ goal_icons.get(key, 'fa-bullseye') }}" aria-hidden="true"></i>{{ label }}</span>
+        </label>
+        {% endfor %}
+      </fieldset>
+
+      <div class="gol-form-grid">
+        <div class="ft-field gol-span">
+          <label for="goal_name">Name</label>
+          <input class="ft-input" id="goal_name" name="name" required maxlength="120" placeholder="e.g. Emergency fund">
+        </div>
+        <div class="ft-field">
+          <label for="goal_target">Target amount (₹)</label>
+          <input class="ft-input" id="goal_target" name="target_amount" type="number" min="1" step="0.01" required inputmode="decimal">
+        </div>
+        <div class="ft-field">
+          <label for="goal_date">Target date <span class="gol-optional">(optional)</span></label>
+          <input class="ft-input" id="goal_date" name="target_date" type="date" lang="en-IN">
+        </div>
+        <div class="ft-field">
+          <label for="goal_current">Already saved (₹)</label>
+          <input class="ft-input" id="goal_current" name="current_amount" type="number" min="0" step="0.01" value="0" inputmode="decimal">
+          <small class="gol-help">Money set aside before you started tracking. Linked investments are added on top.</small>
+        </div>
+        <div class="ft-field">
+          <span class="gol-label">Track progress with</span>
+          <div class="gol-seg gol-seg--block" role="radiogroup">
+            <label class="gol-seg__btn"><input type="radio" name="tracking" value="investments" checked data-tracking> <i class="fa-solid fa-chart-line" aria-hidden="true"></i> Investments</label>
+            <label class="gol-seg__btn"><input type="radio" name="tracking" value="account" data-tracking> <i class="fa-solid fa-building-columns" aria-hidden="true"></i> Account</label>
+          </div>
+        </div>
+        <div class="ft-field gol-span" data-account-field hidden>
+          <label for="goal_account">Account</label>
+          <select class="ft-select" id="goal_account" name="linked_account_id" data-account-select>
+            <option value="">Choose an account</option>
+            {% for acc in accounts %}
+            <option value="{{ acc._id }}">{{ acc.name or acc.bank_name }}</option>
+            {% endfor %}
+          </select>
+          <small class="gol-help">Progress will mirror this account’s balance (e.g. a dedicated savings account).</small>
+        </div>
+        <div class="ft-field gol-span">
+          <label for="goal_notes">Notes <span class="gol-optional">(optional)</span></label>
+          <input class="ft-input" id="goal_notes" name="notes" maxlength="500">
+        </div>
+      </div>
+
+      <section class="gol-dialog__section" data-create-links>
+        <h4>Link investments <span class="gol-optional">(optional)</span></h4>
+        {{ investment_picker('create') }}
+      </section>
+    </div>
+    <footer class="gol-dialog__foot">
+      <button type="button" class="ft-btn ft-btn--ghost" data-dialog-close>Cancel</button>
+      <button type="submit" class="ft-btn ft-btn--primary" data-goal-submit>Create goal</button>
+    </footer>
+  </form>
+</dialog>
+
+{# ---------- Link investments ---------- #}
+<dialog class="gol-dialog gol-dialog--wide" data-link-dialog>
+  <form method="post" action="" class="gol-dialog__card" data-link-form>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+    <input type="hidden" name="return_status" value="{{ goal_filter }}">
+    <header class="gol-dialog__head">
+      <div>
+        <h3>Link investments</h3>
+        <p class="gol-dialog__sub" data-link-goal-name></p>
+      </div>
+      <button type="button" class="gol-dialog__close" data-dialog-close aria-label="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+    </header>
+    <div class="gol-dialog__body">
+      <p class="gol-dialog__hint">Every instalment a linked recurring rule posts, and every linked one-time investment, counts towards this goal. An investment can fund only one goal at a time.</p>
+      {{ investment_picker('link') }}
+    </div>
+    <footer class="gol-dialog__foot">
+      <button type="button" class="ft-btn ft-btn--ghost" data-dialog-close>Cancel</button>
+      <button type="submit" class="ft-btn ft-btn--primary">Save links</button>
+    </footer>
+  </form>
+</dialog>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/goals.js?v={{ FT_APP_VERSION }}-gol1" defer></script>
+{% endblock %}

@@ -1,0 +1,48 @@
+<article class="dash-panel dash-activity ft-reveal" style="--delay:320ms">
+  <div class="dash-panel__head">
+    <div>
+      <h2>
+        <span class="dash-ico"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i></span>
+        Recent Activity
+      </h2>
+    </div>
+    <a class="dash-link" href="/transactions/list">View all</a>
+  </div>
+  {% if has_activity %}
+  <div class="ft-tx-list">
+    {% for tx in transactions[:5] %}
+    <div class="ft-tx-row">
+      <span class="ft-tx-row__icon is-{{ tx.type }}" aria-hidden="true">
+        {% if tx.type == 'credit' %}<i class="fa-solid fa-arrow-up"></i>
+        {% elif tx.type == 'debit' %}<i class="fa-solid fa-arrow-down"></i>
+        {% else %}<i class="fa-solid fa-right-left"></i>{% endif %}
+      </span>
+      <div class="ft-tx-row__body">
+        <div class="ft-tx-row__title">{{ tx.description or tx.type or 'Transaction' }}</div>
+        <div class="ft-tx-row__meta">
+          {% set tx_cat = tx.category_name or (tx.category.name if tx.category is mapping else none) %}
+          {% if tx.type == 'transfer' %}
+            {{ tx.transfer.source }} → {{ tx.transfer.target }}
+          {% else %}
+            {{ tx.account_name or 'Account' }}{% if tx_cat %} · {{ tx_cat }}{% endif %}
+          {% endif %}
+          {% if tx.created_at %} · {{ tx.created_at | datetimeformat('%d %b, %I:%M %p') }}{% endif %}
+        </div>
+      </div>
+      <div class="ft-tx-row__amount ft-money" style="color:{% if tx.type == 'debit' %}var(--ft-negative){% elif tx.type == 'credit' %}var(--ft-positive){% else %}var(--ft-info){% endif %}">
+        {% if tx.type == 'debit' %}-{% elif tx.type == 'credit' %}+{% endif %}₹ {{ tx.amount | money }}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="dash-empty">
+    <div class="dash-empty__art is-activity" aria-hidden="true">
+      <i class="fa-solid fa-clock-rotate-left"></i>
+    </div>
+    <strong>No recent activity yet</strong>
+    <p>New ledger movements will appear here.</p>
+    <a class="dash-link" href="/transactions/add">Add a transaction</a>
+  </div>
+  {% endif %}
+</article>

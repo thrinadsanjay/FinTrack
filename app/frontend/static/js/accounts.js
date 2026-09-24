@@ -1,558 +1,427 @@
-document.addEventListener("DOMContentLoaded", () => {
-  const bankInput = document.getElementById("bank_name");
-  const typeSelect = document.getElementById("acc_type");
-  const nameInput = document.getElementById("account_name");
-  const formToggle = document.getElementById("accountToggle");
-  const accountForm = document.getElementById("accountForm");
-  const setupRow = document.getElementById("accountSetupRow");
-  const setupSummary = document.getElementById("accountSetupSummary");
-  const setupTrigger = document.getElementById("accountSetupTrigger");
+(function () {
+  var root = document.querySelector("[data-accounts-page]");
+  if (!root) return;
 
-  const accountBackdrop = document.getElementById("accountModalBackdrop");
-  const balanceModal = document.getElementById("balanceModal");
-  const creditCardModal = document.getElementById("creditCardModal");
-  const balanceInput = document.getElementById("balance_input");
-  const balanceHidden = document.getElementById("balance_hidden");
-  const saveBalanceConfig = document.getElementById("saveBalanceConfig");
-  const saveCreditCardConfig = document.getElementById("saveCreditCardConfig");
+  var drawer = document.querySelector("[data-add-drawer]");
+  var bankForm = document.querySelector('[data-account-form="bank"]');
+  var ccForm = document.querySelector('[data-account-form="credit_card"]');
+  var loanForm = document.querySelector('[data-account-form="loan"]');
+  var tabs = document.querySelectorAll("[data-kind-tab]");
+  var holdingsTabs = document.querySelectorAll("[data-holdings-tab]");
+  var balanceDialog = document.querySelector("[data-balance-dialog]");
+  var successDialog = document.querySelector("[data-success-dialog]");
+  var pendingForm = null;
 
-  const cardNetworkInput = document.getElementById("card_network");
-  const statementBalanceInput = document.getElementById("statement_balance");
-  const billingCycleStartDayInput = document.getElementById("billing_cycle_start_day");
-  const billingCycleEndDayInput = document.getElementById("billing_cycle_end_day");
-  const dueDayInput = document.getElementById("due_day");
+  var bankName = document.querySelector("[data-bank-name]");
+  var bankType = document.querySelector("[data-bank-type]");
+  var bankTypeValue = document.querySelector("[data-bank-type-value]");
+  var displayName = document.querySelector("[data-display-name]");
+  var bankBalance = document.querySelector("[data-balance]");
+  var ccBank = document.querySelector("[data-cc-bank]");
+  var ccDisplay = document.querySelector("[data-cc-display]");
+  var ccOutstanding = document.querySelector("[data-cc-outstanding]");
+  var ccBalance = document.querySelector("[data-cc-balance]");
+  var loanBank = document.querySelector("[data-loan-bank]");
+  var loanKind = document.querySelector("[data-loan-kind]");
+  var loanIcon = document.querySelector("[data-loan-icon]");
+  var loanName = document.querySelector("[data-loan-name]");
+  var loanBalance = document.querySelector("[data-loan-balance]");
+  var loanPrincipal = document.querySelector("[data-loan-principal]");
 
-  const navItems = document.querySelectorAll("[data-card-target]");
-  const detailPanels = document.querySelectorAll("[data-card-panel]");
-
-  const workspaceBackdrop = document.getElementById("workspaceModalBackdrop");
-  const emiModal = document.getElementById("emiModal");
-  const payBillModal = document.getElementById("payBillModal");
-  const emiModalHeading = document.getElementById("emiModalHeading");
-  const emiModalTitle = document.getElementById("emiModalTitle");
-  const emiModalForm = document.getElementById("emiModalForm");
-  const emiModalSubmit = document.getElementById("emiModalSubmit");
-  const emiAccountId = document.getElementById("emi_account_id");
-  const emiId = document.getElementById("emi_id");
-  const emiTitle = document.getElementById("emi_title");
-  const emiTotalInstallments = document.getElementById("emi_total_installments");
-  const emiRemainingInstallments = document.getElementById("emi_remaining_installments");
-
-  const payBillModalTitle = document.getElementById("payBillModalTitle");
-  const payBillTargetAccountId = document.getElementById("pay_bill_target_account_id");
-  const payBillCreditBillId = document.getElementById("pay_bill_credit_bill_id");
-  const payBillAmount = document.getElementById("pay_bill_amount");
-  const payBillOutstanding = document.getElementById("pay_bill_outstanding");
-  const payBillMinimumDue = document.getElementById("pay_bill_minimum_due");
-  const payBillStatementBalance = document.getElementById("pay_bill_statement_balance");
-  const payChoices = document.querySelectorAll("[data-pay-choice]");
-
-  let userEditedName = false;
-  let currentSetup = "";
-  let activeWorkspaceModal = null;
-
-  function hoistModal(node) {
-    if (!node || !document.body || node.parentElement === document.body) {
-      return;
-    }
-    document.body.appendChild(node);
-  }
-
-  [accountBackdrop, balanceModal, creditCardModal, workspaceBackdrop, emiModal, payBillModal].forEach(hoistModal);
+  var displayTouched = false;
+  var ccDisplayTouched = false;
+  var loanNameTouched = false;
 
   function money(value) {
-    const parsed = Number.parseFloat(value || "0");
-    const safe = Number.isFinite(parsed) ? parsed : 0;
-    return `Rs ${safe.toFixed(2)}`;
+    if (window.FTFormat) return FTFormat.formatINR(value, { space: true });
+    var n = Number(value || 0);
+    return "₹ " + n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
-  function generateName() {
-    if (!bankInput || !typeSelect || !nameInput || userEditedName) {
-      return;
-    }
-
-    const bank = bankInput.value.trim();
-    const type = typeSelect.value;
-    if (!(bank && type)) {
-      nameInput.value = "";
-      return;
-    }
-
-    const label = typeSelect.options[typeSelect.selectedIndex]?.text || "Account";
-    nameInput.value = `${bank}-${label}`;
+  function typeLabel(code) {
+    var option = bankType && bankType.querySelector('option[value="' + code + '"]');
+    return option ? option.textContent.trim() : String(code || "");
   }
 
-  function closeAccountModals() {
-    [balanceModal, creditCardModal].forEach((modal) => {
-      if (modal) {
-        modal.classList.add("is-hidden");
-        modal.setAttribute("aria-hidden", "true");
-      }
+  function syncBankTypeHidden() {
+    if (bankType && bankTypeValue) bankTypeValue.value = bankType.value;
+  }
+
+  function autoDisplayName() {
+    if (!displayName || displayTouched) return;
+    var bank = (bankName && bankName.value.trim()) || "";
+    var type = bankType ? typeLabel(bankType.value) : "";
+    displayName.value = bank ? (type ? bank + " " + type : bank) : "";
+  }
+
+  function autoCcDisplay() {
+    if (!ccDisplay || ccDisplayTouched) return;
+    var bank = (ccBank && ccBank.value.trim()) || "";
+    ccDisplay.value = bank ? bank + " Credit Card" : "";
+  }
+
+  function loanKindLabel() {
+    if (!loanKind || !loanKind.value) return "";
+    var option = loanKind.selectedOptions && loanKind.selectedOptions[0];
+    return option ? option.textContent.trim() : "";
+  }
+
+  function syncLoanIcon() {
+    if (!loanIcon) return;
+    var option = loanKind && loanKind.selectedOptions && loanKind.selectedOptions[0];
+    var icon = (option && option.getAttribute("data-icon")) || "fa-file-invoice-dollar";
+    loanIcon.className = "fa-solid " + icon;
+  }
+
+  function autoLoanName() {
+    if (!loanName || loanNameTouched) return;
+    var bank = (loanBank && loanBank.value.trim()) || "";
+    var type = loanKindLabel();
+    if (bank && type) loanName.value = bank + " " + type;
+    else if (bank) loanName.value = bank;
+    else loanName.value = "";
+  }
+
+  function setKind(kind) {
+    tabs.forEach(function (tab) {
+      var active = tab.getAttribute("data-kind-tab") === kind;
+      tab.classList.toggle("is-active", active);
+      tab.setAttribute("aria-selected", active ? "true" : "false");
     });
-    accountBackdrop?.classList.add("is-hidden");
+    if (bankForm) bankForm.hidden = kind !== "bank";
+    if (ccForm) ccForm.hidden = kind !== "credit_card";
+    if (loanForm) loanForm.hidden = kind !== "loan";
   }
 
-  function openAccountModal(kind) {
-    if (!accountBackdrop) {
-      return;
-    }
-    closeAccountModals();
-    currentSetup = kind;
-    const modal = kind === "credit_card" ? creditCardModal : balanceModal;
-    modal?.classList.remove("is-hidden");
-    modal?.setAttribute("aria-hidden", "false");
-    accountBackdrop.classList.remove("is-hidden");
+  function openDrawer(kind) {
+    if (!drawer) return;
+    drawer.hidden = false;
+    document.body.style.overflow = "hidden";
+    setKind(kind || "bank");
   }
 
-  function syncSetupSummary() {
-    if (!setupRow || !setupSummary || !typeSelect) {
-      return;
-    }
-
-    const type = typeSelect.value;
-    if (!type) {
-      setupRow.hidden = true;
-      currentSetup = "";
-      closeAccountModals();
-      return;
-    }
-
-    setupRow.hidden = false;
-
-    if (type === "credit_card") {
-      const statementBalance = statementBalanceInput?.value || "0";
-      const cycleStart = billingCycleStartDayInput?.value || "1";
-      const cycleEnd = billingCycleEndDayInput?.value || "30";
-      const dueDay = dueDayInput?.value || "5";
-      const cardNetwork = cardNetworkInput?.options[cardNetworkInput.selectedIndex]?.text || "Visa";
-      setupSummary.innerHTML = `
-        <span>Credit card details ready</span>
-        <small>${cardNetwork} · Statement ${money(statementBalance)} · Cycle ${cycleStart}-${cycleEnd} · Due day ${dueDay}</small>
-      `;
-      balanceHidden.value = "0";
-    } else {
-      const openingBalance = balanceHidden?.value || balanceInput?.value || "0";
-      setupSummary.innerHTML = `
-        <span>Account setup ready</span>
-        <small>Opening balance ${money(openingBalance)}</small>
-      `;
-    }
+  function closeDrawer() {
+    if (!drawer) return;
+    drawer.hidden = true;
+    document.body.style.overflow = "";
   }
 
-  function syncTypeSetup(forceModal = false) {
-    if (!typeSelect) {
-      return;
-    }
-
-    const type = typeSelect.value;
-    if (!type) {
-      syncSetupSummary();
-      return;
-    }
-
-    currentSetup = type === "credit_card" ? "credit_card" : "standard";
-    if (type !== "credit_card") {
-      balanceHidden.value = balanceInput?.value || balanceHidden.value || "0";
-    } else {
-      balanceHidden.value = "0";
-    }
-
-    syncSetupSummary();
-
-    if (forceModal) {
-      openAccountModal(type === "credit_card" ? "credit_card" : "standard");
-    }
-  }
-
-  if (nameInput) {
-    nameInput.addEventListener("input", () => {
-      userEditedName = true;
+  function filterHoldings(group) {
+    holdingsTabs.forEach(function (tab) {
+      var active = tab.getAttribute("data-holdings-tab") === group;
+      tab.classList.toggle("is-active", active);
+      tab.setAttribute("aria-selected", active ? "true" : "false");
+    });
+    root.querySelectorAll("[data-holding-row]").forEach(function (row) {
+      row.hidden = group !== "all" && row.getAttribute("data-group") !== group;
     });
   }
 
-  bankInput?.addEventListener("input", generateName);
-  cardNetworkInput?.addEventListener("change", () => syncSetupSummary());
-  billingCycleStartDayInput?.addEventListener("input", () => syncSetupSummary());
-  billingCycleEndDayInput?.addEventListener("input", () => syncSetupSummary());
-  dueDayInput?.addEventListener("input", () => syncSetupSummary());
-  statementBalanceInput?.addEventListener("input", () => syncSetupSummary());
-  typeSelect?.addEventListener("change", () => {
-    generateName();
-    syncTypeSetup(true);
-  });
-
-  formToggle?.addEventListener("click", () => {
-    accountForm?.classList.toggle("account-form-collapsed");
-    formToggle.classList.toggle("open");
-  });
-
-  setupTrigger?.addEventListener("click", () => {
-    if (typeSelect?.value === "credit_card") {
-      openAccountModal("credit_card");
-    } else {
-      openAccountModal("standard");
+  function placeFixed(el, anchor) {
+    var rect = anchor.getBoundingClientRect();
+    var width = Math.min(el.offsetWidth || 140, window.innerWidth - 16);
+    var height = el.offsetHeight || 120;
+    var left = Math.min(Math.max(8, rect.right - width), window.innerWidth - width - 8);
+    var top = rect.bottom + 6;
+    if (top + height > window.innerHeight - 8) {
+      top = Math.max(8, rect.top - height - 6);
     }
-  });
+    el.style.position = "fixed";
+    el.style.top = Math.round(top) + "px";
+    el.style.left = Math.round(left) + "px";
+    el.style.right = "auto";
+  }
 
-  saveBalanceConfig?.addEventListener("click", () => {
-    if (!balanceHidden || !balanceInput) {
-      return;
-    }
-    balanceHidden.value = balanceInput.value || "0";
-    syncSetupSummary();
-    closeAccountModals();
-  });
+  function parkMenuPanel(panel) {
+    if (!panel) return;
+    panel.classList.remove("is-floating");
+    var home = document.querySelector('[data-menu-home="' + panel.getAttribute("data-menu-id") + '"]');
+    if (home && panel.parentElement !== home) home.appendChild(panel);
+  }
 
-  saveCreditCardConfig?.addEventListener("click", () => {
-    syncSetupSummary();
-    closeAccountModals();
-  });
-
-  accountBackdrop?.addEventListener("click", closeAccountModals);
-  document.querySelectorAll("[data-close-modal]").forEach((button) => {
-    button.addEventListener("click", closeAccountModals);
-  });
-
-  function closeAllCardMenus() {
-    detailPanels.forEach((panel) => {
-      const menu = panel.querySelector("[data-card-menu]");
-      const toggle = panel.querySelector("[data-card-menu-toggle]");
-      menu?.classList.add("is-hidden");
-      toggle?.setAttribute("aria-expanded", "false");
+  function closeMenus(except) {
+    root.querySelectorAll(".acc-menu[open]").forEach(function (menu) {
+      if (menu !== except) menu.removeAttribute("open");
+    });
+    document.querySelectorAll(".acc-menu__panel.is-floating").forEach(function (panel) {
+      var home = document.querySelector('[data-menu-home="' + panel.getAttribute("data-menu-id") + '"]');
+      if (home && home !== except) parkMenuPanel(panel);
     });
   }
 
-  function closeAllEmiMenus() {
-    document.querySelectorAll("[data-emi-menu]").forEach((menu) => {
-      menu.classList.add("is-hidden");
-    });
-    document.querySelectorAll("[data-emi-menu-toggle]").forEach((toggle) => {
-      toggle.setAttribute("aria-expanded", "false");
-    });
-  }
-
-  function collapseCardSections(panel) {
-    if (!panel) {
-      return;
-    }
-    panel.querySelectorAll("[data-card-section]").forEach((section) => {
-      section.hidden = true;
-      section.classList.add("is-collapsed");
-    });
-  }
-
-  function openCardSection(panel, sectionName) {
-    if (!panel || !sectionName) {
-      return;
-    }
-    collapseCardSections(panel);
-    const section = panel.querySelector(`[data-card-section="${sectionName}"]`);
-    if (!section) {
-      return;
-    }
-    section.hidden = false;
-    section.classList.remove("is-collapsed");
-  }
-
-  function activateCard(cardId) {
-    navItems.forEach((item) => {
-      item.classList.toggle("is-active", item.dataset.cardTarget === cardId);
-    });
-    detailPanels.forEach((panel) => {
-      const isActive = panel.dataset.cardPanel === cardId;
-      panel.classList.toggle("is-active", isActive);
-      if (!isActive) {
-        collapseCardSections(panel);
-      }
-    });
-    closeAllCardMenus();
-    closeAllEmiMenus();
-  }
-
-  navItems.forEach((item) => {
-    item.addEventListener("click", () => {
-      activateCard(item.dataset.cardTarget || "");
-    });
-  });
-
-  function resetEmiModal() {
-    emiModalForm?.setAttribute("action", "/accounts/credit-card/emi/add");
-    if (emiModalHeading) {
-      emiModalHeading.textContent = "Add New EMI";
-    }
-    if (emiModalTitle) {
-      emiModalTitle.textContent = "Track a new EMI against the selected credit card.";
-    }
-    if (emiModalSubmit) {
-      emiModalSubmit.textContent = "Add EMI";
-    }
-    if (emiId) {
-      emiId.value = "";
-    }
-    emiModalForm?.setAttribute("data-inline-success-message", "EMI added");
-  }
-
-  detailPanels.forEach((panel) => {
-    collapseCardSections(panel);
-
-    const toggle = panel.querySelector("[data-card-menu-toggle]");
-    const menu = panel.querySelector("[data-card-menu]");
-
-    toggle?.addEventListener("click", (event) => {
-      event.stopPropagation();
-      const isOpen = !menu?.classList.contains("is-hidden");
-      closeAllCardMenus();
-      closeAllEmiMenus();
-      if (!menu) {
+  root.querySelectorAll(".acc-menu").forEach(function (menu, index) {
+    var panel = menu.querySelector(".acc-menu__panel");
+    if (!panel) return;
+    var id = "acc-menu-" + index;
+    panel.setAttribute("data-menu-id", id);
+    menu.setAttribute("data-menu-home", id);
+    menu.addEventListener("toggle", function () {
+      if (!menu.open) {
+        parkMenuPanel(panel);
         return;
       }
-      if (!isOpen) {
-        menu.classList.remove("is-hidden");
-        toggle.setAttribute("aria-expanded", "true");
-      }
-    });
-
-    panel.querySelectorAll("[data-card-section-toggle]").forEach((button) => {
-      button.addEventListener("click", () => {
-        openCardSection(panel, button.dataset.cardSectionToggle || "");
-        closeAllCardMenus();
-      });
-    });
-
-    panel.querySelectorAll(".js-open-pay-modal, .js-open-emi-modal, .credit-card-detail__menu-form").forEach((node) => {
-      node.addEventListener("click", () => {
-        closeAllCardMenus();
-      });
+      closeMenus(menu);
+      document.body.appendChild(panel);
+      panel.classList.add("is-floating");
+      placeFixed(panel, menu.querySelector("summary") || menu);
     });
   });
 
-  document.querySelectorAll("[data-emi-menu-toggle]").forEach((toggle) => {
-    toggle.addEventListener("click", (event) => {
-      event.stopPropagation();
-      const wrap = toggle.closest(".credit-card-emi-row-menu-wrap");
-      const menu = wrap?.querySelector("[data-emi-menu]");
-      const isOpen = !menu?.classList.contains("is-hidden");
-      closeAllEmiMenus();
-      closeAllCardMenus();
-      if (!menu) {
-        return;
-      }
-      if (!isOpen) {
-        menu.classList.remove("is-hidden");
-        toggle.setAttribute("aria-expanded", "true");
-      }
-    });
-  });
+  window.addEventListener("scroll", function () { closeMenus(); }, true);
+  window.addEventListener("resize", function () { closeMenus(); });
 
-  document.addEventListener("click", (event) => {
-    if (!event.target.closest(".credit-card-detail__menu-wrap")) {
-      closeAllCardMenus();
-    }
-    if (!event.target.closest(".credit-card-emi-row-menu-wrap")) {
-      closeAllEmiMenus();
-    }
-  });
-
-  function closeWorkspaceModal() {
-    activeWorkspaceModal?.classList.add("is-hidden");
-    activeWorkspaceModal?.setAttribute("aria-hidden", "true");
-    workspaceBackdrop?.classList.add("is-hidden");
-    activeWorkspaceModal = null;
+  function openNamedDialog(attr, id) {
+    closeMenus();
+    var dialog = document.querySelector("[" + attr + "=\"" + id + "\"]");
+    if (dialog && dialog.showModal) dialog.showModal();
   }
 
-  function openWorkspaceModal(modal) {
-    if (!modal || !workspaceBackdrop) {
+  tabs.forEach(function (tab) {
+    tab.addEventListener("click", function () {
+      setKind(tab.getAttribute("data-kind-tab"));
+    });
+  });
+
+  holdingsTabs.forEach(function (tab) {
+    tab.addEventListener("click", function () {
+      filterHoldings(tab.getAttribute("data-holdings-tab"));
+    });
+  });
+
+  root.querySelectorAll("[data-open-add]").forEach(function (btn) {
+    btn.addEventListener("click", function () { openDrawer("bank"); });
+  });
+  document.querySelectorAll("[data-close-add]").forEach(function (btn) {
+    btn.addEventListener("click", closeDrawer);
+  });
+  if (drawer) {
+    drawer.addEventListener("click", function (event) {
+      if (event.target === drawer) closeDrawer();
+    });
+  }
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape" && drawer && !drawer.hidden) closeDrawer();
+  });
+
+  if (bankType) bankType.addEventListener("change", function () { syncBankTypeHidden(); autoDisplayName(); });
+  if (bankName) bankName.addEventListener("input", autoDisplayName);
+  if (displayName) displayName.addEventListener("input", function () { displayTouched = true; });
+  if (ccBank) ccBank.addEventListener("input", autoCcDisplay);
+  if (ccDisplay) ccDisplay.addEventListener("input", function () { ccDisplayTouched = true; });
+  if (loanBank) loanBank.addEventListener("input", autoLoanName);
+  if (loanKind) loanKind.addEventListener("change", function () { syncLoanIcon(); autoLoanName(); });
+  if (loanName) loanName.addEventListener("input", function () { loanNameTouched = true; });
+
+  function monthlyRate(annual) {
+    return Number(annual || 0) / 12 / 100;
+  }
+
+  function suggestedEmi(principal, annual, months) {
+    principal = Math.max(Number(principal || 0), 0);
+    months = parseInt(months, 10) || 0;
+    if (principal <= 0 || months <= 0) return 0;
+    var rate = monthlyRate(annual);
+    if (rate <= 0) return Math.round((principal / months) * 100) / 100;
+    var factor = Math.pow(1 + rate, months);
+    return Math.round((principal * rate * factor / (factor - 1)) * 100) / 100;
+  }
+
+  function suggestedTenure(principal, annual, emi) {
+    principal = Math.max(Number(principal || 0), 0);
+    emi = Math.max(Number(emi || 0), 0);
+    if (principal <= 0 || emi <= 0) return 0;
+    var rate = monthlyRate(annual);
+    if (rate <= 0) return Math.max(1, Math.ceil(principal / emi - 1e-9));
+    if (emi <= principal * rate + 0.005) return 0;
+    var months = Math.log(emi / (emi - principal * rate)) / Math.log(1 + rate);
+    return Math.max(1, Math.round(months));
+  }
+
+  function bindLoanCalc(form) {
+    if (!form) return;
+    var principal = form.querySelector("[data-loan-principal]");
+    var outstanding = form.querySelector("[data-loan-balance]");
+    var rate = form.querySelector("[data-loan-rate]");
+    var emi = form.querySelector("[data-loan-emi]");
+    var tenure = form.querySelector("[data-loan-tenure]");
+    var hint = form.querySelector("[data-loan-calc-hint]");
+    var pref = tenure && tenure.value ? "tenure" : (emi && emi.value ? "emi" : "");
+    var filling = false;
+
+    function principalValue() {
+      var raw = principal && principal.value ? principal.value : (outstanding && outstanding.value);
+      return Number(raw || 0);
+    }
+
+    function setHint(text) {
+      if (hint) hint.textContent = text;
+    }
+
+    function sync() {
+      if (filling) return;
+      filling = true;
+      if (outstanding && principal && !principal.value && outstanding.value) {
+        principal.value = outstanding.value;
+      }
+      var p = principalValue();
+      var annual = rate ? rate.value : 0;
+      if (pref === "tenure") {
+        var nextEmi = suggestedEmi(p, annual, tenure && tenure.value);
+        if (nextEmi > 0 && emi) emi.value = nextEmi.toFixed(2);
+        setHint(nextEmi > 0
+          ? "EMI suggested from principal, rate, and tenure. You can change it."
+          : "Fill principal, rate, and tenure to suggest EMI.");
+      } else if (pref === "emi") {
+        var nextTenure = suggestedTenure(p, annual, emi && emi.value);
+        if (nextTenure > 0 && tenure) tenure.value = String(nextTenure);
+        setHint(nextTenure > 0
+          ? "Tenure suggested from principal, rate, and EMI. You can change it."
+          : (Number(emi && emi.value) > 0 && p > 0
+            ? "EMI is too low to cover monthly interest."
+            : "Fill principal, rate, and EMI to suggest tenure."));
+      } else {
+        setHint("Fill principal, rate, and either EMI or tenure — the other is suggested and stays editable.");
+      }
+      filling = false;
+    }
+
+    if (outstanding) {
+      outstanding.addEventListener("input", function () {
+        if (principal && !principal.value) principal.value = outstanding.value;
+        sync();
+      });
+    }
+    if (principal) principal.addEventListener("input", sync);
+    if (rate) rate.addEventListener("input", sync);
+    if (emi) {
+      emi.addEventListener("input", function () { pref = "emi"; sync(); });
+    }
+    if (tenure) {
+      tenure.addEventListener("input", function () { pref = "tenure"; sync(); });
+    }
+  }
+
+  document.querySelectorAll("[data-loan-calc]").forEach(bindLoanCalc);
+
+  document.addEventListener("click", function (event) {
+    var viewBtn = event.target.closest("[data-view-account]");
+    if (viewBtn) {
+      event.preventDefault();
+      openNamedDialog("data-view-dialog", viewBtn.getAttribute("data-view-account"));
       return;
     }
-    closeWorkspaceModal();
-    modal.classList.remove("is-hidden");
-    modal.setAttribute("aria-hidden", "false");
-    workspaceBackdrop.classList.remove("is-hidden");
-    activeWorkspaceModal = modal;
-  }
-
-  document.querySelectorAll("[data-close-workspace-modal]").forEach((button) => {
-    button.addEventListener("click", () => {
-      closeWorkspaceModal();
-      resetEmiModal();
-    });
-  });
-  workspaceBackdrop?.addEventListener("click", () => {
-    closeWorkspaceModal();
-    resetEmiModal();
+    var editBtn = event.target.closest("[data-edit-account]");
+    if (editBtn) {
+      event.preventDefault();
+      openNamedDialog("data-edit-dialog", editBtn.getAttribute("data-edit-account"));
+    }
+    if (event.target.closest("[data-close-dialog]")) {
+      var dialog = event.target.closest("dialog");
+      if (dialog) dialog.close();
+    }
   });
 
-  document.querySelectorAll(".js-open-emi-modal").forEach((button) => {
-    button.addEventListener("click", () => {
-      resetEmiModal();
-      const cardId = button.dataset.cardId || "";
-      const cardName = button.dataset.cardName || "this card";
-      if (emiAccountId) {
-        emiAccountId.value = cardId;
-      }
-      if (emiModalTitle) {
-        emiModalTitle.textContent = `Track a new EMI for ${cardName}.`;
-      }
-      if (emiTitle) {
-        emiTitle.value = "";
-      }
-      if (emiTotalInstallments) {
-        emiTotalInstallments.value = "";
-      }
-      if (emiRemainingInstallments) {
-        emiRemainingInstallments.value = "";
-      }
-      emiModalForm?.reset();
-      if (emiAccountId) {
-        emiAccountId.value = cardId;
-      }
-      if (emiId) {
-        emiId.value = "";
-      }
-      openWorkspaceModal(emiModal);
-    });
-  });
-
-  document.querySelectorAll(".js-edit-emi-modal").forEach((button) => {
-    button.addEventListener("click", () => {
-      resetEmiModal();
-      if (emiModalHeading) {
-        emiModalHeading.textContent = "Edit EMI";
-      }
-      if (emiModalTitle) {
-        emiModalTitle.textContent = `Update EMI details for ${button.dataset.cardName || "this card"}.`;
-      }
-      if (emiModalSubmit) {
-        emiModalSubmit.textContent = "Save EMI";
-      }
-      emiModalForm?.setAttribute("action", "/accounts/credit-card/emi/update");
-      emiModalForm?.setAttribute("data-inline-success-message", "EMI updated");
-      if (emiAccountId) {
-        emiAccountId.value = button.dataset.accountId || "";
-      }
-      if (emiId) {
-        emiId.value = button.dataset.emiId || "";
-      }
-      const formElements = emiModalForm?.elements;
-      if (emiTitle) {
-        emiTitle.value = button.dataset.emiTitle || "";
-      }
-      formElements?.namedItem("total_amount") && (formElements.namedItem("total_amount").value = button.dataset.totalAmount || "");
-      formElements?.namedItem("monthly_amount") && (formElements.namedItem("monthly_amount").value = button.dataset.monthlyAmount || "");
-      if (emiTotalInstallments) {
-        emiTotalInstallments.value = button.dataset.totalInstallments || "";
-      }
-      if (emiRemainingInstallments) {
-        emiRemainingInstallments.value = button.dataset.remainingInstallments || "";
-      }
-      formElements?.namedItem("interest_rate") && (formElements.namedItem("interest_rate").value = button.dataset.interestRate || "");
-      formElements?.namedItem("next_due_date") && (formElements.namedItem("next_due_date").value = button.dataset.nextDueDate || "");
-      closeAllEmiMenus();
-      openWorkspaceModal(emiModal);
-    });
-  });
-
-  emiTotalInstallments?.addEventListener("input", () => {
-    if (!emiRemainingInstallments) {
+  function openBalanceConfirm(opts) {
+    if (!balanceDialog || !balanceDialog.showModal) {
+      if (pendingForm) pendingForm.submit();
       return;
     }
-    if (!emiRemainingInstallments.value) {
-      emiRemainingInstallments.value = emiTotalInstallments.value;
+    var title = balanceDialog.querySelector("[data-dialog-title]");
+    var copy = balanceDialog.querySelector("[data-dialog-copy]");
+    var amount = balanceDialog.querySelector("[data-dialog-amount]");
+    if (title) title.textContent = opts.title || "Confirm balance";
+    if (copy) copy.textContent = opts.copy || "Review the amount before saving.";
+    if (amount) amount.textContent = money(opts.amount || 0);
+    balanceDialog.showModal();
+  }
+
+  if (balanceDialog) {
+    balanceDialog.addEventListener("close", function () {
+      if (balanceDialog.returnValue === "confirm" && pendingForm) {
+        var form = pendingForm;
+        pendingForm = null;
+        HTMLFormElement.prototype.submit.call(form);
+      } else {
+        pendingForm = null;
+      }
+    });
+  }
+
+  if (bankForm) {
+    bankForm.addEventListener("submit", function (event) {
+      event.preventDefault();
+      if (!bankForm.checkValidity()) { bankForm.reportValidity(); return; }
+      syncBankTypeHidden();
+      if (displayName && !displayName.value.trim()) { displayTouched = false; autoDisplayName(); }
+      pendingForm = bankForm;
+      openBalanceConfirm({
+        title: "Confirm opening balance",
+        copy: "You’re creating “" + ((displayName && displayName.value) || (bankName && bankName.value) || "account") + "” with this opening balance.",
+        amount: bankBalance ? bankBalance.value : 0
+      });
+    });
+  }
+
+  if (ccForm) {
+    ccForm.addEventListener("submit", function (event) {
+      event.preventDefault();
+      if (!ccForm.checkValidity()) { ccForm.reportValidity(); return; }
+      var outstanding = Number((ccOutstanding && ccOutstanding.value) || 0);
+      if (!isFinite(outstanding) || outstanding < 0) outstanding = 0;
+      if (ccBalance) ccBalance.value = String(-Math.abs(outstanding));
+      if (ccDisplay && !ccDisplay.value.trim()) { ccDisplayTouched = false; autoCcDisplay(); }
+      pendingForm = ccForm;
+      openBalanceConfirm({
+        title: "Confirm credit card balances",
+        copy: "Outstanding will be saved for “" + ((ccDisplay && ccDisplay.value) || (ccBank && ccBank.value) || "card") + "”.",
+        amount: outstanding
+      });
+    });
+  }
+
+  if (loanForm) {
+    loanForm.addEventListener("submit", function (event) {
+      event.preventDefault();
+      if (loanName && !loanName.value.trim()) { loanNameTouched = false; autoLoanName(); }
+      if (!loanForm.checkValidity()) { loanForm.reportValidity(); return; }
+      pendingForm = loanForm;
+      openBalanceConfirm({
+        title: "Confirm loan outstanding",
+        copy: "This outstanding is tracked as a liability and is not added to Total cash.",
+        amount: loanBalance ? loanBalance.value : 0
+      });
+    });
+  }
+
+  if (root.getAttribute("data-created") === "1" && successDialog && successDialog.showModal) {
+    var kind = root.getAttribute("data-created-kind") || "account";
+    var bal = Number(root.getAttribute("data-created-balance") || 0);
+    var shown = kind === "credit_card" ? Math.abs(bal) : Math.abs(bal);
+    var copy = successDialog.querySelector("[data-success-copy]");
+    var amount = successDialog.querySelector("[data-success-amount]");
+    if (copy) {
+      copy.textContent =
+        kind === "loan"
+          ? "Loan created. Outstanding (not in cash):"
+          : kind === "credit_card"
+            ? "Credit card created. Outstanding balance:"
+            : "Account created. Opening balance:";
     }
-  });
-
-  function setPayChoice(choice) {
-    payChoices.forEach((button) => {
-      button.classList.toggle("is-active", button.dataset.payChoice === choice);
-    });
+    if (amount) amount.textContent = money(shown);
+    successDialog.showModal();
+    if (window.history && window.history.replaceState) window.history.replaceState({}, "", "/accounts");
   }
 
-  document.querySelectorAll(".js-open-pay-modal").forEach((button) => {
-    button.addEventListener("click", () => {
-      const cardId = button.dataset.cardId || "";
-      const cardName = button.dataset.cardName || "this card";
-      const statementBalance = Number.parseFloat(button.dataset.cardStatementBalance || "0") || 0;
-      const outstanding = Number.parseFloat(button.dataset.cardOutstanding || "0") || 0;
-      const minimumDue = Number.parseFloat(button.dataset.cardMinimumDue || "0") || (statementBalance > 0 ? Number((statementBalance * 0.1).toFixed(2)) : 0);
-      const creditBillId = button.dataset.cardBillId || "";
+  var openView = root.getAttribute("data-open-view");
+  if (openView) openNamedDialog("data-view-dialog", openView);
 
-      if (payBillTargetAccountId) {
-        payBillTargetAccountId.value = cardId;
-      }
-      if (payBillCreditBillId) {
-        payBillCreditBillId.value = creditBillId;
-      }
-      if (payBillModalTitle) {
-        payBillModalTitle.textContent = `Choose how much you want to pay for ${cardName}.`;
-      }
-      if (payBillOutstanding) {
-        payBillOutstanding.textContent = money(outstanding);
-      }
-      if (payBillMinimumDue) {
-        payBillMinimumDue.textContent = money(minimumDue);
-      }
-      if (payBillStatementBalance) {
-        payBillStatementBalance.textContent = money(statementBalance);
-      }
-      if (payBillAmount) {
-        payBillAmount.value = statementBalance > 0 ? statementBalance.toFixed(2) : minimumDue.toFixed(2);
-      }
-      setPayChoice(statementBalance > 0 ? "full" : "minimum");
-
-      payChoices.forEach((choiceButton) => {
-        choiceButton.onclick = () => {
-          const kind = choiceButton.dataset.payChoice || "partial";
-          setPayChoice(kind);
-          if (!payBillAmount) {
-            return;
-          }
-          if (kind === "minimum") {
-            payBillAmount.value = minimumDue.toFixed(2);
-          } else if (kind === "full") {
-            payBillAmount.value = statementBalance.toFixed(2);
-          } else {
-            payBillAmount.focus();
-            payBillAmount.select();
-          }
-        };
-      });
-
-      openWorkspaceModal(payBillModal);
-    });
-  });
-
-  document.querySelectorAll(".edit-btn").forEach((editBtn) => {
-    editBtn.addEventListener("click", () => {
-      const row = editBtn.closest("tr");
-      row?.querySelectorAll(".editable").forEach((input) => {
-        input.disabled = false;
-        input.classList.add("editing");
-      });
-      editBtn.style.display = "none";
-      row?.querySelector(".save-btn")?.style.setProperty("display", "inline-flex");
-      row?.querySelector(".cancel-btn")?.style.setProperty("display", "inline-flex");
-      row?.querySelector(".delete-btn")?.style.setProperty("display", "none");
-    });
-  });
-
-  document.querySelectorAll(".cancel-btn").forEach((cancelBtn) => {
-    cancelBtn.addEventListener("click", () => {
-      const row = cancelBtn.closest("tr");
-      row?.querySelectorAll(".editable").forEach((input) => {
-        input.value = input.dataset.original || "";
-        input.disabled = true;
-        input.classList.remove("editing");
-      });
-      row?.querySelector(".edit-btn")?.style.setProperty("display", "inline-flex");
-      row?.querySelector(".delete-btn")?.style.setProperty("display", "inline-flex");
-      row?.querySelector(".save-btn")?.style.setProperty("display", "none");
-      cancelBtn.style.display = "none";
-    });
-  });
-
-  syncTypeSetup(false);
-  resetEmiModal();
-  if (navItems[0]) {
-    activateCard(navItems[0].dataset.cardTarget || "");
+  var holdingsGroup = root.getAttribute("data-holdings-group");
+  if (holdingsGroup === "bank" || holdingsGroup === "card" || holdingsGroup === "loan") {
+    filterHoldings(holdingsGroup);
   }
-});
+
+  syncBankTypeHidden();
+  autoDisplayName();
+  syncLoanIcon();
+  setKind("bank");
+})();

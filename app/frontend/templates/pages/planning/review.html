@@ -1,0 +1,90 @@
+{% extends "base/base.html" %}
+{% block title %}Monthly Review · {{ FT_APP_NAME }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/pages/planning.css?v={{ FT_APP_VERSION }}-head1">
+{% endblock %}
+{% block content %}
+{% set cf = report.cash_flow or {} %}
+<section class="pln">
+  <header class="pln-hero">
+    <div>
+      <h1>{{ report.month_label or 'Monthly' }} Financial Review</h1>
+    </div>
+  </header>
+
+  <div class="pln-kpis">
+    <article class="pln-kpi"><span class="pln-kpi__label">Income</span><div class="pln-kpi__value">{% if cf.income is not none %}₹ {{ cf.income | money }}{% else %}—{% endif %}</div></article>
+    <article class="pln-kpi"><span class="pln-kpi__label">Expenses</span><div class="pln-kpi__value">{% if cf.expense is not none %}₹ {{ cf.expense | money }}{% else %}—{% endif %}</div></article>
+    <article class="pln-kpi"><span class="pln-kpi__label">Net savings</span><div class="pln-kpi__value">{% if cf.net is not none %}₹ {{ cf.net | money }}{% else %}—{% endif %}</div></article>
+    <article class="pln-kpi"><span class="pln-kpi__label">Savings rate</span><div class="pln-kpi__value">{% if cf.savings_rate is not none %}{{ cf.savings_rate }}%{% else %}—{% endif %}</div></article>
+  </div>
+
+  {% if report.narrative %}
+  <article class="pln-panel">
+    <h2>Summary</h2>
+    <p class="pln-copy" style="white-space:pre-wrap">{{ report.narrative }}</p>
+  </article>
+  {% elif not report.ai_available %}
+  <article class="pln-panel">
+    <p class="pln-copy">Narrative is skipped because the optional language model is not configured. The numbers above still stand.</p>
+  </article>
+  {% endif %}
+
+  <div class="pln-grid">
+    <article class="pln-panel">
+      <h2>Highlights</h2>
+      {% if report.highlights %}
+        {% for item in report.highlights %}<p class="pln-copy">✓ {{ item }}</p>{% endfor %}
+      {% else %}
+      <p class="pln-empty">No positive highlights this month.</p>
+      {% endif %}
+    </article>
+    <article class="pln-panel">
+      <h2>Attention</h2>
+      {% if report.attention %}
+        {% for item in report.attention %}<p class="pln-copy">⚠ {{ item }}</p>{% endfor %}
+      {% else %}
+      <p class="pln-empty">Nothing flagged for attention.</p>
+      {% endif %}
+    </article>
+  </div>
+
+  <article class="pln-panel">
+    <h2>Category changes</h2>
+    {% if report.category_changes %}
+      {% for row in report.category_changes %}
+      <div class="pln-row"><span>{{ row.name }}</span><strong>{{ row.change_pct }}%</strong></div>
+      {% endfor %}
+    {% else %}
+    <p class="pln-empty">Not enough category history to compare months.</p>
+    {% endif %}
+  </article>
+
+  <article class="pln-panel">
+    <h2>Credit cards</h2>
+    <div class="pln-row"><span>Outstanding</span><strong>{% if report.credit_cards.outstanding is not none %}₹ {{ report.credit_cards.outstanding | money }}{% else %}—{% endif %}</strong></div>
+    <div class="pln-row"><span>Utilization</span><strong>{% if report.credit_cards.utilization is not none %}{{ report.credit_cards.utilization }}%{% else %}—{% endif %}</strong></div>
+    <div class="pln-row"><span>Upcoming dues</span><strong>{% if report.credit_cards.upcoming_due is not none %}₹ {{ report.credit_cards.upcoming_due | money }}{% else %}—{% endif %}</strong></div>
+  </article>
+
+  <article class="pln-panel">
+    <h2>Goals</h2>
+    {% if report.goals %}
+      {% for goal in report.goals %}
+      <div class="pln-row">
+        <span>{{ goal.name }}</span>
+        <strong>{% if goal.progress_pct is not none %}{{ goal.progress_pct }}%{% else %}—{% endif %}</strong>
+      </div>
+      {% endfor %}
+    {% else %}
+    <p class="pln-empty">No active goals.</p>
+    {% endif %}
+  </article>
+
+  <article class="pln-panel">
+    <h2>Upcoming</h2>
+    <p class="pln-copy">{{ report.upcoming_count or 0 }} card/bill payments on the calendar.</p>
+    <p class="pln-disclaimer">{{ report.disclaimer }}</p>
+  </article>
+</section>
+{% endblock %}

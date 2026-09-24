@@ -39,17 +39,19 @@ async def upsert_notification(
 
     if is_read is not None:
         set_payload["is_read"] = is_read
-    else:
-        # Keep read state when content is unchanged; mark unread only for new/updated alerts.
-        if content_changed:
-            set_payload["is_read"] = False
+    elif content_changed:
+        set_payload["is_read"] = False
+
+    update_doc = {
+        "$set": set_payload,
+        "$setOnInsert": {"created_at": now},
+    }
+    if content_changed:
+        update_doc["$unset"] = {"archived_at": ""}
 
     await db.notifications.update_one(
         {"user_id": user_id, "key": key},
-        {
-            "$set": set_payload,
-            "$setOnInsert": {"created_at": now},
-        },
+        update_doc,
         upsert=True,
     )
 
@@ -132,7 +134,7 @@ async def list_notifications(
     since: datetime | None = None,
     include_unread_outside_since: bool = False,
 ):
-    query = {"user_id": user_id}
+    query = {"user_id": user_id, "archived_at": None}
     if unread_only:
         query["is_read"] = False
     if since is not None and include_unread_outside_since and not unread_only:
@@ -152,10 +154,17 @@ async def list_notifications(
     return [n async for n in cursor]
 
 
+async def count_unread_notifications(*, user_id: ObjectId | str) -> int:
+    uid = ObjectId(user_id) if not isinstance(user_id, ObjectId) else user_id
+    return await db.notifications.count_documents(
+        {"user_id": uid, "is_read": False, "archived_at": None}
+    )
+
+
 async def mark_all_read(*, user_id: ObjectId | str):
     uid = ObjectId(user_id)
     await db.notifications.update_many(
-        {"user_id": uid, "is_read": False},
+        {"user_id": uid, "is_read": False, "archived_at": None},
         {"$set": {"is_read": True, "updated_at": datetime.now(timezone.utc)}},
     )
 
@@ -169,3 +178,30 @@ async def mark_read_by_ids(*, user_id: ObjectId | str, ids: list[str]):
         {"user_id": uid, "_id": {"$in": object_ids}},
         {"$set": {"is_read": True, "updated_at": datetime.now(timezone.utc)}},
     )
+
+
+async def archive_by_ids(*, user_id: ObjectId | str, ids: list[str]):
+    uid = ObjectId(user_id)
+    object_ids = [ObjectId(i) for i in ids if ObjectId.is_valid(i)]
+    if not object_ids:
+        return
+    now = datetime.now(timezone.utc)
+    await db.notifications.update_many(
+        {"user_id": uid, "_id": {"$in": object_ids}},
+        {"$set": {"archived_at": now, "is_read": True, "updated_at": now}},
+    )
+
+
+async def archive_all(*, user_id: ObjectId | str):
+    uid = ObjectId(user_id)
+    now = datetime.now(timezone.utc)
+    await db.notifications.update_many(
+        {"user_id": uid, "archived_at": None},
+        {"$set": {"archived_at": now, "is_read": True, "updated_at": now}},
+    )
+
+
+class NotificationInbox(list):
+    def __init__(self, items=None, *, unread_count: int = 0):
+        super().__init__(items or [])
+        self.unread_count = int(unread_count or 0)

@@ -34,6 +34,20 @@ def get_current_user(request: Request) -> dict:
     return user
 
 
+async def get_current_user_valid(request: Request) -> dict:
+    """Session cookie plus Security Center epoch/sid check."""
+    user = get_current_user(request)
+    from app.services.sessions import is_request_session_valid
+
+    if not await is_request_session_valid(request):
+        request.session.clear()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired",
+        )
+    return user
+
+
 # ======================================================
 # ROLE-BASED DEPENDENCIES (EXTENSIBLE)
 # ======================================================

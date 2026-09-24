@@ -2,6 +2,7 @@ import logging
 import os
 import time
 import html
+from contextlib import asynccontextmanager
 from zoneinfo import ZoneInfo
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, HTMLResponse
@@ -23,6 +24,7 @@ from app.core.session import add_session_middleware
 from app.core.startup import ensure_admin_exists, define_categories
 
 from app.db.init_db import init_indexes
+from app.db.mongo import supports_transactions
 
 from app.routers import (
     health,
@@ -35,20 +37,30 @@ from app.routers import (
     chat,
     ai_chat,
     telegram_bot,
+    inbox,
+    planning,
+    search,
+    rules,
+    security,
+    ai_finance,
 )
 from app.web.home import router as web_router
 from app.web.auth import router as web_auth_router
 from app.web.accounts import router as web_accounts_router
 from app.web.transactions import router as web_transactions_router
+from app.web.categorization import router as web_categorization_router
 from app.web.transaction_inbox import router as web_transaction_inbox_router
 from app.web.notifications import router as web_notifications_router
 from app.web.recurring import router as web_recurring_router
 from app.web.profile import router as web_profile_router
 from app.web.admin import router as web_admin_router
 from app.web.help_support import router as web_help_support_router
+from app.web.planning import router as web_planning_router
+from app.web.security import router as web_security_router
+from app.web.automations import router as web_automations_router
 from app.web.templates import templates
 
-from app.schedulers.recurring_scheduler import configure_recurring_schedule, run_recurring_transactions
+from app.schedulers.recurring_scheduler import configure_recurring_schedule
 from app.schedulers.notification_scheduler import run_notification_alert_sweep
 from app.schedulers.backup_scheduler import configure_backup_schedule
 from app.schedulers.credit_card_scheduler import (
@@ -57,6 +69,7 @@ from app.schedulers.credit_card_scheduler import (
     run_credit_card_interest_and_fees,
     run_credit_card_emi_schedule_refresh,
 )
+from app.schedulers.loan_scheduler import run_loan_emi_cycles
 from app.services.telegram_polling import run_telegram_poll_once
 
 
@@ -73,13 +86,172 @@ if settings.FT_ENV.lower() in ("dev", "development"):
 
 
 # ======================================================
+# SCHEDULER (created before app so lifespan can manage it)
+# ======================================================
+
+scheduler = AsyncIOScheduler(timezone="UTC")
+notification_alert_interval_seconds = max(
+    60,
+    int(os.getenv("FT_NOTIFICATION_ALERT_INTERVAL_SECONDS", "300")),
+)
+# Set FT_SCHEDULER_ENABLED=false on processes that should only serve HTTP.
+# Jobs are also guarded by Mongo leases (app/schedulers/job_lock.py), so several
+# scheduler-enabled workers/replicas still run each job once per tick.
+scheduler_enabled = str(os.getenv("FT_SCHEDULER_ENABLED", "true")).strip().lower() not in ("0", "false", "no", "off")
+
+
+async def _start_background_jobs() -> None:
+    logger.info("⚙️ Running initial setup...")
+
+    await init_indexes()
+    await ensure_admin_exists()
+    await define_categories()
+    try:
+        set_total_users(await count_active_users_total())
+    except Exception:
+        logger.exception("Failed to initialize total user metric")
+
+    logger.info(
+        "Ledger writes: %s",
+        "multi-document transactions" if await supports_transactions() else "atomic single-document updates (standalone MongoDB)",
+    )
+
+    if not scheduler_enabled:
+        logger.info("⏱ Background schedulers disabled in this process (FT_SCHEDULER_ENABLED=false)")
+        return
+
+    await configure_recurring_schedule(scheduler)
+
+    admin_settings = await get_admin_settings()
+    telegram_cfg = (admin_settings or {}).get("telegram") or {}
+    telegram_polling_scheduled = bool(
+        telegram_cfg.get("enabled") and telegram_cfg.get("polling_enabled")
+    )
+    if telegram_polling_scheduled:
+        scheduler.add_job(
+            run_telegram_poll_once,
+            trigger="interval",
+            seconds=8,
+            id="telegram-polling",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+        )
+    else:
+        logger.info(
+            "Telegram polling scheduler not started "
+            "(telegram disabled or polling fallback disabled)"
+        )
+
+    scheduler.add_job(
+        run_notification_alert_sweep,
+        trigger="interval",
+        seconds=notification_alert_interval_seconds,
+        id="notification-alert-sweep",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+
+    scheduler.add_job(
+        run_credit_card_bill_generation,
+        trigger="cron",
+        hour=1,
+        minute=5,
+        id="credit-card-bill-generation",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+
+    scheduler.add_job(
+        run_credit_card_due_alerts,
+        trigger="cron",
+        hour=8,
+        minute=0,
+        id="credit-card-due-alerts",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+
+    scheduler.add_job(
+        run_credit_card_interest_and_fees,
+        trigger="cron",
+        hour=2,
+        minute=15,
+        id="credit-card-interest-fees",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+
+    scheduler.add_job(
+        run_credit_card_emi_schedule_refresh,
+        trigger="cron",
+        hour=0,
+        minute=30,
+        id="credit-card-emi-refresh",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+
+    scheduler.add_job(
+        run_loan_emi_cycles,
+        trigger="cron",
+        hour=5,
+        minute=50,
+        id="loan-emi-cycles",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+
+    await configure_backup_schedule(scheduler)
+    if not scheduler.running:
+        scheduler.start()
+    logger.info(
+        "⏱ Background schedulers started (recurring + notification sweep/%ss, telegram polling=%s)",
+        notification_alert_interval_seconds,
+        "on" if telegram_polling_scheduled else "off",
+    )
+
+
+def _stop_background_jobs() -> None:
+    logger.info("🛑 Shutting down scheduler...")
+    if not scheduler.running:
+        return
+    try:
+        # wait=False avoids re-entering the closing asyncio/uvloop runner.
+        scheduler.shutdown(wait=False)
+    except Exception:
+        logger.exception("Scheduler shutdown failed")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    app.state.scheduler = scheduler
+    try:
+        await _start_background_jobs()
+    except Exception:
+        logger.exception("Startup failed")
+        _stop_background_jobs()
+        raise
+    try:
+        yield
+    finally:
+        _stop_background_jobs()
+
+
+# ======================================================
 # APPLICATION
 # ======================================================
 
 app = FastAPI(
     title=settings.FT_APP_NAME,
     version=settings.FT_APP_VERSION,
-    FT_ENVironments=settings.FT_ENV,
+    lifespan=lifespan,
 )
 
 logger.info(
@@ -114,6 +286,9 @@ add_session_middleware(app)
 @app.middleware("http")
 async def prometheus_middleware(request: Request, call_next):
     start_time = time.time()
+    if request.url.path.startswith("/static/"):
+        # Static assets need no settings, session or maintenance handling.
+        return await call_next(request)
     maintenance = {"enabled": False, "message": ""}
     try:
         maintenance = await get_maintenance_state()
@@ -152,6 +327,7 @@ async def prometheus_middleware(request: Request, call_next):
             "/login/local",
             "/reset-password",
             "/notifications/read",
+            "/notifications/archive",
         }
         if not allow_writes:
             maintenance_message = request.state.maintenance_message or (
@@ -209,144 +385,57 @@ app.include_router(recurring_deposit.router, prefix="/api/recurring-deposits", t
 app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
 app.include_router(ai_chat.router, prefix="/api/aichat", tags=["AI Chat"])
 app.include_router(telegram_bot.router, prefix="/api/telegram", tags=["Telegram"])
+app.include_router(inbox.router, tags=["Inbox"])
+app.include_router(planning.router, prefix="/api/planning", tags=["Planning"])
+app.include_router(search.router, prefix="/api/search", tags=["Search"])
+app.include_router(rules.router, prefix="/api/rules", tags=["Rules"])
+app.include_router(security.router, prefix="/api/security", tags=["Security"])
+app.include_router(ai_finance.router, prefix="/api/ai", tags=["Ask FinTracker"])
+
+
+@app.get("/api/csrf-token", tags=["Auth"])
+async def get_csrf_token_endpoint(request: Request):
+    """Return a fresh CSRF token for the current session. Safe to call after long idle periods."""
+    from app.core.csrf import get_csrf_token as _get_csrf_token
+    token = _get_csrf_token(request)
+    return JSONResponse({"csrf_token": token})
 
 # WEB ROUTES
 app.include_router(web_router)
 app.include_router(web_auth_router)
 app.include_router(web_accounts_router, prefix="/accounts")
 app.include_router(web_transactions_router, prefix="/transactions")
+app.include_router(web_categorization_router)
 app.include_router(web_transaction_inbox_router)
 app.include_router(web_notifications_router, prefix="/notifications")
 app.include_router(web_recurring_router, prefix="/recurring")
 app.include_router(web_profile_router)
 app.include_router(web_admin_router, prefix="/admin")
 app.include_router(web_help_support_router)
-
-
-# ======================================================
-# SCHEDULER
-# ======================================================
-
-scheduler = AsyncIOScheduler(timezone="UTC")
-app.state.scheduler = scheduler
-notification_alert_interval_seconds = max(
-    60,
-    int(os.getenv("FT_NOTIFICATION_ALERT_INTERVAL_SECONDS", "300")),
-)
-
-# ======================================================
-# STARTUP / SHUTDOWN
-# ======================================================
-
-@app.on_event("startup")
-async def on_startup():
-    logger.info("⚙️ Running initial setup...")
-
-    await init_indexes()
-    await ensure_admin_exists()
-    await define_categories()
-    try:
-        set_total_users(await count_active_users_total())
-    except Exception:
-        logger.exception("Failed to initialize total user metric")
-
-    await configure_recurring_schedule(scheduler)
-
-    admin_settings = await get_admin_settings()
-    telegram_cfg = (admin_settings or {}).get("telegram") or {}
-    telegram_polling_scheduled = bool(telegram_cfg.get("enabled") and telegram_cfg.get("polling_enabled"))
-    if telegram_polling_scheduled:
-        scheduler.add_job(
-            run_telegram_poll_once,
-            trigger="interval",
-            seconds=8,
-            id="telegram-polling",
-            replace_existing=True,
-            max_instances=1,
-            coalesce=True,
-        )
-    else:
-        logger.info("Telegram polling scheduler not started (telegram disabled or polling fallback disabled)")
-
-    scheduler.add_job(
-        run_notification_alert_sweep,
-        trigger="interval",
-        seconds=notification_alert_interval_seconds,
-        id="notification-alert-sweep",
-        replace_existing=True,
-        max_instances=1,
-        coalesce=True,
-    )
-
-    scheduler.add_job(
-        run_credit_card_bill_generation,
-        trigger="cron",
-        hour=1,
-        minute=5,
-        id="credit-card-bill-generation",
-        replace_existing=True,
-        max_instances=1,
-        coalesce=True,
-    )
-
-    scheduler.add_job(
-        run_credit_card_due_alerts,
-        trigger="cron",
-        hour=8,
-        minute=0,
-        id="credit-card-due-alerts",
-        replace_existing=True,
-        max_instances=1,
-        coalesce=True,
-    )
-
-    scheduler.add_job(
-        run_credit_card_interest_and_fees,
-        trigger="cron",
-        hour=2,
-        minute=15,
-        id="credit-card-interest-fees",
-        replace_existing=True,
-        max_instances=1,
-        coalesce=True,
-    )
-
-    scheduler.add_job(
-        run_credit_card_emi_schedule_refresh,
-        trigger="cron",
-        hour=0,
-        minute=30,
-        id="credit-card-emi-refresh",
-        replace_existing=True,
-        max_instances=1,
-        coalesce=True,
-    )
-
-    await configure_backup_schedule(scheduler)
-    scheduler.start()
-    logger.info(
-        "⏱ Background schedulers started (recurring + notification sweep/%ss, telegram polling=%s)",
-        notification_alert_interval_seconds,
-        "on" if telegram_polling_scheduled else "off",
-    )
-
-
-@app.on_event("shutdown")
-def on_shutdown():
-    logger.info("🛑 Shutting down scheduler...")
-    scheduler.shutdown(wait=False)
+app.include_router(web_planning_router)
+app.include_router(web_security_router)
+app.include_router(web_automations_router)
 
 
 @app.exception_handler(CsrfValidationError)
 async def csrf_exception_handler(request: Request, exc: CsrfValidationError):
     accept = request.headers.get("accept", "")
     if "text/html" in accept:
+        user = None
+        try:
+            user = request.session.get("user")
+        except Exception:
+            user = None
         return templates.TemplateResponse(
             request=request,
             name="csrf_error.html",
             context={
                 "request": request,
                 "error": str(exc),
+                "user": user,
+                "notifications": [],
+                "shell_status": "error",
+                "active_page": None,
             },
             status_code=403,
         )
@@ -357,12 +446,21 @@ async def csrf_exception_handler(request: Request, exc: CsrfValidationError):
 async def app_error_handler(request: Request, exc: AppError):
     accept = request.headers.get("accept", "")
     if "text/html" in accept:
+        user = None
+        try:
+            user = request.session.get("user")
+        except Exception:
+            user = None
         return templates.TemplateResponse(
             request=request,
             name="app_error.html",
             context={
                 "request": request,
                 "error": exc.detail,
+                "user": user,
+                "notifications": [],
+                "shell_status": "error",
+                "active_page": None,
             },
             status_code=exc.status_code,
         )
@@ -370,18 +468,29 @@ async def app_error_handler(request: Request, exc: AppError):
     if exc.code:
         payload["code"] = exc.code
     return JSONResponse(payload, status_code=exc.status_code)
+
+
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     logger.exception("Unhandled application error on %s", request.url.path, exc_info=exc)
     accept = request.headers.get("accept", "")
     if "text/html" in accept:
         try:
+            user = None
+            try:
+                user = request.session.get("user")
+            except Exception:
+                user = None
             return templates.TemplateResponse(
                 request=request,
                 name="app_error.html",
                 context={
                     "request": request,
                     "error": str(exc),
+                    "user": user,
+                    "notifications": [],
+                    "shell_status": "error",
+                    "active_page": None,
                 },
                 status_code=500,
             )

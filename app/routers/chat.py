@@ -598,3 +598,52 @@ async def end_support_chat(request: Request):
         system_message="Chat ended by user.",
     )
     return {"status": "ended"}
+
+
+class BotMessagePayload(BaseModel):
+    message: str | None = Field(default=None, max_length=5000)
+    quick_id: str | None = Field(default=None, max_length=120)
+    set_mode: Literal["guided", "ai"] | None = None
+
+
+def _chat_user_key(request: Request, user_id: str | None) -> str:
+    if user_id:
+        return str(user_id)
+    guest_id = request.session.get("chat_guest_id") or request.session.get("support_guest_id")
+    if not guest_id:
+        guest_id = uuid4().hex
+        request.session["chat_guest_id"] = guest_id
+    return f"guest:{guest_id}"
+
+
+@router.get("/bot/bootstrap")
+async def bot_bootstrap(request: Request):
+    from app.services.chat_assistant import bootstrap_chat
+
+    session_user = request.session.get("user") or {}
+    user_id = session_user.get("user_id")
+    authenticated = bool(user_id)
+    display = session_user.get("username") or session_user.get("full_name")
+    return await bootstrap_chat(
+        user_id=user_id,
+        authenticated=authenticated,
+        display_name=display,
+        user_key=_chat_user_key(request, user_id),
+    )
+
+
+@router.post("/bot")
+async def bot_message(payload: BotMessagePayload, request: Request):
+    from app.services.chat_assistant import process_chat_message
+
+    session_user = request.session.get("user") or {}
+    user_id = session_user.get("user_id")
+    authenticated = bool(user_id)
+    return await process_chat_message(
+        user_id=user_id,
+        authenticated=authenticated,
+        message=payload.message,
+        quick_id=payload.quick_id,
+        set_mode=payload.set_mode,
+        user_key=_chat_user_key(request, user_id),
+    )

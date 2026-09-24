@@ -1,7 +1,8 @@
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 from copy import deepcopy
+import re
 import secrets
 import logging
 import smtplib
@@ -13,13 +14,26 @@ from fastapi.responses import RedirectResponse, JSONResponse
 from urllib.parse import quote_plus
 from bson import ObjectId
 
+from app.core.setup_vars import DEFAULT_ADMIN_USERNAME
 from app.core.guards import admin_required
 from app.core.csrf import verify_csrf_token
 from app.core.config import settings
 from app.db.mongo import db
-from app.services.users import list_users
+from pymongo.errors import DuplicateKeyError
+from app.helpers.phone import timezone_from_country_iso, normalize_country_iso, normalize_phone_number
+from app.services.users import (
+    create_local_user,
+    delete_user,
+    get_user_by_email_any,
+    get_user_by_mobile_any,
+    get_user_by_username_any,
+    list_users,
+    update_user_account,
+    update_user_password,
+)
 from app.services.audit import audit_log
 from app.services.admin_settings import get_admin_settings, save_admin_settings
+from app.services.categorization.merchant_memory_service import learn as learn_merchant_memory
 from app.services.backups import (
     run_backup,
     get_backup_status,
@@ -44,7 +58,6 @@ from app.services.telegram import (
 from app.services.telegram_polling import run_telegram_poll_once, get_telegram_poll_status
 from app.services.web_push import send_push_notification_alert
 from app.helpers.recurring_schedule import parse_clock_time, parse_timezone_name
-from app.helpers.phone import timezone_from_country_iso, normalize_country_iso
 from app.web.templates import templates
 
 router = APIRouter()
@@ -70,11 +83,79 @@ def _to_aware_utc(dt: datetime | str | None) -> datetime | None:
     return dt.astimezone(timezone.utc)
 
 
-def _is_protected_local_admin(user_doc: dict) -> bool:
+def _is_bootstrap_admin(user_doc: dict) -> bool:
+    username = str(user_doc.get("username") or "").strip().lower()
     return bool(
         user_doc
         and user_doc.get("auth_provider") == "local"
-        and user_doc.get("is_admin")
+        and username == DEFAULT_ADMIN_USERNAME.lower()
+    )
+
+
+_PHONE_RE = re.compile(r"^\+?[0-9]{8,15}$")
+_NAME_MAX_LEN = 80
+
+
+def _clean_person_name(value: str) -> str:
+    return re.sub(r"\s+", " ", str(value or "")).strip()[:_NAME_MAX_LEN]
+
+
+def _parse_optional_email(value: str) -> tuple[str, str | None]:
+    email = str(value or "").strip()
+    if not email:
+        return "", None
+    _, parsed_email = parseaddr(email)
+    if not parsed_email or "@" not in parsed_email or "." not in parsed_email.split("@")[-1]:
+        return email, "Enter a valid email address."
+    return email, None
+
+
+def _parse_optional_phone(value: str) -> tuple[str, str | None]:
+    phone = normalize_phone_number(mobile=value)
+    if not phone:
+        return "", None
+    if not _PHONE_RE.fullmatch(phone):
+        return phone, "Enter a valid mobile number."
+    return phone, None
+
+
+async def _ensure_unique_contact(*, user_id: str | None, email: str, phone: str) -> str | None:
+    if email:
+        existing_email = await get_user_by_email_any(email)
+        if existing_email and str(existing_email.get("_id")) != user_id:
+            return "That email is already in use."
+    if phone:
+        existing_phone = await get_user_by_mobile_any(phone)
+        if existing_phone and str(existing_phone.get("_id")) != user_id:
+            return "That mobile number is already in use."
+    return None
+
+
+def _users_page_redirect(*, error: str | None = None, msg: str | None = None) -> RedirectResponse:
+    if msg:
+        return RedirectResponse(f"/admin?msg={quote_plus(msg)}#users", status_code=303)
+    if error:
+        return RedirectResponse(f"/admin?users_error={quote_plus(error)}#users", status_code=303)
+    return RedirectResponse("/admin#users", status_code=303)
+
+
+async def _load_user_or_redirect(user_id: str):
+    if not ObjectId.is_valid(user_id):
+        return None, _users_page_redirect(error="Invalid user.")
+    target = await db.users.find_one({"_id": ObjectId(user_id), "deleted_at": None})
+    if not target:
+        return None, _users_page_redirect(error="User not found.")
+    return target, None
+
+
+async def _count_other_active_admins(user_id: str) -> int:
+    return await db.users.count_documents(
+        {
+            "deleted_at": None,
+            "is_active": True,
+            "is_admin": True,
+            "_id": {"$ne": ObjectId(user_id)},
+        }
     )
 
 
@@ -393,7 +474,7 @@ async def admin_dashboard(request: Request):
 
     return templates.TemplateResponse(
         request=request,
-        name="admin.html",
+        name="pages/admin/admin.html",
         context={
             "request": request,
             "user": request.session.get("user"),
@@ -418,6 +499,8 @@ async def admin_dashboard(request: Request):
             "admin_alert_success": admin_alert_success,
             "admin_alert_error": admin_alert_error,
             "settings_error_section": str(request.query_params.get("section") or "").strip(),
+            "users_error": str(request.query_params.get("users_error") or "").strip(),
+            "default_admin_username": DEFAULT_ADMIN_USERNAME,
             "users": users_sorted[:100],
         },
     )
@@ -1434,6 +1517,217 @@ async def admin_broadcast_telegram(request: Request):
     )
 
 
+
+@router.post("/users/create")
+@admin_required
+async def admin_create_user(
+    request: Request,
+    csrf_token: str = Form(...),
+    username: str = Form(""),
+    first_name: str = Form(""),
+    last_name: str = Form(""),
+    email: str = Form(""),
+    phone: str = Form(""),
+    password: str = Form(""),
+    confirm_password: str = Form(""),
+    is_admin: str = Form(""),
+    must_reset_password: str = Form(""),
+):
+    verify_csrf_token(request, csrf_token)
+
+    username = str(username or "").strip()
+    first_name = _clean_person_name(first_name)
+    last_name = _clean_person_name(last_name)
+    email, email_error = _parse_optional_email(email)
+    phone, phone_error = _parse_optional_phone(phone)
+    password = str(password or "")
+    confirm_password = str(confirm_password or "")
+    grant_admin = _bool_from_form(is_admin)
+    force_reset = _bool_from_form(must_reset_password)
+
+    if not re.fullmatch(r"[A-Za-z0-9._-]{3,32}", username or ""):
+        return _users_page_redirect(error="Username must be 3–32 characters using letters, numbers, dots, hyphens, or underscores.")
+    if email_error:
+        return _users_page_redirect(error=email_error)
+    if phone_error:
+        return _users_page_redirect(error=phone_error)
+    if len(password) < 8:
+        return _users_page_redirect(error="Password must be at least 8 characters.")
+    if password != confirm_password:
+        return _users_page_redirect(error="Passwords do not match.")
+    if await get_user_by_username_any(username):
+        return _users_page_redirect(error="That username is already in use.")
+    contact_error = await _ensure_unique_contact(user_id=None, email=email, phone=phone)
+    if contact_error:
+        return _users_page_redirect(error=contact_error)
+
+    try:
+        await create_local_user(
+            username=username,
+            password=password,
+            email=email,
+            first_name=first_name,
+            last_name=last_name,
+            phone=phone,
+            is_admin=grant_admin,
+            must_reset_password=force_reset,
+        )
+    except DuplicateKeyError:
+        return _users_page_redirect(error="That email is already in use.")
+
+    await audit_log(
+        action="ADMIN_USER_CREATED",
+        request=request,
+        user=_audit_actor(request),
+        meta={
+            "username": username,
+            "first_name": first_name,
+            "last_name": last_name,
+            "email": email or None,
+            "phone": phone or None,
+            "is_admin": grant_admin,
+        },
+    )
+    return _users_page_redirect(msg="User created")
+
+
+@router.post("/users/{user_id}/update")
+@admin_required
+async def admin_update_user(
+    request: Request,
+    user_id: str,
+    csrf_token: str = Form(...),
+    first_name: str = Form(""),
+    last_name: str = Form(""),
+    email: str = Form(""),
+    phone: str = Form(""),
+):
+    verify_csrf_token(request, csrf_token)
+
+    _target, redirect = await _load_user_or_redirect(user_id)
+    if redirect:
+        return redirect
+
+    first_name = _clean_person_name(first_name)
+    last_name = _clean_person_name(last_name)
+    email, email_error = _parse_optional_email(email)
+    phone, phone_error = _parse_optional_phone(phone)
+
+    if email_error:
+        return _users_page_redirect(error=email_error)
+    if phone_error:
+        return _users_page_redirect(error=phone_error)
+    contact_error = await _ensure_unique_contact(user_id=user_id, email=email, phone=phone)
+    if contact_error:
+        return _users_page_redirect(error=contact_error)
+
+    try:
+        await update_user_account(
+            user_id=user_id,
+            first_name=first_name,
+            last_name=last_name,
+            email=email,
+            phone=phone,
+        )
+    except DuplicateKeyError:
+        return _users_page_redirect(error="That email is already in use.")
+    except RuntimeError as exc:
+        return _users_page_redirect(error=str(exc))
+
+    await audit_log(
+        action="ADMIN_USER_UPDATED",
+        request=request,
+        user=_audit_actor(request),
+        meta={
+            "target_user_id": user_id,
+            "first_name": first_name,
+            "last_name": last_name,
+            "email": email or None,
+            "phone": phone or None,
+        },
+    )
+    return _users_page_redirect(msg="User updated")
+
+
+@router.post("/users/{user_id}/reset-password")
+@admin_required
+async def admin_reset_user_password(
+    request: Request,
+    user_id: str,
+    csrf_token: str = Form(...),
+    password: str = Form(""),
+    confirm_password: str = Form(""),
+    must_reset_password: str = Form(""),
+):
+    verify_csrf_token(request, csrf_token)
+
+    target, redirect = await _load_user_or_redirect(user_id)
+    if redirect:
+        return redirect
+
+    if target.get("auth_provider") != "local":
+        return _users_page_redirect(error="Password reset is only available for local accounts.")
+
+    password = str(password or "")
+    confirm_password = str(confirm_password or "")
+    force_reset = _bool_from_form(must_reset_password)
+
+    if len(password) < 8:
+        return _users_page_redirect(error="Password must be at least 8 characters.")
+    if password != confirm_password:
+        return _users_page_redirect(error="Passwords do not match.")
+
+    try:
+        await update_user_password(user_id, password, must_reset_password=force_reset)
+    except RuntimeError as exc:
+        return _users_page_redirect(error=str(exc))
+
+    await audit_log(
+        action="ADMIN_USER_PASSWORD_RESET",
+        request=request,
+        user=_audit_actor(request),
+        meta={"target_user_id": user_id, "must_reset_password": force_reset},
+    )
+    return _users_page_redirect(msg="Password reset")
+
+
+@router.post("/users/{user_id}/delete")
+@admin_required
+async def admin_delete_user(
+    request: Request,
+    user_id: str,
+    csrf_token: str = Form(...),
+):
+    verify_csrf_token(request, csrf_token)
+
+    target, redirect = await _load_user_or_redirect(user_id)
+    if redirect:
+        return redirect
+
+    actor_user_id = (request.session.get("user") or {}).get("user_id")
+    if actor_user_id == user_id:
+        return _users_page_redirect(error="You cannot delete your own account.")
+    if _is_bootstrap_admin(target):
+        return _users_page_redirect(error="The default admin account cannot be deleted.")
+
+    if target.get("is_admin") and target.get("is_active", True):
+        if await _count_other_active_admins(user_id) == 0:
+            return _users_page_redirect(error="At least one active admin is required.")
+
+    try:
+        await delete_user(user_id)
+    except RuntimeError as exc:
+        return _users_page_redirect(error=str(exc))
+
+    await audit_log(
+        action="ADMIN_USER_DELETED",
+        request=request,
+        user=_audit_actor(request),
+        meta={"target_user_id": user_id},
+    )
+    return _users_page_redirect(msg="User deleted")
+
+
 @router.post("/users/{user_id}/toggle-active")
 @admin_required
 async def admin_toggle_user_active(
@@ -1444,34 +1738,26 @@ async def admin_toggle_user_active(
     verify_csrf_token(request, csrf_token)
 
     if not ObjectId.is_valid(user_id):
-        return RedirectResponse("/admin", status_code=303)
+        return _users_page_redirect()
 
     actor_user_id = (request.session.get("user") or {}).get("user_id")
     target = await db.users.find_one({"_id": ObjectId(user_id), "deleted_at": None})
     if not target:
-        return RedirectResponse("/admin", status_code=303)
-    if _is_protected_local_admin(target):
-        return RedirectResponse("/admin", status_code=303)
+        return _users_page_redirect()
+    if _is_bootstrap_admin(target):
+        return _users_page_redirect(error="The default admin account cannot be disabled.")
 
     current_active = bool(target.get("is_active", True))
     next_active = not current_active
 
     # Prevent admins from disabling themselves.
     if not next_active and actor_user_id == user_id:
-        return RedirectResponse("/admin", status_code=303)
+        return _users_page_redirect(error="You cannot disable your own account.")
 
     # Prevent disabling the last active admin.
     if not next_active and target.get("is_admin"):
-        other_admins = await db.users.count_documents(
-            {
-                "deleted_at": None,
-                "is_active": True,
-                "is_admin": True,
-                "_id": {"$ne": ObjectId(user_id)},
-            }
-        )
-        if other_admins == 0:
-            return RedirectResponse("/admin", status_code=303)
+        if await _count_other_active_admins(user_id) == 0:
+            return _users_page_redirect(error="At least one active admin is required.")
 
     await db.users.update_one(
         {"_id": ObjectId(user_id)},
@@ -1483,7 +1769,7 @@ async def admin_toggle_user_active(
         user=_audit_actor(request),
         meta={"target_user_id": user_id, "is_active": next_active},
     )
-    return RedirectResponse("/admin", status_code=303)
+    return _users_page_redirect(msg="User disabled" if not next_active else "User enabled")
 
 
 @router.post("/users/{user_id}/toggle-admin")
@@ -1496,34 +1782,26 @@ async def admin_toggle_user_admin(
     verify_csrf_token(request, csrf_token)
 
     if not ObjectId.is_valid(user_id):
-        return RedirectResponse("/admin", status_code=303)
+        return _users_page_redirect()
 
     actor_user_id = (request.session.get("user") or {}).get("user_id")
     target = await db.users.find_one({"_id": ObjectId(user_id), "deleted_at": None})
     if not target:
-        return RedirectResponse("/admin", status_code=303)
-    if _is_protected_local_admin(target):
-        return RedirectResponse("/admin", status_code=303)
+        return _users_page_redirect()
+    if _is_bootstrap_admin(target):
+        return _users_page_redirect(error="The default admin account must remain an admin.")
 
     current_admin = bool(target.get("is_admin", False))
     next_admin = not current_admin
 
     # Prevent admins from removing their own admin access.
     if not next_admin and actor_user_id == user_id:
-        return RedirectResponse("/admin", status_code=303)
+        return _users_page_redirect(error="You cannot remove your own admin access.")
 
     # Prevent removing the last active admin.
     if not next_admin and target.get("is_active", True):
-        other_admins = await db.users.count_documents(
-            {
-                "deleted_at": None,
-                "is_active": True,
-                "is_admin": True,
-                "_id": {"$ne": ObjectId(user_id)},
-            }
-        )
-        if other_admins == 0:
-            return RedirectResponse("/admin", status_code=303)
+        if await _count_other_active_admins(user_id) == 0:
+            return _users_page_redirect(error="At least one active admin is required.")
 
     update_doc = {"is_admin": next_admin, "updated_at": datetime.now(timezone.utc)}
     update_query = {"$set": update_doc}
@@ -1538,4 +1816,318 @@ async def admin_toggle_user_admin(
         user=_audit_actor(request),
         meta={"target_user_id": user_id, "is_admin": next_admin},
     )
-    return RedirectResponse("/admin", status_code=303)
+    return _users_page_redirect(msg="Admin removed" if not next_admin else "Admin granted")
+
+
+# ======================================================
+# MERCHANT MANAGEMENT
+# ======================================================
+
+@router.get("/merchants")
+@admin_required
+async def admin_merchants_page(request: Request):
+    """Redirect merchants route to embedded admin tab view."""
+    return RedirectResponse("/admin#merchants", status_code=303)
+
+
+@router.post("/api/merchants/list")
+@admin_required
+async def admin_merchants_list(request: Request):
+    """List merchant mappings and discovered unmapped merchants."""
+    verify_csrf_token(request, request.headers.get("X-CSRF-Token"))
+    user_id = request.session.get("user", {}).get("user_id")
+    if not user_id:
+        return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+
+    try:
+        ObjectId(user_id)  # validate only
+    except Exception:
+        return JSONResponse({"detail": "Invalid user ID"}, status_code=400)
+
+    merchants = []
+    seen_keys: set[str] = set()
+    cursor = db.merchant_memory.find(
+        {},
+        {
+            "_id": 1,
+            "cleaned_key": 1,
+            "merchant_name": 1,
+            "category": 1,
+            "subcategory": 1,
+            "category_code": 1,
+            "subcategory_code": 1,
+            "confidence": 1,
+            "learned_from": 1,
+            "usage_count": 1,
+            "created_at": 1,
+            "updated_at": 1,
+        },
+    ).sort("usage_count", -1)
+
+    async for doc in cursor:
+        normalized_key = str(doc.get("cleaned_key") or "").strip().lower()
+        if normalized_key:
+            seen_keys.add(normalized_key)
+        merchants.append({
+            "id": str(doc.get("_id")),
+            "cleaned_key": doc.get("cleaned_key", ""),
+            "merchant_name": doc.get("merchant_name", ""),
+            "category": doc.get("category", ""),
+            "subcategory": doc.get("subcategory", ""),
+            "category_code": doc.get("category_code", ""),
+            "subcategory_code": doc.get("subcategory_code", ""),
+            "confidence": doc.get("confidence", 0.0),
+            "learned_from": doc.get("learned_from", ""),
+            "usage_count": doc.get("usage_count", 0),
+            "created_at": doc.get("created_at").isoformat() if doc.get("created_at") else None,
+            "updated_at": doc.get("updated_at").isoformat() if doc.get("updated_at") else None,
+        })
+
+    # Also surface discovered merchants from inbox that are not mapped yet.
+    pipeline = [
+        {"$match": {"status": "pending", "merchant_dismissed": {"$ne": True}}},
+        {
+            "$project": {
+                "cleaned_key": {
+                    "$ifNull": [
+                        "$cleaned_key",
+                        "$merchant_keyword",
+                    ]
+                },
+                "merchant_name": {
+                    "$ifNull": [
+                        "$detected_merchant",
+                        "$merchant_keyword",
+                    ]
+                },
+                "description": 1,
+            }
+        },
+        {
+            "$group": {
+                "_id": "$cleaned_key",
+                "merchant_name": {"$first": "$merchant_name"},
+                "description": {"$first": "$description"},
+                "count": {"$sum": 1},
+            }
+        },
+        {"$sort": {"count": -1}},
+        {"$limit": 250},
+    ]
+
+    inbox_candidates = await db.transaction_inbox.aggregate(pipeline).to_list(length=250)
+    for item in inbox_candidates:
+        raw_key = str(item.get("_id") or "").strip().lower()
+        if not raw_key or raw_key in seen_keys:
+            continue
+
+        display_name = str(item.get("merchant_name") or "").strip()
+        if not display_name:
+            display_name = str(item.get("description") or "").strip()[:80]
+        if not display_name:
+            display_name = raw_key.title()
+
+        merchants.append(
+            {
+                "id": "",
+                "cleaned_key": raw_key,
+                "merchant_name": display_name,
+                "category": "",
+                "subcategory": "",
+                "category_code": "",
+                "subcategory_code": "",
+                "confidence": 0.0,
+                "learned_from": "inbox_detected",
+                "source": "inbox_detected",
+                "usage_count": int(item.get("count") or 0),
+                "created_at": None,
+                "updated_at": None,
+            }
+        )
+
+    return JSONResponse({"status": "ok", "merchants": merchants})
+
+
+@router.post("/api/merchants/add")
+@admin_required
+async def admin_merchants_add(request: Request):
+    """Add a new merchant mapping."""
+    verify_csrf_token(request, request.headers.get("X-CSRF-Token"))
+    user_id = request.session.get("user", {}).get("user_id")
+    if not user_id:
+        return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+
+    try:
+        payload = await request.json()
+    except Exception:
+        return JSONResponse({"detail": "Invalid JSON"}, status_code=400)
+
+    cleaned_key = str((payload or {}).get("cleaned_key") or "").strip()
+    merchant_name = str((payload or {}).get("merchant_name") or "").strip()
+    category = str((payload or {}).get("category") or "").strip()
+    subcategory = str((payload or {}).get("subcategory") or "").strip()
+    category_code = str((payload or {}).get("category_code") or "").strip() or None
+    subcategory_code = str((payload or {}).get("subcategory_code") or "").strip() or None
+    confidence = float((payload or {}).get("confidence", 0.95))
+
+    if not cleaned_key:
+        return JSONResponse({"detail": "Merchant key is required"}, status_code=400)
+    if not category or not subcategory:
+        return JSONResponse({"detail": "Category and subcategory are required"}, status_code=400)
+
+    try:
+        result = await learn_merchant_memory(
+            user_id=user_id,
+            cleaned_key=cleaned_key,
+            merchant_name=merchant_name or cleaned_key.title(),
+            category=category,
+            subcategory=subcategory,
+            category_code=category_code,
+            subcategory_code=subcategory_code,
+            confidence=confidence,
+            learned_from="admin",
+        )
+        await audit_log(
+            action="ADMIN_MERCHANT_ADDED",
+            request=request,
+            user=_audit_actor(request),
+            meta={"cleaned_key": cleaned_key, "category_code": category_code},
+        )
+        return JSONResponse({
+            "status": "ok",
+            "merchant": {
+                "cleaned_key": result.get("cleaned_key"),
+                "merchant_name": result.get("merchant_name"),
+                "category": result.get("category"),
+                "subcategory": result.get("subcategory"),
+            },
+        })
+    except Exception as exc:
+        await audit_log(
+            action="ADMIN_MERCHANT_ADD_FAILED",
+            request=request,
+            user=_audit_actor(request),
+            meta={"cleaned_key": cleaned_key, "error": str(exc)},
+        )
+        return JSONResponse({"detail": f"Failed to add merchant: {exc}"}, status_code=400)
+
+
+@router.post("/api/merchants/update/{merchant_id}")
+@admin_required
+async def admin_merchants_update(request: Request, merchant_id: str):
+    """Update an existing merchant mapping."""
+    verify_csrf_token(request, request.headers.get("X-CSRF-Token"))
+    user_id = request.session.get("user", {}).get("user_id")
+    if not user_id:
+        return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+
+    try:
+        merchant_oid = ObjectId(merchant_id)
+        user_oid = ObjectId(user_id)
+    except Exception:
+        return JSONResponse({"detail": "Invalid ID"}, status_code=400)
+
+    try:
+        payload = await request.json()
+    except Exception:
+        return JSONResponse({"detail": "Invalid JSON"}, status_code=400)
+
+    category = str((payload or {}).get("category") or "").strip()
+    subcategory = str((payload or {}).get("subcategory") or "").strip()
+    category_code = str((payload or {}).get("category_code") or "").strip() or None
+    subcategory_code = str((payload or {}).get("subcategory_code") or "").strip() or None
+    merchant_name = str((payload or {}).get("merchant_name") or "").strip() or None
+    confidence = float((payload or {}).get("confidence", 0.95))
+
+    if not category or not subcategory:
+        return JSONResponse({"detail": "Category and subcategory are required"}, status_code=400)
+
+    update_doc = {
+        "category": category,
+        "subcategory": subcategory,
+        "category_code": category_code,
+        "subcategory_code": subcategory_code,
+        "confidence": confidence,
+        "updated_at": datetime.now(timezone.utc),
+    }
+    if merchant_name:
+        update_doc["merchant_name"] = merchant_name
+
+    result = await db.merchant_memory.update_one(
+        {"_id": merchant_oid, "user_id": user_oid},
+        {"$set": update_doc},
+    )
+
+    if result.modified_count == 0:
+        return JSONResponse({"detail": "Merchant not found"}, status_code=404)
+
+    await audit_log(
+        action="ADMIN_MERCHANT_UPDATED",
+        request=request,
+        user=_audit_actor(request),
+        meta={"merchant_id": merchant_id, "category_code": category_code},
+    )
+    return JSONResponse({"status": "ok", "message": "Merchant updated successfully"})
+
+
+@router.post("/api/merchants/delete/{merchant_id}")
+@admin_required
+async def admin_merchants_delete(request: Request, merchant_id: str):
+    """Delete a merchant mapping."""
+    verify_csrf_token(request, request.headers.get("X-CSRF-Token"))
+    user_id = request.session.get("user", {}).get("user_id")
+    if not user_id:
+        return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+
+    try:
+        merchant_oid = ObjectId(merchant_id)
+        user_oid = ObjectId(user_id)
+    except Exception:
+        return JSONResponse({"detail": "Invalid ID"}, status_code=400)
+
+    result = await db.merchant_memory.delete_one(
+        {"_id": merchant_oid, "user_id": user_oid},
+    )
+
+    if result.deleted_count == 0:
+        return JSONResponse({"detail": "Merchant not found"}, status_code=404)
+
+    await audit_log(
+        action="ADMIN_MERCHANT_DELETED",
+        request=request,
+        user=_audit_actor(request),
+        meta={"merchant_id": merchant_id},
+    )
+    return JSONResponse({"status": "ok", "message": "Merchant deleted successfully"})
+
+
+@router.post("/api/merchants/dismiss")
+@admin_required
+async def admin_merchants_dismiss(request: Request):
+    """Dismiss a discovered merchant from the inbox so it no longer appears in the list."""
+    verify_csrf_token(request, request.headers.get("X-CSRF-Token"))
+    user_id = request.session.get("user", {}).get("user_id")
+    if not user_id:
+        return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+
+    try:
+        payload = await request.json()
+    except Exception:
+        return JSONResponse({"detail": "Invalid JSON"}, status_code=400)
+
+    cleaned_key = str((payload or {}).get("cleaned_key") or "").strip().lower()
+    if not cleaned_key:
+        return JSONResponse({"detail": "cleaned_key is required"}, status_code=400)
+
+    result = await db.transaction_inbox.update_many(
+        {"cleaned_key": cleaned_key, "status": "pending"},
+        {"$set": {"merchant_dismissed": True}},
+    )
+
+    await audit_log(
+        action="ADMIN_MERCHANT_DISMISSED",
+        request=request,
+        user=_audit_actor(request),
+        meta={"cleaned_key": cleaned_key, "modified": result.modified_count},
+    )
+    return JSONResponse({"status": "ok", "modified": result.modified_count})

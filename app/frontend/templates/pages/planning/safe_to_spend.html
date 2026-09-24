@@ -1,0 +1,57 @@
+{% extends "base/base.html" %}
+{% block title %}Safe to Spend · {{ FT_APP_NAME }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/pages/planning.css?v={{ FT_APP_VERSION }}-head1">
+{% endblock %}
+{% block content %}
+{% set s = bundle.safe_to_spend or {} %}
+{% set br = s.breakdown or {} %}
+<section class="pln">
+  <header class="pln-hero">
+    <div>
+      <h1>Safe to Spend</h1>
+    </div>
+  </header>
+
+  <div class="pln-kpis">
+    <article class="pln-kpi">
+      <span class="pln-kpi__label">Safe to spend</span>
+      <div class="pln-kpi__value {% if (s.safe_to_spend or 0) <= 0 %}is-neg{% endif %}">₹ {{ (s.safe_to_spend or 0) | money }}</div>
+      {% if s.until %}<div class="pln-kpi__meta">Until {{ s.until | dateformat('%d %b %Y') }}</div>{% endif %}
+    </article>
+    <article class="pln-kpi">
+      <span class="pln-kpi__label">Available cash</span>
+      <div class="pln-kpi__value">₹ {{ (s.available_cash or 0) | money }}</div>
+      <div class="pln-kpi__meta">Savings, current, cash, and wallet only</div>
+    </article>
+    <article class="pln-kpi">
+      <span class="pln-kpi__label">Reserved</span>
+      <div class="pln-kpi__value">₹ {{ (s.reserved or 0) | money }}</div>
+    </article>
+    <article class="pln-kpi">
+      <span class="pln-kpi__label">Next expected income</span>
+      {% if s.next_income_amount %}
+      <div class="pln-kpi__value is-pos">₹ {{ s.next_income_amount | money }}</div>
+      <div class="pln-kpi__meta">{{ s.next_income_label }}{% if s.next_income_date %} · {{ s.next_income_date | dateformat('%d %b') }}{% endif %} · not added to spendable</div>
+      {% else %}
+      <div class="pln-kpi__value">—</div>
+      <div class="pln-kpi__meta">No upcoming scheduled income</div>
+      {% endif %}
+    </article>
+  </div>
+
+  <article class="pln-panel">
+    <h2>Calculation</h2>
+    <div class="pln-row"><span>Available cash</span><strong>₹ {{ (s.available_cash or 0) | money }}</strong></div>
+    <div class="pln-row"><span>Upcoming bills / recurring</span><strong>− ₹ {{ ((br.bills or 0) + (br.recurring or 0)) | money }}</strong></div>
+    <div class="pln-row"><span>Credit-card dues</span><strong>− ₹ {{ (br.credit_cards or 0) | money }}</strong></div>
+    <div class="pln-row"><span>Bank EMIs</span><strong>− ₹ {{ (br.emis or 0) | money }}</strong></div>
+    <div class="pln-row"><span>Safety buffer ({{ ((s.buffer_rate or 0) * 100) | int }}%)</span><strong>− ₹ {{ (br.safety_buffer or 0) | money }}</strong></div>
+    <div class="pln-row"><span>Result</span><strong>₹ {{ (s.raw_amount or 0) | money }}</strong></div>
+    {% if s.shortfall %}
+    <p class="pln-kpi__meta">Shortfall versus obligations: ₹ {{ s.shortfall | money }}. Displayed safe-to-spend is floored at ₹0.00.</p>
+    {% endif %}
+  </article>
+  <p class="pln-disclaimer">This is a planning estimate from your ledger, not a spending limit or financial advice. Expected income is shown for context and is not added to the spendable amount.</p>
+</section>
+{% endblock %}

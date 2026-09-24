@@ -1,0 +1,9 @@
+{% extends "base/base.html" %}
+{% block title %}Maintenance · {{ FT_APP_NAME }}{% endblock %}
+{% block content %}
+<div class="ft-card" style="max-width: 36rem;">
+  <h1 class="ft-display" style="font-size:1.75rem;margin-bottom:0.5rem">Under maintenance</h1>
+  <p class="ft-muted" style="margin-bottom:1.25rem">{{ message or 'We will be back shortly.' }}</p>
+  <a class="ft-btn ft-btn--secondary" href="/">Back home</a>
+</div>
+{% endblock %}

@@ -1,0 +1,175 @@
+<aside class="ft-sidebar" data-sidebar aria-label="Primary">
+  <div class="ft-sidebar__top">
+    <a class="ft-sidebar__brand" href="/" title="{{ FT_APP_NAME }}">
+      <img class="ft-sidebar__logo" src="/static/icons/FinTracker_exact.svg" alt="">
+      <span class="ft-sidebar__name">{{ FT_APP_NAME }}</span>
+    </a>
+    <button
+      type="button"
+      class="ft-sidebar__toggle"
+      data-sidebar-toggle
+      aria-label="Collapse navigation"
+      title="Collapse navigation"
+    >
+      <i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
+    </button>
+    <button
+      type="button"
+      class="ft-sidebar__close"
+      data-sidebar-close
+      aria-label="Close navigation"
+    >
+      <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+    </button>
+  </div>
+
+  <nav class="ft-nav">
+    <div class="ft-nav__section">Overview</div>
+    <a class="ft-nav__link {% if active_page == 'dashboard' %}is-active{% endif %}" href="/" data-nav-tip="Dashboard">
+      <i class="fa-solid fa-border-all" aria-hidden="true"></i>
+      <span class="ft-nav__label">Dashboard</span>
+    </a>
+    <a class="ft-nav__link {% if active_page == 'planning_insights' %}is-active{% endif %}" href="/insights" data-nav-tip="Insights">
+      <i class="fa-solid fa-lightbulb" aria-hidden="true"></i>
+      <span class="ft-nav__label">Insights</span>
+    </a>
+
+    <div class="ft-nav__section">Money</div>
+    <a class="ft-nav__link {% if active_page == 'accounts' %}is-active{% endif %}" href="/accounts" data-nav-tip="Accounts">
+      <i class="fa-solid fa-wallet" aria-hidden="true"></i>
+      <span class="ft-nav__label">Accounts</span>
+    </a>
+    <a class="ft-nav__link {% if active_page in ['transactions_list', 'list', 'listtransactions', 'transactions', 'add', 'addtransaction'] %}is-active{% endif %}" href="/transactions/list" data-nav-tip="Transactions">
+      <i class="fa-solid fa-right-left" aria-hidden="true"></i>
+      <span class="ft-nav__label">Transactions</span>
+    </a>
+    <a class="ft-nav__link {% if active_page == 'recurring' %}is-active{% endif %}" href="/recurring" data-nav-tip="Recurring">
+      <i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i>
+      <span class="ft-nav__label">Recurring</span>
+    </a>
+    <a class="ft-nav__link {% if active_page in ['inbox', 'transactioninbox'] %}is-active{% endif %}" href="/transaction-inbox" data-nav-tip="Inbox">
+      <i class="fa-solid fa-inbox" aria-hidden="true"></i>
+      <span class="ft-nav__label">Inbox</span>
+    </a>
+
+    <div class="ft-nav__section">Planning</div>
+    <a class="ft-nav__link {% if active_page == 'planning_calendar' %}is-active{% endif %}" href="/planning/calendar" data-nav-tip="Financial Calendar">
+      <i class="fa-regular fa-calendar" aria-hidden="true"></i>
+      <span class="ft-nav__label">Financial Calendar</span>
+    </a>
+    <a class="ft-nav__link {% if active_page == 'planning_goals' %}is-active{% endif %}" href="/planning/goals" data-nav-tip="Goals">
+      <i class="fa-solid fa-flag" aria-hidden="true"></i>
+      <span class="ft-nav__label">Goals</span>
+    </a>
+
+    <div class="ft-nav__section">Settings</div>
+    <a class="ft-nav__link {% if active_page == 'profile' %}is-active{% endif %}" href="/profile" data-nav-tip="Profile">
+      <i class="fa-regular fa-user" aria-hidden="true"></i>
+      <span class="ft-nav__label">Profile</span>
+    </a>
+    <a class="ft-nav__link {% if active_page == 'help_support' %}is-active{% endif %}" href="/help-support" data-nav-tip="Help & Support">
+      <i class="fa-solid fa-life-ring" aria-hidden="true"></i>
+      <span class="ft-nav__label">Help &amp; Support</span>
+    </a>
+    <a class="ft-nav__link {% if active_page == 'security' %}is-active{% endif %}" href="/security" data-nav-tip="Security">
+      <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
+      <span class="ft-nav__label">Security</span>
+    </a>
+    <a class="ft-nav__link {% if active_page == 'automations' %}is-active{% endif %}" href="/settings/automations" data-nav-tip="Automations">
+      <i class="fa-solid fa-bolt" aria-hidden="true"></i>
+      <span class="ft-nav__label">Automations</span>
+    </a>
+
+    {% if user and user.is_admin %}
+    <div class="ft-nav__section">Administration</div>
+    <div
+      class="ft-nav__group {% if active_page == 'admin' %}is-open{% endif %}"
+      data-nav-group
+      data-admin-nav-root
+    >
+      <button
+        type="button"
+        class="ft-nav__link ft-nav__parent {% if active_page == 'admin' %}is-active{% endif %}"
+        data-nav-group-toggle
+        data-nav-href="/admin"
+        aria-expanded="{{ 'true' if active_page == 'admin' else 'false' }}"
+        data-nav-tip="Admin"
+      >
+        <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
+        <span class="ft-nav__label">Admin</span>
+        <i class="fa-solid fa-chevron-down ft-nav__chevron" aria-hidden="true"></i>
+      </button>
+      <div class="ft-nav__children">
+        <a
+          class="ft-nav__link ft-nav__sub"
+          href="/admin#overview"
+          data-admin-nav="overview"
+          data-admin-nav-primary="true"
+          data-nav-tip="Overview"
+        >
+          <i class="fa-solid fa-gauge-high" aria-hidden="true"></i>
+          <span class="ft-nav__label">Overview</span>
+        </a>
+
+        <a
+          class="ft-nav__link ft-nav__sub"
+          href="/admin#settings"
+          data-admin-nav="settings"
+          data-admin-nav-primary="true"
+          data-nav-tip="Settings"
+        >
+          <i class="fa-solid fa-sliders" aria-hidden="true"></i>
+          <span class="ft-nav__label">Settings</span>
+        </a>
+
+        <a
+          class="ft-nav__link ft-nav__sub"
+          href="/admin#users"
+          data-admin-nav="users"
+          data-admin-nav-primary="true"
+          data-nav-tip="Users"
+        >
+          <i class="fa-solid fa-users" aria-hidden="true"></i>
+          <span class="ft-nav__label">Users</span>
+        </a>
+        <a
+          class="ft-nav__link ft-nav__sub"
+          href="/admin#support"
+          data-admin-nav="support"
+          data-admin-nav-primary="true"
+          data-nav-tip="Support"
+        >
+          <i class="fa-solid fa-headset" aria-hidden="true"></i>
+          <span class="ft-nav__label">Support</span>
+        </a>
+      </div>
+    </div>
+    {% endif %}
+  </nav>
+
+  <footer class="ft-sidebar__footer">
+    {% if shell_status == 'error' %}
+      {% set status_class = 'is-bad' %}
+      {% set status_title = 'Something is broken' %}
+    {% elif request.state.maintenance_mode %}
+      {% set status_class = 'is-warn' %}
+      {% set status_title = 'Maintenance mode' %}
+    {% else %}
+      {% set status_class = 'is-ok' %}
+      {% set status_title = 'Online' %}
+    {% endif %}
+    <div class="ft-sidebar__status">
+      <strong class="ft-sidebar__foot-brand">{{ FT_APP_NAME }}</strong>
+      <p class="ft-sidebar__meta">
+        <span class="ft-sidebar__version">v{{ FT_APP_VERSION }}</span>
+        <span
+          class="ft-sidebar__pulse {{ status_class }}"
+          title="{{ status_title }}"
+          aria-label="{{ status_title }}"
+        ></span>
+      </p>
+    </div>
+  </footer>
+</aside>
+
+<div class="ft-sidebar-backdrop" data-sidebar-backdrop hidden></div>

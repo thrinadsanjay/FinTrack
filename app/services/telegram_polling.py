@@ -5,6 +5,7 @@ import logging
 from datetime import datetime, timezone
 
 from app.services.admin_settings import get_admin_settings
+from app.schedulers.job_lock import singleton_job
 from app.services.telegram import get_updates, get_webhook_info
 from app.services.telegram_transactions import process_telegram_text
 
@@ -22,6 +23,7 @@ _last_config_has_token: bool = False
 _last_webhook_url: str = ""
 
 
+@singleton_job("telegram-polling", lease_seconds=2 * 60)
 async def run_telegram_poll_once() -> None:
     global _last_update_id, _last_poll_at, _last_poll_error, _last_processed_updates, _last_processed_messages
     global _last_config_enabled, _last_config_polling_enabled, _last_config_has_token, _last_webhook_url

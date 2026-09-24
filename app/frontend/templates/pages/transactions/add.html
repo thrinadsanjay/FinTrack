@@ -1,0 +1,188 @@
+{% extends "base/base.html" %}
+{% block title %}Add transaction · {{ FT_APP_NAME }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/pages/transactions-add.css?v={{ FT_APP_VERSION }}-head1">
+{% endblock %}
+
+{% block content %}
+{% set defaults = tx_defaults or {} %}
+<section class="tx-add" data-tx-page>
+  <header class="tx-add__hero">
+    <div>
+      <h1>Add transaction</h1>
+    </div>
+    <div class="tx-add__actions">
+      <a class="ft-btn ft-btn--secondary" href="/transactions/list">View list</a>
+    </div>
+  </header>
+
+  {% if error %}
+  <div class="ft-alert ft-alert--error tx-add__alert">{{ error }}</div>
+  {% endif %}
+
+  <article class="tx-add__panel">
+    <form method="post" action="/transactions/add" class="tx-form" data-tx-form>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+
+      <div class="tx-form__section">
+        <h2 class="tx-form__section-title">Basics</h2>
+        <div class="tx-form__grid">
+          <div class="ft-field tx-form__span-2">
+            <label for="tx_type">Type</label>
+            <div class="tx-type-pills" role="radiogroup" aria-label="Transaction type">
+              <label class="tx-type-pill">
+                <input type="radio" name="tx_type" value="debit" {% if defaults.tx_type != 'credit' and defaults.tx_type != 'transfer' %}checked{% endif %} data-tx-type>
+                <span><i class="fa-solid fa-arrow-up" aria-hidden="true"></i> Expense</span>
+              </label>
+              <label class="tx-type-pill">
+                <input type="radio" name="tx_type" value="credit" {% if defaults.tx_type == 'credit' %}checked{% endif %} data-tx-type>
+                <span><i class="fa-solid fa-arrow-down" aria-hidden="true"></i> Income</span>
+              </label>
+              <label class="tx-type-pill">
+                <input type="radio" name="tx_type" value="transfer" {% if defaults.tx_type == 'transfer' %}checked{% endif %} data-tx-type>
+                <span><i class="fa-solid fa-right-left" aria-hidden="true"></i> Transfer</span>
+              </label>
+            </div>
+            <select class="ft-select sr-only" id="tx_type" data-tx-type-select aria-hidden="true" tabindex="-1">
+              <option value="debit" {% if defaults.tx_type != 'credit' and defaults.tx_type != 'transfer' %}selected{% endif %}>debit</option>
+              <option value="credit" {% if defaults.tx_type == 'credit' %}selected{% endif %}>credit</option>
+              <option value="transfer" {% if defaults.tx_type == 'transfer' %}selected{% endif %}>transfer</option>
+            </select>
+          </div>
+
+          <div class="ft-field">
+            <label for="amount">Amount</label>
+            <div class="tx-input">
+              <span class="tx-input__prefix">₹</span>
+              <input class="ft-input" id="amount" name="amount" type="number" step="0.01" min="0.01" value="{{ defaults.amount or '' }}" required placeholder="0.00">
+            </div>
+          </div>
+
+          <div class="ft-field">
+            <label for="account_id">Account</label>
+            <select class="ft-select" id="account_id" name="account_id" required>
+              {% for acc in accounts %}
+              <option value="{{ acc._id }}" {% if defaults.account_id == acc._id|string %}selected{% endif %}>
+                {{ acc.name or acc.bank_name }} — ₹ {{ acc.balance | money }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="ft-field" data-transfer-only hidden>
+            <label for="target_account_id">To account</label>
+            <select class="ft-select" id="target_account_id" name="target_account_id" disabled>
+              {% for acc in accounts %}
+              <option value="{{ acc._id }}" {% if defaults.target_account_id == acc._id|string %}selected{% endif %}>
+                {{ acc.name or acc.bank_name }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="ft-field">
+            <label for="mode">Payment mode</label>
+            <select class="ft-select" id="mode" name="mode" required>
+              {% set mode_names = {'upi':'UPI','card':'Card','cash':'Cash','netbanking':'Net Banking','cheque':'Cheque','other':'Other'} %}
+              {% for m in ['upi','card','cash','netbanking','cheque','other'] %}
+              <option value="{{ m }}" {% if defaults.mode == m %}selected{% endif %}>{{ mode_names.get(m, m) }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="ft-field tx-form__span-2">
+            <label for="description">Description</label>
+            <input class="ft-input" id="description" name="description" value="{{ defaults.description or '' }}" placeholder="What was this for?">
+          </div>
+        </div>
+      </div>
+
+      <div class="tx-form__section" data-category-section>
+        <h2 class="tx-form__section-title">Categorization</h2>
+        <p class="tx-form__section-hint" data-category-hint>Categories load from your system list based on type.</p>
+        <div class="tx-form__grid">
+          <div class="ft-field" data-non-transfer>
+            <label for="category_code">Category</label>
+            <select class="ft-select" id="category_code" name="category_code" required>
+              <option value="">Loading…</option>
+            </select>
+          </div>
+
+          <div class="ft-field" data-non-transfer>
+            <label for="subcategory_code">Subcategory</label>
+            <select class="ft-select" id="subcategory_code" name="subcategory_code" required>
+              <option value="">Select category first</option>
+            </select>
+          </div>
+        </div>
+        {# Transfer always uses Self Transfer; keep values for Form(...) #}
+        <div hidden data-transfer-category-fields>
+          <input type="hidden" name="category_code" value="transfer" data-transfer-category disabled>
+          <input type="hidden" name="subcategory_code" value="transfer" data-transfer-subcategory disabled>
+        </div>
+      </div>
+
+      <div class="tx-form__section">
+        <div class="tx-recurring-head">
+          <div>
+            <h2 class="tx-form__section-title">Recurring</h2>
+            <p class="tx-form__section-hint">Schedule this transaction to repeat automatically.</p>
+          </div>
+          <label class="tx-toggle">
+            <input type="checkbox" name="is_recurring" value="true" data-recurring-toggle>
+            <span class="tx-toggle__track" aria-hidden="true"><span class="tx-toggle__thumb"></span></span>
+            <span class="tx-toggle__label">Make recurring</span>
+          </label>
+        </div>
+
+        <div class="tx-recurring-panel" data-recurring-panel hidden>
+          <div class="tx-form__grid">
+            <div class="ft-field">
+              <label for="frequency">Frequency</label>
+              <select class="ft-select" id="frequency" name="frequency" data-recurring-field>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="biweekly">Biweekly</option>
+                <option value="monthly" selected>Monthly</option>
+                <option value="quarterly">Quarterly</option>
+                <option value="halfyearly">Half-yearly</option>
+                <option value="yearly">Yearly</option>
+              </select>
+            </div>
+
+            <div class="ft-field">
+              <label for="interval">Every</label>
+              <div class="tx-input">
+                <input class="ft-input" id="interval" name="interval" type="number" min="1" value="1" data-recurring-field>
+                <span class="tx-input__suffix" data-interval-suffix>month(s)</span>
+              </div>
+            </div>
+
+            <div class="ft-field">
+              <label for="start_date">Start date</label>
+              <input class="ft-input" id="start_date" name="start_date" type="date" data-recurring-field>
+            </div>
+
+            <div class="ft-field">
+              <label for="end_date">End date <span class="tx-optional">(optional)</span></label>
+              <input class="ft-input" id="end_date" name="end_date" type="date" data-recurring-field>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tx-form__footer">
+        <a class="ft-btn ft-btn--secondary" href="/transactions/list">Cancel</a>
+        <button class="ft-btn ft-btn--primary" type="submit">
+          Save transaction <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+        </button>
+      </div>
+    </form>
+  </article>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/transactions.js?v={{ FT_APP_VERSION }}" defer></script>
+{% endblock %}

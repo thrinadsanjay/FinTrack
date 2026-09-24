@@ -1,0 +1,150 @@
+{% extends "base/base.html" %}
+{% block title %}Inbox · {{ FT_APP_NAME }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/pages/transactions-inbox.css?v={{ FT_APP_VERSION }}-head1">
+{% endblock %}
+
+{% block content %}
+<section class="inx" data-inbox-page>
+  <header class="inx-hero">
+    <div>
+      <h1>Transaction inbox</h1>
+    </div>
+    <div class="inx-hero__actions">
+      <select class="ft-select" id="inbox_upload_account" aria-label="Account for upload">
+        {% for acc in accounts %}
+        <option value="{{ acc._id }}">{{ acc.name or acc.bank_name }}</option>
+        {% endfor %}
+      </select>
+      <label class="ft-btn ft-btn--secondary inx-upload-btn">
+        <i class="fa-solid fa-file-arrow-up" aria-hidden="true"></i> Upload statement
+        <input type="file" accept=".pdf,.csv,.xlsx,application/pdf,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" data-inbox-upload hidden>
+      </label>
+      <button type="button" class="ft-btn ft-btn--secondary" data-inbox-sync-sms title="Parse SMS buffer into inbox">
+        <i class="fa-solid fa-mobile-screen" aria-hidden="true"></i> Sync SMS
+      </button>
+      <button type="button" class="ft-btn ft-btn--primary" data-inbox-bulk disabled>
+        <i class="fa-solid fa-bolt" aria-hidden="true"></i> Approve ready
+      </button>
+      <button type="button" class="ft-btn ft-btn--secondary" data-inbox-skip-duplicates>
+        Skip duplicates
+      </button>
+    </div>
+  </header>
+
+  <div class="inx-kpis" data-inbox-kpis>
+    <div class="inx-kpi"><span class="inx-kpi__label">Pending</span><strong class="inx-kpi__value" data-kpi-pending>0</strong></div>
+    <div class="inx-kpi is-attention"><span class="inx-kpi__label">Needs attention</span><strong class="inx-kpi__value" data-kpi-attention>0</strong></div>
+    <div class="inx-kpi is-sms"><span class="inx-kpi__label">From SMS</span><strong class="inx-kpi__value" data-kpi-sms>0</strong></div>
+    <div class="inx-kpi is-pdf"><span class="inx-kpi__label">From statement</span><strong class="inx-kpi__value" data-kpi-pdf>0</strong></div>
+    <div class="inx-kpi is-amount"><span class="inx-kpi__label">Buffer total</span><strong class="inx-kpi__value" data-kpi-total>₹ 0.00</strong></div>
+  </div>
+
+  <div class="inx-toolbar">
+    <div class="inx-toolbar__search">
+      <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+      <input class="ft-input" type="search" placeholder="Filter description, merchant, amount…" data-inbox-search>
+    </div>
+    <select class="ft-select" data-inbox-source aria-label="Source">
+      <option value="">All sources</option>
+      <option value="sms">SMS</option>
+      <option value="pdf">Statement</option>
+      <option value="csv">CSV</option>
+    </select>
+    <label class="inx-check">
+      <input type="checkbox" data-inbox-attention>
+      <span>Needs attention only</span>
+    </label>
+    <label class="inx-check">
+      <input type="checkbox" data-inbox-duplicates>
+      <span>Possible duplicates</span>
+    </label>
+    <button type="button" class="ft-btn ft-btn--ghost" data-inbox-clear-pending>Clear pending</button>
+  </div>
+
+  <p class="inx-meta" data-inbox-meta>Loading…</p>
+  <div class="inx-report" data-inbox-report hidden></div>
+
+  <div class="inx-list" data-inbox-list>
+    <div class="inx-empty">Loading inbox…</div>
+  </div>
+</section>
+
+<dialog class="inx-dialog" data-inbox-review-dialog>
+  <form method="dialog" class="inx-dialog__card" data-inbox-review-form>
+    <input type="hidden" name="row_id" data-review-id>
+    <header class="inx-dialog__head">
+      <div>
+        <h3>Review candidate</h3>
+        <p class="inx-dialog__hint" data-review-hint>Fill missing details, then approve into the ledger.</p>
+      </div>
+      <button type="button" class="inx-dialog__close" data-dialog-close aria-label="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+    </header>
+    <div class="inx-dialog__body">
+      <div class="inx-dialog__grid">
+        <div class="ft-field">
+          <label for="review_date">Date</label>
+          <input class="ft-input" id="review_date" name="date" type="date" data-review-date required>
+        </div>
+        <div class="ft-field">
+          <label for="review_amount">Amount</label>
+          <input class="ft-input" id="review_amount" name="amount" type="number" step="0.01" min="0.01" data-review-amount required>
+        </div>
+        <div class="ft-field">
+          <label for="review_type">Type</label>
+          <select class="ft-select" id="review_type" name="type" data-review-type required>
+            <option value="debit">Expense</option>
+            <option value="credit">Income</option>
+          </select>
+        </div>
+        <div class="ft-field">
+          <label for="review_mode">Payment mode</label>
+          <select class="ft-select" id="review_mode" name="mode" data-review-mode>
+            {% set mode_names = {'upi':'UPI','card':'Card','cash':'Cash','netbanking':'Net Banking','cheque':'Cheque','transfer':'Transfer','unknown':'Unknown','other':'Other'} %}
+            {% for m in ['upi','card','cash','netbanking','cheque','transfer','unknown','other'] %}
+            <option value="{{ m }}">{{ mode_names.get(m, m) }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="ft-field inx-dialog__span">
+          <label for="review_account">Account</label>
+          <select class="ft-select" id="review_account" name="account_id" data-review-account required>
+            {% for acc in accounts %}
+            <option value="{{ acc._id }}">{{ acc.name or acc.bank_name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="ft-field inx-dialog__span">
+          <label for="review_description">Description</label>
+          <input class="ft-input" id="review_description" name="description" data-review-description required>
+        </div>
+        <div class="ft-field">
+          <label for="review_category">Category</label>
+          <select class="ft-select" id="review_category" name="category_code" data-review-category required>
+            <option value="">Select category</option>
+          </select>
+        </div>
+        <div class="ft-field">
+          <label for="review_subcategory">Subcategory</label>
+          <select class="ft-select" id="review_subcategory" name="subcategory_code" data-review-subcategory required>
+            <option value="">Select subcategory</option>
+          </select>
+        </div>
+      </div>
+      <p class="inx-dialog__raw" data-review-raw hidden></p>
+      <div class="inx-dup" data-review-duplicate hidden></div>
+    </div>
+    <footer class="inx-dialog__foot">
+      <button type="button" class="ft-btn ft-btn--ghost" data-review-skip>Skip import</button>
+      <button type="button" class="ft-btn ft-btn--ghost" data-dialog-close>Cancel</button>
+      <button type="button" class="ft-btn ft-btn--secondary" data-review-save>Save only</button>
+      <button type="submit" class="ft-btn ft-btn--primary" value="approve">Keep both / Approve</button>
+    </footer>
+  </form>
+</dialog>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/inbox.js?v={{ FT_APP_VERSION }}-burnt" defer></script>
+{% endblock %}

@@ -8,6 +8,14 @@ __pycache__
 .pytest_cache
 .mypy_cache
 .env
+db
+certs
+*.key
+*.pem
+archive
+tests
+docs
+.github
 logs
 backups
 node_modules

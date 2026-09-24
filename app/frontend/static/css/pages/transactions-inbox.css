@@ -1,0 +1,369 @@
+/* Transaction inbox review board */
+.inx {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.inx-hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.inx-hero h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+  color: var(--ft-ink);
+}
+
+.inx-hero__crumb,
+.inx-hero__copy {
+  display: none;
+}
+
+.inx-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.inx-hero__actions .ft-select {
+  min-height: 40px;
+  min-width: 140px;
+}
+
+.inx-upload-btn {
+  cursor: pointer;
+}
+
+.inx-kpis {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.inx-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--ft-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ft-raised) 96%, transparent);
+  box-shadow: inset 3px 0 0 var(--ft-accent);
+}
+
+.inx-kpi.is-attention { box-shadow: inset 3px 0 0 var(--ft-warning); }
+.inx-kpi.is-sms { box-shadow: inset 3px 0 0 var(--ft-info); }
+.inx-kpi.is-pdf { box-shadow: inset 3px 0 0 var(--ft-neutral); }
+.inx-kpi.is-amount { box-shadow: inset 3px 0 0 var(--ft-positive); }
+
+.inx-kpi__label {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ft-faint);
+}
+
+.inx-kpi__value {
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.inx-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--ft-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ft-raised) 96%, transparent);
+}
+
+.inx-toolbar__search {
+  position: relative;
+  flex: 1 1 220px;
+  min-width: 180px;
+}
+
+.inx-toolbar__search i {
+  position: absolute;
+  left: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ft-faint);
+  font-size: 0.8rem;
+  pointer-events: none;
+}
+
+.inx-toolbar__search .ft-input {
+  width: 100%;
+  padding-left: 2.1rem;
+  min-height: 36px;
+}
+
+.inx-toolbar .ft-select {
+  min-height: 36px;
+}
+
+.inx-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--ft-ink-soft);
+  font-weight: 600;
+}
+
+.inx-meta {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--ft-muted);
+}
+
+.inx-report {
+  padding: 0.65rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--ft-accent) 35%, var(--ft-border));
+  background: color-mix(in srgb, var(--ft-accent-soft) 45%, var(--ft-raised));
+  color: var(--ft-accent-ink);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.inx-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.inx-empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--ft-muted);
+  border: 1px dashed var(--ft-border);
+  border-radius: 14px;
+  background: var(--ft-inset);
+}
+
+.inx-empty__title {
+  margin: 0 0 0.35rem;
+  font-weight: 750;
+  color: var(--ft-ink);
+}
+
+.inx-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.7rem;
+  align-items: start;
+  padding: 0.75rem 0.85rem;
+  border-radius: 12px;
+  border: 1px solid var(--ft-border);
+  background: var(--ft-raised);
+  box-shadow: inset 3px 0 0 transparent;
+}
+
+.inx-card.is-credit {
+  box-shadow: inset 3px 0 0 var(--ft-positive);
+  border-color: color-mix(in srgb, var(--ft-positive) 30%, var(--ft-border));
+}
+
+.inx-card.is-debit {
+  box-shadow: inset 3px 0 0 var(--ft-negative);
+  border-color: color-mix(in srgb, var(--ft-negative) 30%, var(--ft-border));
+}
+
+.inx-card.is-attention {
+  border-color: color-mix(in srgb, var(--ft-warning) 45%, var(--ft-border));
+}
+
+.inx-card__icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  color: inherit;
+}
+
+.inx-card.is-credit .inx-card__icon { color: var(--ft-positive); }
+.inx-card.is-debit .inx-card__icon { color: var(--ft-negative); }
+
+.inx-dup {
+  margin-top: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--ft-warning);
+  line-height: 1.4;
+}
+
+.inx-card__main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.inx-card__title {
+  font-weight: 750;
+  font-size: 0.92rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inx-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.7rem;
+  font-size: 0.75rem;
+  color: var(--ft-ink-soft);
+}
+
+.inx-card__tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.inx-card__side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.45rem;
+}
+
+.inx-card__amount {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.inx-card.is-credit .inx-card__amount { color: var(--ft-positive); }
+.inx-card.is-debit .inx-card__amount { color: var(--ft-negative); }
+
+.inx-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  justify-content: flex-end;
+}
+
+.inx-dialog {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  max-width: calc(100vw - 2rem);
+}
+
+.inx-dialog::backdrop {
+  background: rgba(8, 12, 20, 0.62);
+}
+
+.inx-dialog__card {
+  width: min(560px, calc(100vw - 2rem));
+  border: 1px solid var(--ft-border);
+  border-radius: var(--ft-radius-xl);
+  background: var(--ft-raised);
+  overflow: hidden;
+}
+
+.inx-dialog__head,
+.inx-dialog__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ft-space-3);
+  padding: var(--ft-space-4);
+}
+
+.inx-dialog__head {
+  border-bottom: 1px solid var(--ft-border);
+  align-items: flex-start;
+}
+
+.inx-dialog__head h3 {
+  margin: 0;
+}
+
+.inx-dialog__hint {
+  margin: 0.25rem 0 0;
+  font-size: 0.82rem;
+  color: var(--ft-muted);
+}
+
+.inx-dialog__body {
+  padding: var(--ft-space-4);
+}
+
+.inx-dialog__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--ft-space-3);
+}
+
+.inx-dialog__span {
+  grid-column: 1 / -1;
+}
+
+.inx-dialog__raw {
+  margin: 0.75rem 0 0;
+  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+  background: var(--ft-inset);
+  color: var(--ft-muted);
+  font-size: 0.75rem;
+  word-break: break-word;
+}
+
+.inx-dialog__foot {
+  border-top: 1px solid var(--ft-border);
+  justify-content: flex-end;
+}
+
+.inx-dialog__close {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--ft-border);
+  background: var(--ft-inset);
+  color: var(--ft-ink-soft);
+  cursor: pointer;
+}
+
+@media (min-width: 900px) {
+  .inx-kpis {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .inx-dialog__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .inx-card {
+    grid-template-columns: auto 1fr;
+  }
+
+  .inx-card__side {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}

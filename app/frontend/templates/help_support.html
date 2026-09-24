@@ -1,173 +1,127 @@
-{% extends "base.html" %}
-{% block title %}{{ FT_APP_NAME }} ¦ Help & Support{% endblock %}
+{% extends "base/base.html" %}
+{% block title %}Help · {{ FT_APP_NAME }}{% endblock %}
+
 {% block extra_css %}
-<link rel="stylesheet" href="/static/css/help_support.css">
+<link rel="stylesheet" href="/static/css/pages/help.css?v={{ FT_APP_VERSION }}-head1">
 {% endblock %}
+
 {% block content %}
-<section class="page page-help" data-help-page data-user-authenticated="{{ 'true' if user else 'false' }}" data-reactivation-context="{{ account_reactivation_context or '' }}">
-  <div class="help-wrap">
-    <header class="help-hero">
+{% set email = support_email or FT_SUPPORT_EMAIL %}
+{% set phone = support_phone or FT_SUPPORT_PHONE %}
+
+<section class="hlp" data-help-page>
+  <header class="hlp-hero">
+    <div class="hlp-hero__text">
+      <h1>Help &amp; support</h1>
+    </div>
+    <button
+      type="button"
+      class="ft-btn ft-btn--primary hlp-hero__cta"
+      data-open-chat="{% if account_reactivation_context %}support{% else %}assistant{% endif %}"
+    >
+      <i class="fa-solid fa-comments" aria-hidden="true"></i>
+      {% if account_reactivation_context %}Contact live support{% else %}Open assistant{% endif %}
+    </button>
+  </header>
+
+  {% if account_notice %}
+  <div class="ft-alert ft-alert--warning">{{ account_notice }}</div>
+  {% endif %}
+
+  <div class="hlp-contact">
+    <a class="hlp-contact__card" href="mailto:{{ email }}">
+      <span class="hlp-contact__icon is-email"><i class="fa-regular fa-envelope" aria-hidden="true"></i></span>
       <div>
-        <h1>Help &amp; Support</h1>
-        <p>Find answers quickly, contact support, and chat from one place.</p>
+        <span class="hlp-contact__label">Email</span>
+        <strong>{{ email }}</strong>
+        <span class="hlp-contact__hint">Typical reply within one business day</span>
       </div>
-      <div class="hero-actions">
-        <a href="/" class="btn-secondary">Home</a>
-        {% if user %}<a href="/profile" class="btn-secondary">Profile</a>{% endif %}
+    </a>
+    <a class="hlp-contact__card" href="tel:{{ phone }}">
+      <span class="hlp-contact__icon is-phone"><i class="fa-solid fa-phone" aria-hidden="true"></i></span>
+      <div>
+        <span class="hlp-contact__label">Phone</span>
+        <strong>{{ phone }}</strong>
+        <span class="hlp-contact__hint">Urgent account access only</span>
       </div>
-    </header>
-
-    {% if account_notice %}
-    <div class="help-account-notice">{{ account_notice }}</div>
-    <div class="help-actions" style="margin-bottom: 12px;">
-      <button type="button" class="btn-primary" data-reactivation-request>Request Reactivation</button>
-    </div>
-    {% endif %}
-
-    <section class="help-tiles" aria-label="Help Sections">
-      <button type="button" class="help-tile active" data-help-target="contact">
-        <i class="fa-regular fa-envelope"></i>
-        <span>Contact Support</span>
-      </button>
-      <button type="button" class="help-tile" data-help-target="faq">
-        <i class="fa-regular fa-circle-question"></i>
-        <span>FAQ</span>
-      </button>
-      <button type="button" class="help-tile" data-help-target="chat">
-        <i class="fa-regular fa-comments"></i>
-        <span>Chat</span>
-      </button>
-      {% if user %}
-      <button type="button" class="help-tile" data-help-target="account">
-        <i class="fa-regular fa-user"></i>
-        <span>My Account</span>
-      </button>
-      {% endif %}
-    </section>
-
-    <div class="help-layout">
-      <section class="help-panels">
-        <article class="help-panel active" data-help-panel="contact">
-          <h2>Contact Support</h2>
-          <p class="help-muted">Reach out to our support team for access, billing, or application issues.</p>
-
-          <div class="contact-grid">
-            <div class="contact-card">
-              <label>Support Email</label>
-              <p>{{ support_email or FT_SUPPORT_EMAIL }}</p>
-              <a class="btn-primary" href="mailto:{{ support_email or FT_SUPPORT_EMAIL }}">Send Email</a>
-            </div>
-
-            <div class="contact-card">
-              <label>Contact Number</label>
-              <p>{{ support_phone or FT_SUPPORT_PHONE }}</p>
-              <a class="btn-secondary mobile-call" href="tel:{{ (support_phone or FT_SUPPORT_PHONE) | replace(' ', '') }}">
-                Call
-              </a>
-            </div>
-          </div>
-        </article>
-
-        <article class="help-panel" data-help-panel="faq">
-          <h2>FAQ</h2>
-          <div class="faq-list">
-            <details>
-              <summary>Why is my account disabled?</summary>
-              <p>Account access can be restricted by administrators. Contact support for reactivation.</p>
-            </details>
-            <details>
-              <summary>How do I get admin access?</summary>
-              <p>Admin access is granted by your platform administrator.</p>
-            </details>
-            <details>
-              <summary>Why do I see login/session issues?</summary>
-              <p>Clear browser cookies or login again. If issue persists, share your username and time with support.</p>
-            </details>
-            <details>
-              <summary>Where can I report a bug?</summary>
-              <p>Use the support email with steps, screenshots, and expected behavior for faster resolution.</p>
-            </details>
-          </div>
-        </article>
-
-        <article class="help-panel" data-help-panel="chat">
-          <h2>Chat Support</h2>
-          <p class="help-muted">Use the launcher to open chat at the bottom-right.</p>
-          <button type="button" class="btn-primary" data-open-chat>
-            Open Chat
-          </button>
-        </article>
-
-        {% if user %}
-        <article class="help-panel" data-help-panel="account">
-          <h2>My Account</h2>
-          <div class="account-grid">
-            <p><strong>Name:</strong> {{ user.full_name or user.username or "User" }}</p>
-            <p><strong>Username:</strong> {{ user.username or "-" }}</p>
-            <p><strong>Email:</strong> {{ user.email or "-" }}</p>
-            <p><strong>Provider:</strong> {{ user.auth_provider or "-" }}</p>
-          </div>
-          <div class="help-actions">
-            <a href="/" class="btn-secondary">Go To Home Page</a>
-            <a href="/profile" class="btn-secondary">Open Profile</a>
-          </div>
-        </article>
-        {% endif %}
-      </section>
-
-      <aside class="help-side">
-        <article class="side-card">
-          <h3>Need Immediate Help?</h3>
-          <p>Start with email support for account access and incident issues.</p>
-          <a href="mailto:{{ support_email or FT_SUPPORT_EMAIL }}" class="btn-primary">Email Support</a>
-        </article>
-
-        <article class="side-card compact">
-          <h3>Quick Facts</h3>
-          <ul>
-            <li>Response channel: Email</li>
-            <li>Support number: {{ support_phone or FT_SUPPORT_PHONE }}</li>
-            <li>FAQ and chat available on this page</li>
-          </ul>
-        </article>
-
-        {% if not user %}
-        <article class="side-card compact">
-          <h3>Already have access?</h3>
-          <p>Sign in to view account-specific support options.</p>
-          <a href="/login" class="btn-secondary">Sign In</a>
-        </article>
-        {% endif %}
-      </aside>
-    </div>
+    </a>
+    <button type="button" class="hlp-contact__card hlp-contact__card--btn" data-open-chat="assistant">
+      <span class="hlp-contact__icon is-chat"><i class="fa-solid fa-comments" aria-hidden="true"></i></span>
+      <div>
+        <span class="hlp-contact__label">Assistant</span>
+        <strong>Chat bubble</strong>
+        <span class="hlp-contact__hint">Balances, transactions, or live admin</span>
+      </div>
+    </button>
   </div>
 
-  <button type="button" class="chat-fab" aria-label="Open chat" data-chat-toggle>
-    <i class="fa-regular fa-comments"></i>
-  </button>
-
-  <section class="chat-box" data-chat-box hidden>
-    <header class="chat-header">
-      <strong>Support Chat</strong>
-      <div class="chat-header-actions">
-        <button type="button" aria-label="Close chat" data-chat-close>×</button>
-      </div>
+  <article class="hlp-faq-panel">
+    <header class="hlp-faq-panel__head">
+      <h2>Common questions</h2>
+      <p>Short answers for the issues we see most.</p>
     </header>
-
-    <div class="chat-body" id="chatBody"></div>
-
-    <div class="typing-indicator" id="typingIndicator" hidden>
-      <span></span><span></span><span></span>
+    <div class="hlp-faq-grid">
+      <details class="hlp-faq">
+        <summary>How do I import a bank statement?</summary>
+        <p>Open <a href="/transaction-inbox">Inbox</a>, choose the account, upload a PDF/CSV, then review only the missing transactions before approving.</p>
+      </details>
+      <details class="hlp-faq">
+        <summary>Why didn’t a recurring transaction post?</summary>
+        <p>Check <a href="/recurring">Recurring</a> for paused/ended rules, then review failed items on the transactions board and retry if funds were short.</p>
+      </details>
+      <details class="hlp-faq">
+        <summary>How do I reset my password?</summary>
+        <p>Local accounts can change it under <a href="/profile#security">Profile → Security</a>. OAuth accounts must use their provider’s security page.</p>
+      </details>
+      <details class="hlp-faq">
+        <summary>My account is disabled</summary>
+        <p>
+          Open the chat bubble → Live support
+          {% if account_reactivation_context %}
+          and send: “{{ account_reactivation_context }}”
+          {% else %}
+          and ask for reactivation with the email you used to sign in.
+          {% endif %}
+        </p>
+      </details>
+      <details class="hlp-faq">
+        <summary>What can the assistant do?</summary>
+        <p>Show balances, last transactions, and month summary; walk you through adding a transaction; or hand off to live support. AI mode (when configured) turns plain language into those same actions.</p>
+      </details>
+      <details class="hlp-faq">
+        <summary>Where do I manage Telegram or passkeys?</summary>
+        <p>Open <a href="/profile">Profile</a> — Telegram linking and security (password / passkeys) live there.</p>
+      </details>
     </div>
-
-    <div class="chat-options" id="chatOptions"></div>
-
-    <form class="chat-input" id="chatForm">
-      <input type="text" id="chatInput" placeholder="Type your message..." autocomplete="off" />
-      <button type="submit">Send</button>
-    </form>
-  </section>
+  </article>
 </section>
-<script src="/static/js/help_support.js" defer></script>
-<script src="/static/js/chat.js"></script>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  document.querySelectorAll("[data-open-chat]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var tab = btn.getAttribute("data-open-chat") || "assistant";
+      var detail = { tab: tab };
+      {% if account_reactivation_context %}
+      if (tab === "support") {
+        detail.message = {{ account_reactivation_context | tojson }};
+      }
+      {% endif %}
+      window.dispatchEvent(new CustomEvent("ft:chat-open", { detail: detail }));
+    });
+  });
+  {% if account_notice %}
+  window.addEventListener("DOMContentLoaded", function () {
+    window.setTimeout(function () {
+      window.dispatchEvent(new CustomEvent("ft:chat-open", {
+        detail: {
+          tab: "support",
+          message: {{ (account_reactivation_context or "") | tojson }}
+        }
+      }));
+    }, 700);
+  });
+  {% endif %}
+</script>
 {% endblock %}

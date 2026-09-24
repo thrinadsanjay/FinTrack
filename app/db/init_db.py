@@ -3,7 +3,11 @@ from app.db.mongo import db
 
 async def init_indexes():
     # Users
-    await db.users.create_index("email", unique=True)
+    user_indexes = await db.users.index_information()
+    email_index = user_indexes.get("email_1") or {}
+    if email_index and not email_index.get("sparse"):
+        await db.users.drop_index("email_1")
+    await db.users.create_index("email", unique=True, sparse=True)
     await db.users.create_index([("passkeys.credential_id", 1)], unique=True, sparse=True)
     # Accounts
     await db.accounts.create_index([("user_id", 1)])
@@ -36,7 +40,14 @@ async def init_indexes():
     await db.transaction_inbox.create_index([("user_id", 1), ("status", 1), ("confidence", -1)])
     await db.sms_buffer.create_index([("parsed", 1), ("created_at", 1)])
     await db.merchant_memory.create_index([("user_id", 1), ("merchant_keyword", 1), ("type", 1)], unique=True)
+    await db.merchant_memory.create_index([("user_id", 1), ("cleaned_key", 1)], unique=True, sparse=True)
     await db.merchant_memory.create_index([("user_id", 1), ("updated_at", -1)])
+    await db.merchant_aliases.create_index([("user_id", 1), ("alias_key", 1)], unique=True)
+    await db.merchant_aliases.create_index([("user_id", 1), ("cleaned_key", 1)])
+    await db.categorization_feedback.create_index([("user_id", 1), ("txn_id", 1)], unique=True)
+    await db.categorization_feedback.create_index([("user_id", 1), ("cleaned_key", 1), ("timestamp", -1)])
+    await db.merchant_rules.create_index([("user_id", 1), ("keyword", 1), ("is_active", 1)])
+    await db.merchant_rules.create_index([("user_id", 1), ("type", 1), ("priority", -1)])
 
     # Recurring rules / scheduler
     await db.recurring_deposits.create_index([("user_id", 1)])
@@ -63,6 +74,12 @@ async def init_indexes():
     await db.credit_card_emi_schedule.create_index([("user_id", 1), ("card_id", 1), ("due_date", 1)])
     await db.credit_alerts.create_index([("scheduled_for", 1), ("status", 1)])
     await db.credit_alerts.create_index([("user_id", 1), ("bill_id", 1), ("alert_type", 1)])
+    await db.loan_ledger.create_index(
+        [("account_id", 1), ("cycle_date", 1)],
+        unique=True,
+        name="unique_loan_cycle_per_account",
+    )
+    await db.loan_ledger.create_index([("user_id", 1), ("cycle_date", 1)])
 
     # Notifications
     await db.notifications.create_index([("user_id", 1)])
@@ -84,6 +101,8 @@ async def init_indexes():
     await db.chat_logs.create_index([("channel", 1), ("user_id", 1), ("sender", 1), ("user_read", 1)])
     await db.support_sessions.create_index([("user_id", 1), ("updated_at", -1)])
     await db.support_sessions.create_index([("status", 1), ("updated_at", -1)])
+    await db.chatbot_sessions.create_index([("user_key", 1)], unique=True)
+    await db.chatbot_sessions.create_index([("updated_at", -1)])
 
     # Telegram OTP verification
     await db.telegram_otp_verifications.create_index([("user_id", 1)], unique=True)
@@ -92,6 +111,25 @@ async def init_indexes():
     await db.telegram_register_intents.create_index([("created_at", -1)])
     await db.telegram_tx_sessions.create_index([("chat_id", 1)], unique=True)
     await db.telegram_tx_sessions.create_index([("updated_at", -1)])
+
+    # Phase 1 planning
+    await db.financial_goals.create_index([("user_id", 1), ("status", 1), ("created_at", -1)])
+    # Goal <-> investment links (multikey): "which goal funds this rule/transaction?"
+    await db.financial_goals.create_index([("user_id", 1), ("linked_recurring_ids", 1)])
+    await db.financial_goals.create_index([("user_id", 1), ("linked_transaction_ids", 1)])
+    await db.financial_health_snapshots.create_index([("user_id", 1), ("date_key", 1)], unique=True)
+    await db.net_worth_snapshots.create_index([("user_id", 1), ("date_key", 1)], unique=True)
+
+    # Phase 2
+    await db.auth_sessions.create_index([("user_id", 1), ("revoked_at", 1), ("last_seen_at", -1)])
+    await db.auth_sessions.create_index([("sid", 1)], unique=True)
+    await db.financial_rules.create_index([("user_id", 1), ("enabled", 1), ("priority", -1)])
+    await db.financial_rule_runs.create_index([("user_id", 1), ("created_at", -1)])
+    await db.financial_rule_runs.create_index([("dedupe_key", 1)], unique=True, sparse=True)
+    await db.transactions.create_index([("user_id", 1), ("description", 1)])
+    await db.transactions.create_index([("user_id", 1), ("amount", 1), ("created_at", -1)])
+    await db.credit_card_transactions.create_index([("user_id", 1), ("merchant", 1)])
+    await db.users.create_index([("telegram_chat_id", 1)], sparse=True)
 
 
     

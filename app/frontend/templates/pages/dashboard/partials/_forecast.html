@@ -1,0 +1,124 @@
+{% set forecast = plan.forecast or {} %}
+{% set month_end = forecast.get('month_end_balance') %}
+{% set month_spent = forecast.get('month_spent') %}
+{% set month_remaining = forecast.get('month_remaining_outflow') %}
+{% set month_projected = forecast.get('month_projected_outflow') %}
+{% set month_income_left = forecast.get('month_projected_inflow') %}
+{% if month_income_left is none %}
+  {% set month_income_left = forecast.get('month_remaining_inflow') %}
+{% endif %}
+{% set typical_raw = forecast.get('typical_spend') %}
+{% if typical_raw and typical_raw is mapping %}
+  {% set typical_items = typical_raw.get('items') or [] %}
+{% else %}
+  {% set typical_items = typical_raw or [] %}
+{% endif %}
+{% set typical_remaining = forecast.get('month_typical_remaining') %}
+{% set typical_ns = namespace(items=typical_items, extra=0, from_overlay=typical_items|length > 0) %}
+{% if not typical_ns.from_overlay %}
+  {% set elapsed = now.day if now and now.day else 1 %}
+  {% set month_len = 31 %}
+  {% if now and now.month in [4, 6, 9, 11] %}{% set month_len = 30 %}{% endif %}
+  {% if now and now.month == 2 %}{% set month_len = 29 if now.year % 4 == 0 else 28 %}{% endif %}
+  {% set days_left = month_len - elapsed %}
+  {% if days_left < 0 %}{% set days_left = 0 %}{% endif %}
+  {% set built = namespace(items=[]) %}
+  {% for cat in spend_cats or [] %}
+    {% set cat_name = (cat.name or '') | trim %}
+    {% set cat_key = cat_name | lower %}
+    {% if cat_name and cat_key not in ['loan', 'housing', 'bank transfers'] %}
+      {% set pace = ((cat.total or 0) * days_left / elapsed) if elapsed else 0 %}
+      {% if pace > 0 %}
+        {% set built.items = built.items + [{"name": cat_name ~ " (est.)", "remaining": pace}] %}
+        {% set typical_ns.extra = typical_ns.extra + pace %}
+      {% endif %}
+    {% endif %}
+  {% endfor %}
+  {% set typical_ns.items = built.items %}
+{% endif %}
+{% if typical_remaining is none %}
+  {% set rem_est = namespace(out=0) %}
+  {% for item in typical_ns.items %}
+    {% set rem_est.out = rem_est.out + (item.remaining or 0) %}
+  {% endfor %}
+  {% set typical_remaining = rem_est.out %}
+{% endif %}
+{% if month_spent is none %}
+  {% set month_spent = summary.month_expense or 0 %}
+{% endif %}
+{% if month_remaining is none %}
+  {% set rem = namespace(out=0, inn=0) %}
+  {% for ev in calendar_events %}
+    {% set amt = ev.amount or 0 %}
+    {% if amt < 0 %}
+      {% set rem.out = rem.out - amt %}
+    {% elif amt > 0 %}
+      {% set rem.inn = rem.inn + amt %}
+    {% endif %}
+  {% endfor %}
+  {% set month_remaining = rem.out %}
+  {% if month_income_left is none %}
+    {% set month_income_left = rem.inn %}
+  {% endif %}
+  {% if month_end is none %}
+    {% set start = forecast.get('today') %}
+    {% if start is none %}{% set start = balance_total %}{% endif %}
+    {% if start is not none %}{% set month_end = start - rem.out + rem.inn - (typical_remaining or 0) %}{% endif %}
+  {% endif %}
+{% elif typical_ns.extra %}
+  {% if month_end is not none %}{% set month_end = month_end - typical_ns.extra %}{% endif %}
+{% endif %}
+{% if month_income_left is none %}
+  {% set inn = namespace(v=0) %}
+  {% for ev in calendar_events %}
+    {% if (ev.amount or 0) > 0 %}{% set inn.v = inn.v + ev.amount %}{% endif %}
+  {% endfor %}
+  {% set month_income_left = inn.v %}
+{% endif %}
+{% if month_projected is none %}
+  {% set month_projected = (month_spent or 0) + (month_remaining or 0) + (typical_remaining or 0) %}
+{% elif typical_ns.extra %}
+  {% set month_projected = month_projected + typical_ns.extra %}
+{% endif %}
+{% set spent_pct = ((month_spent / month_projected) * 100) if month_projected else 0 %}
+<article class="dash-panel dash-forecast ft-reveal" style="--delay:380ms" aria-labelledby="dash-forecast-title">
+  <div class="dash-panel__head">
+    <div>
+      <h2 id="dash-forecast-title">
+        <span class="dash-ico"><i class="fa-solid fa-chart-line" aria-hidden="true"></i></span>
+        Cash Flow Forecast
+      </h2>
+    </div>
+    <a class="dash-link" href="/insights#cash">90-day outlook</a>
+  </div>
+
+  <div class="dash-forecast__hero{% if month_end is not none and month_end < 0 %} is-negative{% endif %}">
+    <span>Projected month-end balance</span>
+    <strong class="ft-money">
+      {% if month_end is none %}—{% elif month_end < 0 %}−₹ {{ (month_end|abs) | money }}{% else %}₹ {{ month_end | money }}{% endif %}
+    </strong>
+  </div>
+
+  <div class="dash-forecast__rows">
+    <div>
+      <span>Projected income</span>
+      <b>₹ {{ (month_income_left or 0) | money }}</b>
+    </div>
+    <div><span>Projected monthly outflow</span><b>₹ {{ month_projected | money }}</b></div>
+    <div data-forecast-field="month_spent" title="Posted expenses already recorded this month (ledger)."><span>Spent so far · posted</span><b>₹ {{ month_spent | money }}</b></div>
+    <div data-forecast-field="month_remaining_outflow" title="Upcoming scheduled bills still due from today through month-end. Separate from spent so far."><span>Scheduled remaining · upcoming</span><b>₹ {{ month_remaining | money }}</b></div>
+    {% for item in typical_ns.items %}
+    {% set typical_left = item.remaining if item.remaining is not none else item.average or 0 %}
+    {% if typical_left > 0 %}
+    {% set typical_name = item.name | replace(' (est.)', '') | replace(' (Est.)', '') | replace(' (estimated)', '') %}
+    <div class="is-typical" title="Average of recent complete months minus what you have already spent on {{ typical_name }} this month.">
+      <span>Still expected · {{ typical_name }} <i>est.</i></span>
+      <b>₹ {{ typical_left | money }}</b>
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+  <div class="dash-forecast__progress" aria-label="{{ spent_pct | round(0) }}% of projected monthly outflow already spent">
+    <i style="width: {{ [spent_pct, 100] | min }}%"></i>
+  </div>
+</article>

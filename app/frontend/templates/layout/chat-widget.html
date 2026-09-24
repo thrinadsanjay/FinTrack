@@ -1,0 +1,73 @@
+{# Global floating assistant — included from base.html #}
+{% set cw_user = current_user or user %}
+<div
+  class="ft-chat"
+  data-chat-widget
+  data-authenticated="{{ 'true' if cw_user else 'false' }}"
+  data-display-name="{{ (cw_user.username or cw_user.full_name or '') if cw_user else '' }}"
+  hidden
+>
+  <button
+    type="button"
+    class="ft-chat__fab"
+    data-chat-toggle
+    aria-expanded="false"
+    aria-controls="ft-chat-panel"
+    aria-label="Help and chat"
+    title="Help &amp; chat"
+  >
+    <i class="fa-solid fa-comments" aria-hidden="true"></i>
+    <span class="ft-chat__unread" data-chat-unread hidden>0</span>
+  </button>
+
+  <section
+    id="ft-chat-panel"
+    class="ft-chat__panel"
+    data-chat-panel
+    role="dialog"
+    aria-label="FinTracker assistant"
+    hidden
+  >
+    <header class="ft-chat__head">
+      <div class="ft-chat__brand">
+        <span class="ft-chat__avatar" aria-hidden="true"><i class="fa-solid fa-chart-line"></i></span>
+        <div>
+          <strong>FinTracker Assistant</strong>
+          <span class="ft-chat__status">
+            <i class="ft-chat__live" aria-hidden="true"></i>
+            <span data-chat-status>Online · Here to help with your finances</span>
+          </span>
+        </div>
+      </div>
+      <div class="ft-chat__head-actions">
+        <button type="button" class="ft-chat__icon-btn" data-chat-mode title="Toggle AI / Guided" aria-label="Toggle AI mode">
+          <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
+        </button>
+        <button type="button" class="ft-chat__icon-btn" data-chat-minimize title="Close" aria-label="Close chat">
+          <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+        </button>
+      </div>
+    </header>
+
+    <div class="ft-chat__tabs" role="tablist">
+      <button type="button" class="ft-chat__tab is-active" data-chat-tab="assistant" role="tab" aria-selected="true">
+        <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> Assistant
+      </button>
+      <button type="button" class="ft-chat__tab" data-chat-tab="support" role="tab" aria-selected="false">
+        <i class="fa-solid fa-headset" aria-hidden="true"></i> Live support
+      </button>
+    </div>
+
+    <div class="ft-chat__body" data-chat-body></div>
+    <div class="ft-chat__quick" data-chat-quick></div>
+
+    <form class="ft-chat__composer" data-chat-form>
+      <label class="visually-hidden" for="ft-chat-input">Message</label>
+      <textarea id="ft-chat-input" class="ft-chat__input" data-chat-input rows="1" placeholder="Ask anything about your finances…" maxlength="5000"></textarea>
+      <button class="ft-chat__send" type="submit" aria-label="Send">
+        <i class="fa-solid fa-paper-plane" aria-hidden="true"></i>
+      </button>
+    </form>
+    <p class="ft-chat__trust"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i> Your data is secure and private</p>
+  </section>
+</div>

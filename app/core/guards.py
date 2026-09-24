@@ -42,11 +42,25 @@ def login_required(f):
             return RedirectResponse("/account-disabled", status_code=303)
         db_user = await db.users.find_one(
             {"_id": ObjectId(user_id), "deleted_at": None, "is_active": True},
-            {"_id": 1},
+            {"_id": 1, "session_epoch": 1},
         )
         if not db_user:
             request.session.clear()
             return RedirectResponse("/account-disabled", status_code=303)
+        cookie_epoch = request.session.get("epoch")
+        db_epoch = int(db_user.get("session_epoch") or 0)
+        if cookie_epoch is None:
+            if db_epoch != 0:
+                request.session.clear()
+                return RedirectResponse("/login", status_code=303)
+        else:
+            try:
+                if int(cookie_epoch) != db_epoch:
+                    request.session.clear()
+                    return RedirectResponse("/login", status_code=303)
+            except (TypeError, ValueError):
+                request.session.clear()
+                return RedirectResponse("/login", status_code=303)
         return await f(request, *args, **kwargs)
     return decorated_function
 

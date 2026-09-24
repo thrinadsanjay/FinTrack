@@ -13,7 +13,159 @@ It provides a server-rendered web app (Jinja2) plus JSON APIs for accounts, tran
 - Admin Center: overview, users, support requests, and centralized runtime settings
 - Support chat: user-to-admin live support conversations in Admin dashboard
 - Telegram integration: user linking, OTP verification, transaction flow, and alerts
+- Planning and intelligence (Phase 1): financial health, cash-flow forecast, safe to spend, net worth, credit-card command center, financial calendar, insights, import duplicate detection, and goals
+- Assistant and automation (Phase 2): global search, security center, financial rules, conversational Telegram queries, optional Ask FinTracker, monthly review, and recommendations
 - Audit logging for critical security and business actions
+
+## Phase 1 — Planning and intelligence
+
+Phase 1 adds calculated financial intelligence on top of existing records. It does not invent balances, bills, or transactions. Dimensions without enough data are marked unavailable.
+
+### Features
+
+- Financial Health (0–100) with equal-weighted available dimensions and a score history
+- Cash-flow forecast (30/60/90 days) from current cash, recurring rules, card dues, and bank EMIs
+- Safe to Spend = cash-like balances minus upcoming obligations and a visible 10% safety buffer
+- Net worth = asset accounts minus credit-card outstanding (EMI principal is not added on top of card debt)
+- Credit Card command center (aggregate of existing card/EMI data)
+- Financial calendar (recurring, card dues, EMIs)
+- Smart insights (rule-based, skipped when data is insufficient)
+- Inbox duplicate detection with confidence, explanation, Skip / Keep both / Review
+- Financial goals (manual; money is never moved automatically)
+
+### Calculations
+
+Pure math lives in `app/helpers/planning_math.py`. Orchestration is `app/services/planning.py`. Goals CRUD is `app/services/goals.py`.
+
+- Cash (safe-to-spend / forecast start) sums `savings`, `current`, `cash`, and `wallet` only. Credit-card available limit is never spendable cash.
+- Forecast **scheduled** = next stored occurrence. **Forecasted** = later dates implied by the same recurring rule. Historical estimates are excluded from the primary path.
+- Health score averages only dimensions that have data. Bands: GOOD ≥ 80, FAIR ≥ 65, WATCH ≥ 50, otherwise RISK. No dimensions → INSUFFICIENT.
+- Dashboard loads one planning overlay (`get_planning_overlay`) in parallel with the existing summary. It does not issue a separate client-side request per widget.
+
+### New API endpoints
+
+All require the existing session cookie (`get_current_user`):
+
+- `GET /api/planning/dashboard`
+- `GET /api/planning/health`
+- `GET /api/planning/forecast`
+- `GET /api/planning/safe-to-spend`
+- `GET /api/planning/net-worth`
+- `GET /api/planning/credit-cards`
+- `GET /api/planning/calendar?year=&month=&day=`
+- `GET /api/planning/insights`
+- `GET /api/planning/goals`
+- `POST /api/planning/goals`
+- `PATCH /api/planning/goals/{id}`
+
+### New HTML pages
+
+- `/insights/health`, `/insights/forecast`, `/insights`
+- `/planning/safe-to-spend`, `/planning/net-worth`, `/planning/calendar`, `/planning/goals`
+
+Existing routes (`/`, `/accounts`, `/transactions`, `/recurring`, `/transaction-inbox`, `/admin`, `/profile`) are unchanged.
+
+### Database
+
+New collections (created on first write; indexes from `init_indexes()`):
+
+- `financial_goals` — user goals
+- `financial_health_snapshots` — daily health score upsert `(user_id, date_key)`
+- `net_worth_snapshots` — daily net-worth upsert `(user_id, date_key)`
+
+No migration script is required. Indexes are created at application startup.
+
+### Telegram
+
+Optional Phase 1 commands: `/forecast`, `/safetospend`, `/networth`, `/goals`.
+
+### Testing
+
+```bash
+python3 -m unittest tests.test_planning_math tests.test_init_indexes tests.test_planning_overlay -q
+python3 -m unittest discover -s tests -q
+python3 -m compileall -q app
+```
+
+Health, forecast, safe-to-spend, net worth, calendar, insights, duplicates, and goals have unit coverage in `tests/test_planning_math.py`, including empty ledgers, negative balances, transfers (ignored for net worth), and credit-card vs bank EMI double-count guards.
+
+## Phase 2 — Assistant and automation
+
+Phase 2 sits on Phase 1. It does not replace guided Telegram transaction entry, merchant_rules categorization, or the existing chat widget.
+
+### Features
+
+- **Global search** (`Ctrl/Cmd+K`) across transactions, accounts, merchants, recurring, credit-card activity, bills, EMIs, goals, and permission-scoped support records
+- **Security Center** (`/security`): password/passkey/Google/Telegram status, active sessions, last login, security audit events. Sign out other sessions. Never displays passwords, tokens, or OAuth secrets
+- **Financial rules** (`/settings/automations`): conditions and actions (categorize, notify, Telegram notify, mark for review, insight). Enable/disable, priority, execution history. No automatic money transfers. Loop guards and daily snapshot dedupe
+- **Conversational Telegram**: existing commands plus natural-language questions (balance, spending, forecast, safe-to-spend, net worth, cards, goals, bills, health). Linked `telegram_chat_id` only; ambiguous multi-user links are rejected
+- **Ask FinTracker** (`/insights/ask`): optional. Uses controlled tools, not raw database access
+- **AI explanations** on Insights: explain calculated facts; if the ledger cannot show a cause, say so
+- **Monthly financial review** (`/insights/review`): deterministic numbers plus optional narrative
+- **Recommendations**: evidence-based, optional, non-prescriptive, not regulated advice
+
+### Which integrations are required
+
+| Feature | Requires |
+|---|---|
+| Core app, search, security center, rules, monthly numbers, recommendations | MongoDB + session auth only |
+| Telegram commands and conversational queries | Telegram bot configured (Admin → Telegram, or `FT_TELEGRAM_*`) |
+| Telegram rule notifications | Telegram linked on the user profile **and** bot enabled |
+| Ask FinTracker, AI explanations, monthly narrative | `OPENAI_API_KEY` (optional `FT_OPENAI_MODEL`, default `gpt-4o-mini`) |
+| Push copies of notifications | FCM / `FT_PUSH_*` when push is enabled |
+| Email | SMTP (`FT_SMTP_*`) when enabled |
+
+AI is never mandatory. Missing or invalid API keys leave calculated pages working.
+
+### AI privacy model
+
+The model never receives the full database, passwords, session tokens, OAuth secrets, Telegram bot tokens, or other users’ records. Each tool call is authorized for the signed-in `user_id` in application code. Payloads are sanitized (`app/helpers/ai_privacy.py`) and clipped. The model cannot run Mongo queries.
+
+Documented tools: `get_balance`, `get_transactions`, `get_spending_by_category`, `get_cash_flow`, `get_forecast`, `get_safe_to_spend`, `get_net_worth`, `get_credit_cards`, `get_upcoming_bills`, `get_goals`, `get_financial_health`.
+
+### Telegram
+
+Preserved: `/start` `/help` `/addtransaction` `/last5` `/balance` `/summary` `/cancel` plus Phase 1 `/forecast` `/safetospend` `/networth` `/goals`.
+
+Also: “How much can I spend?”, “How much did I spend on food this month?”, “How are my credit cards?”, “What's my net worth?”, “What's my balance?”.
+
+Quick transaction text such as `100 swiggy order from kotak` still starts the guided confirm flow.
+
+### API endpoints (session cookie)
+
+- `GET /api/search?q=`
+- `GET/POST/PATCH/DELETE /api/rules`, `POST /api/rules/{id}/toggle`, `GET /api/rules/runs`
+- `POST /api/security/sessions/revoke-others`
+- `GET /api/ai/status`, `POST /api/ai/ask`, `POST /api/ai/explain`, `GET /api/ai/review`, `GET /api/ai/recommendations`
+
+Mutating AI/rules/security APIs require `X-CSRF-Token`.
+
+### HTML pages
+
+- `/security`
+- `/settings/automations`
+- `/insights/ask`
+- `/insights/review`
+
+### Database
+
+Indexes created at startup (`init_indexes()`). New collections:
+
+- `auth_sessions` — login session metadata (`sid`, method, last seen, revoked_at). Cookie still holds the signed session
+- `financial_rules` — user automations
+- `financial_rule_runs` — execution history
+
+`users.session_epoch` is incremented when other sessions are signed out. Legacy cookies without `epoch` remain valid until the first revoke.
+
+No separate migration script.
+
+### Testing
+
+```bash
+python3 -m unittest tests.test_search_parse tests.test_rules_math tests.test_telegram_intents tests.test_phase2_helpers tests.test_ai_tools tests.test_planning_math tests.test_planning_overlay -q
+python3 -m unittest discover -s tests -q
+python3 -m compileall -q app
+```
 
 ## System Architecture
 
@@ -53,7 +205,7 @@ FinTrack/
 │   └── compose.yml
 ├── systemctl/
 │   ├── FinTracker.service
-│   ├── FinTracker_backend.service
+│   ├── FinTracker_app.service
 │   └── deploy_app.sh
 ├── Dockerfile
 ├── requirements.txt
@@ -131,7 +283,8 @@ Only the minimum runtime fields needed for a normal production setup should be t
 | `FT_DEFAULT_ADMIN_USERNAME` | String | Optional | Initial admin username on first boot. |
 | `FT_DEFAULT_ADMIN_PASSWORD` | String | Optional | Initial admin password on first boot. |
 | `FT_DEFAULT_ADMIN_EMAIL` | Email string | Optional | Initial admin email on first boot. |
-| `OPENAI_API_KEY` | API key string | Optional | Required only if AI chat features are used. |
+| `OPENAI_API_KEY` | API key string | Optional | Required only for Ask FinTracker, AI explanations, and monthly-review narrative. |
+| `FT_OPENAI_MODEL` | Model name string | Optional | OpenAI model id. Defaults to `gpt-4o-mini`. |
 | `MONGO_INITDB_DATABASE` | String | Optional | Docker helper variable for Mongo initialization. |
 | `ME_CONFIG_MONGODB_SERVER` | Host string | Optional | Docker helper variable for Mongo Express. |
 | `ME_CONFIG_MONGODB_PORT` | Port string/integer | Optional | Docker helper variable for Mongo Express. |
@@ -266,6 +419,10 @@ Delivery is driven by background sweep interval:
 - `/last5` -> last 5 transactions
 - `/balance` -> total + per-account balances
 - `/summary` -> current month income/expense summary
+- `/forecast` -> 30/60/90 day scheduled cash forecast
+- `/safetospend` -> safe-to-spend amount
+- `/networth` -> assets, liabilities, net worth
+- `/goals` -> active financial goals
 - `/cancel` -> cancel active Telegram transaction flow
 
 ## Admin Settings Overview

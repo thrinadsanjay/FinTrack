@@ -1,0 +1,15 @@
+<a class="dash-panel dash-kpi dash-club-tile is-outflow ft-reveal" style="--delay:185ms" href="/transactions/list">
+  <div class="dash-panel__head">
+    <div>
+      <h2>
+        <span class="dash-ico is-outflow"><i class="fa-solid fa-arrow-down" aria-hidden="true"></i></span>
+        Monthly Outflow
+      </h2>
+    </div>
+  </div>
+  <div class="dash-kpi__value ft-money" data-countup="{{ summary.month_expense or 0 }}">₹ {{ (summary.month_expense or 0) | money }}</div>
+  <div class="dash-spark-wrap">
+    <svg class="dash-spark" data-spark="outflow" aria-label="Monthly outflow trend"></svg>
+    <div class="dash-tooltip" data-spark-tip hidden></div>
+  </div>
+</a>

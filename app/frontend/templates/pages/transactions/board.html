@@ -1,0 +1,160 @@
+{% extends "base/base.html" %}
+{% block title %}Transactions · {{ FT_APP_NAME }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/pages/transactions-activity.css?v={{ FT_APP_VERSION }}-tx13">
+<link rel="stylesheet" href="/static/css/pages/transactions-board.css?v={{ FT_APP_VERSION }}-tx10">
+{% endblock %}
+
+{% block content %}
+{% set f = filters or {} %}
+{% set columns = columns or [] %}
+
+<section class="txb" data-tx-board data-tx-page {% if open_add %}data-open-add-on-load="1"{% endif %}>
+  <header class="txb-hero">
+    <h1>Transactions</h1>
+    <div class="txb-hero__actions">
+      {% include "pages/transactions/_view_switch.html" %}
+      <button type="button" class="ft-btn ft-btn--primary" data-open-add>
+        <i class="fa-solid fa-plus" aria-hidden="true"></i> Add transaction
+      </button>
+    </div>
+  </header>
+
+  {% if error %}
+  <div class="ft-alert ft-alert--error">{{ error }}</div>
+  {% endif %}
+
+  <form method="get" action="/transactions/list" class="txb-toolbar">
+    <input type="hidden" name="view" value="board">
+    <div class="txb-toolbar__search">
+      <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+      <input class="ft-input" id="search" name="search" value="{{ f.search or '' }}" placeholder="Search description, amount, account…">
+    </div>
+    <select class="ft-select" id="account_id" name="account_id" aria-label="Account">
+      <option value="">All accounts</option>
+      {% for acc in accounts %}
+      <option value="{{ acc._id }}" {% if f.account_id == acc._id|string %}selected{% endif %}>{{ acc.name or acc.bank_name }}</option>
+      {% endfor %}
+    </select>
+    <input class="ft-input ft-date" id="date_from" name="date_from" type="date" lang="en-IN" value="{{ f.date_from or '' }}" aria-label="From date">
+    <input class="ft-input ft-date" id="date_to" name="date_to" type="date" lang="en-IN" value="{{ f.date_to or '' }}" aria-label="To date">
+    <button class="ft-btn ft-btn--secondary" type="submit">Filter</button>
+    {% if active_filter_count %}
+    <a class="ft-btn ft-btn--ghost" href="/transactions/list?view=board">Clear</a>
+    {% endif %}
+  </form>
+
+  <div class="txb-legend" aria-label="Transaction types">
+    <span class="txb-legend__item is-credit">Income</span>
+    <span class="txb-legend__item is-debit">Expense</span>
+    <span class="txb-legend__item is-transfer">Transfer</span>
+  </div>
+
+  <div class="txb-board">
+    {% for col in columns %}
+    <section class="txb-col is-{{ col.tone }}">
+      <header class="txb-col__head">
+        <span class="txb-col__title"><i class="fa-solid {{ col.icon }}" aria-hidden="true"></i> {{ col.title }}</span>
+        <span class="txb-col__count">{{ col.count }}</span>
+      </header>
+      <div class="txb-col__body">
+        {% if col.empty %}
+        <div class="txb-empty">
+          <p class="txb-empty__title">Nothing here</p>
+          <p class="txb-empty__copy">No transactions in this window.</p>
+        </div>
+        {% else %}
+        {% for group in col.day_groups %}
+        <div class="txb-day">
+          <div class="txb-day__sep">
+            <span class="txb-day__heading">{{ group.heading or group.label }}</span>
+            <span class="txb-day__label">{{ group.label }} · {{ group.rows | length }}</span>
+          </div>
+          <ul class="txb-cards">
+            {% for tx in group.rows %}
+            <li class="txb-card is-{{ tx.type_key }} {% if tx.is_deleted %}is-deleted{% endif %}" data-tx-card data-tx-row data-type="{{ tx.type_key }}" data-id="{{ tx._id }}">
+              <span class="txb-card__icon"><i class="fa-solid {{ tx.icon }}" aria-hidden="true"></i></span>
+              <div class="txb-card__main">
+                <span class="txb-card__title">{{ tx.display_title }}</span>
+                <span class="txb-card__account">{{ tx.account_name }}</span>
+                <span class="txb-card__category">{% if tx.is_transfer %}Self transfer{% else %}{{ tx.category_name or '—' }}{% if tx.subcategory_name %} · {{ tx.subcategory_name }}{% endif %}{% endif %}</span>
+              </div>
+              <div class="txb-card__side">
+                <div class="txb-card__side-top">
+                  <span class="txb-card__time">{{ tx.local_time }}</span>
+                  <button type="button" class="txb-icon-btn txb-info-btn" data-tx-info data-info="{{ tx.info_text | e }}" aria-label="Info">
+                    <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+                  </button>
+                  <div class="txb-menu">
+                    <button type="button" class="txb-icon-btn" data-tx-menu-toggle aria-haspopup="menu" aria-expanded="false" aria-label="Actions">
+                      <i class="fa-solid fa-ellipsis" aria-hidden="true"></i>
+                    </button>
+                    <div class="txb-menu__panel" data-tx-menu-panel hidden>
+                      <button type="button" class="txb-menu__item" data-view-tx="{{ tx._id }}">
+                        <i class="fa-solid fa-eye" aria-hidden="true"></i> View
+                      </button>
+                      {% if tx.can_modify and not tx.is_transfer %}
+                      <button type="button" class="txb-menu__item" data-tx-edit data-id="{{ tx._id }}" data-account-id="{{ tx.account_id }}" data-amount="{{ tx.amount }}" data-description="{{ tx.description or '' }}" data-category-code="{{ tx.category_code or '' }}" data-subcategory-code="{{ tx.subcategory_code or '' }}">
+                        <i class="fa-solid fa-pen" aria-hidden="true"></i> Edit
+                      </button>
+                      {% endif %}
+                      {% if tx.can_convert_to_emi %}
+                      <button type="button" class="txb-menu__item" data-tx-emi data-id="{{ tx._id }}" data-amount="{{ tx.amount }}" data-description="{{ tx.description or '' }}">
+                        <i class="fa-solid fa-credit-card" aria-hidden="true"></i> Convert to EMI
+                      </button>
+                      {% endif %}
+                      {% if tx.can_retry %}
+                      <form method="post" action="/transactions/retry-failed">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                        <input type="hidden" name="return_view" value="board">
+                        <input type="hidden" name="transaction_id" value="{{ tx._id }}">
+                        <button class="txb-menu__item" type="submit"><i class="fa-solid fa-rotate-right" aria-hidden="true"></i> Retry</button>
+                      </form>
+                      {% endif %}
+                      {% if tx.can_restore %}
+                      <form method="post" action="/transactions/restore">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                        <input type="hidden" name="return_view" value="board">
+                        <input type="hidden" name="transaction_id" value="{{ tx._id }}">
+                        <button class="txb-menu__item" type="submit"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i> Restore</button>
+                      </form>
+                      {% endif %}
+                      {% if tx.can_modify %}
+                      <form method="post" action="/transactions/delete" onsubmit="return confirm('Delete this transaction?');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+                        <input type="hidden" name="return_view" value="board">
+                        <input type="hidden" name="transaction_id" value="{{ tx._id }}">
+                        <button class="txb-menu__item is-danger" type="submit"><i class="fa-solid fa-trash" aria-hidden="true"></i> Delete</button>
+                      </form>
+                      {% endif %}
+                    </div>
+                  </div>
+                </div>
+                <strong class="txb-card__amount">{% if tx.type_key == 'credit' %}+{% elif tx.type_key == 'debit' %}−{% endif %}₹ {{ tx.amount | money }}</strong>
+              </div>
+            </li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endfor %}
+        {% endif %}
+      </div>
+      <footer class="txb-col__foot">
+        <span class="txb-sum is-credit"><i class="fa-solid fa-arrow-up" aria-hidden="true"></i> ₹ {{ col.income | money }}</span>
+        <span class="txb-sum is-debit"><i class="fa-solid fa-arrow-down" aria-hidden="true"></i> ₹ {{ col.expense | money }}</span>
+        <span class="txb-sum is-transfer"><i class="fa-solid fa-right-left" aria-hidden="true"></i> ₹ {{ col.transfer | money }}</span>
+      </footer>
+    </section>
+    {% endfor %}
+  </div>
+</section>
+
+{% include "pages/transactions/_add_drawer.html" %}
+{% include "pages/transactions/_tx_dialogs.html" %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/transactions.js?v={{ FT_APP_VERSION }}-tx10" defer></script>
+<script src="/static/js/transactions_board.js?v={{ FT_APP_VERSION }}-tx9" defer></script>
+{% endblock %}

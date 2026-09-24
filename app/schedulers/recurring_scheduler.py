@@ -5,14 +5,14 @@ from datetime import datetime, timezone
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.core.logging import setup_logging
-from app.db.mongo import db
+from app.db.mongo import db, run_atomic
+from app.schedulers.job_lock import singleton_job
 from app.helpers.account_balances import apply_account_delta, delta_for_tx
 from app.helpers.notification_payloads import recurring_failed_scheduler_payload
 from app.helpers.recurring_schedule import (
     calculate_next_run,
     calculate_next_occurrence,
     parse_clock_time,
-    parse_scheduler_time,
     parse_timezone_name,
     SKIP_MISSED_OCCURRENCES,
 )
@@ -66,6 +66,7 @@ async def configure_recurring_schedule(scheduler: AsyncIOScheduler) -> None:
 # ASYNC SCHEDULER JOB
 # ======================================================
 
+@singleton_job("recurring-transactions", lease_seconds=30 * 60)
 async def run_recurring_transactions():
     """
     Materializes recurring transactions whose next_run is due.
@@ -132,28 +133,53 @@ async def run_recurring_transactions():
         if existing:
             continue  # already posted for this run
 
-        account = await db[ACCOUNTS].find_one(
-            {"_id": r["account_id"]},
-            {"balance": 1, "name": 1},
-        )
-        account_balance = account.get("balance", 0) if account else 0
         amount = round_money(r.get("amount", 0))
 
-        if r["type"] == "debit" and account_balance < amount:
+        # -----------------------------
+        # Create transaction + update balance (atomic; debit is funds-guarded)
+        # -----------------------------
+        tx_doc = {
+            "user_id": r["user_id"],
+            "account_id": r["account_id"],
+            "type": r["type"],
+            "mode": r["mode"],
+            "amount": amount,
+            "description": r.get("description", ""),
+            "category": r["category"],
+            "subcategory": r["subcategory"],
+            "created_at": now,
+            "deleted_at": None,
+            "source": "recurring",
+            "recurring_id": r["_id"],
+            "scheduled_for": scheduled_for,
+        }
+        delta = delta_for_tx(r["type"], amount)
+
+        async def _post(session, tx_doc=tx_doc, delta=delta, account_id=r["account_id"]):
+            if not await apply_account_delta(
+                db=db,
+                account_id=account_id,
+                delta=delta,
+                session=session,
+                require_funds=True,
+            ):
+                return False
+            try:
+                await db[TRANSACTIONS].insert_one(dict(tx_doc), session=session)
+            except Exception:
+                if session is None:
+                    await apply_account_delta(db=db, account_id=account_id, delta=-delta)
+                raise
+            return True
+
+        if not await run_atomic(_post):
+            account = await db[ACCOUNTS].find_one(
+                {"_id": r["account_id"]},
+                {"balance": 1, "name": 1},
+            )
+            account_balance = account.get("balance", 0) if account else 0
             failed_tx_doc = {
-                "user_id": r["user_id"],
-                "account_id": r["account_id"],
-                "type": r["type"],
-                "mode": r["mode"],
-                "amount": amount,
-                "description": r.get("description", ""),
-                "category": r["category"],
-                "subcategory": r["subcategory"],
-                "created_at": now,
-                "deleted_at": None,
-                "source": "recurring",
-                "recurring_id": r["_id"],
-                "scheduled_for": scheduled_for,
+                **tx_doc,
                 "is_failed": True,
                 "failure_reason": "insufficient_funds",
                 "retry_status": "pending",
@@ -175,37 +201,7 @@ async def run_recurring_transactions():
             )
             continue
 
-        # -----------------------------
-        # Create transaction
-        # -----------------------------
-        tx_doc = {
-            "user_id": r["user_id"],
-            "account_id": r["account_id"],
-            "type": r["type"],
-            "mode": r["mode"],
-            "amount": amount,
-            "description": r.get("description", ""),
-            "category": r["category"],
-            "subcategory": r["subcategory"],
-            "created_at": now,
-            "deleted_at": None,
-            "source": "recurring",
-            "recurring_id": r["_id"],
-            "scheduled_for": scheduled_for,
-        }
-
-        await db[TRANSACTIONS].insert_one(tx_doc)
         logger.info("⏱ Recurring transaction inserted: %s", tx_doc)
-
-        # -----------------------------
-        # Update account balance
-        # -----------------------------
-        delta = delta_for_tx(r["type"], amount)
-        await apply_account_delta(
-            db=db,
-            account_id=r["account_id"],
-            delta=delta,
-        )
 
         # -----------------------------
         # Calculate next run

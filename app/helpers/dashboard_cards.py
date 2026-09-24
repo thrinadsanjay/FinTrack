@@ -8,7 +8,13 @@ from app.helpers.dashboard_time import APP_TIMEZONE, APP_ZONE
 async def fetch_total_balance(uid: ObjectId) -> float:
     balance_cursor = db.accounts.aggregate(
         [
-            {"$match": {"user_id": uid, "deleted_at": None}},
+            {
+                "$match": {
+                    "user_id": uid,
+                    "deleted_at": None,
+                    "type": {"$nin": ["credit_card", "loan"]},
+                }
+            },
             {"$group": {"_id": None, "total": {"$sum": "$balance"}}},
         ]
     )
@@ -90,7 +96,7 @@ async def fetch_top_spending_categories(uid: ObjectId, month_start: datetime, mo
             },
             {"$group": {"_id": {"$ifNull": ["$category.name", "Uncategorized"]}, "total": {"$sum": "$amount"}}},
             {"$sort": {"total": -1}},
-            {"$limit": 5},
+            {"$limit": 6},
         ]
     )
     items: list[dict] = []
@@ -106,6 +112,17 @@ async def fetch_top_spending_categories(uid: ObjectId, month_start: datetime, mo
     return items
 
 
+def _tx_amount(value) -> float:
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _tx_when(tx: dict):
+    return tx.get("transaction_date") or tx.get("date") or tx.get("created_at")
+
+
 async def fetch_largest_transactions(uid: ObjectId, month_start: datetime, account_map: dict[str, dict]) -> list[dict]:
     cursor = (
         db.transactions
@@ -114,26 +131,45 @@ async def fetch_largest_transactions(uid: ObjectId, month_start: datetime, accou
                 "user_id": uid,
                 "deleted_at": None,
                 "is_failed": {"$ne": True},
-                "created_at": {"$gte": month_start},
-                "type": "debit",
-                "amount": {"$gt": 10000},
+                "type": {"$in": ["credit", "debit", "transfer", "transfer_out"]},
+                "$or": [
+                    {"transaction_date": {"$gte": month_start}},
+                    {"date": {"$gte": month_start}},
+                    {"created_at": {"$gte": month_start}},
+                ],
             },
-            {"description": 1, "amount": 1, "created_at": 1, "account_id": 1},
+            {
+                "description": 1,
+                "amount": 1,
+                "created_at": 1,
+                "transaction_date": 1,
+                "date": 1,
+                "account_id": 1,
+                "type": 1,
+                "category": 1,
+            },
         )
-        .sort("amount", -1)
-        .limit(5)
+        .limit(400)
     )
-    rows: list[dict] = []
+    ranked: list[dict] = []
     async for tx in cursor:
-        rows.append(
+        amount = _tx_amount(tx.get("amount"))
+        if amount <= 0:
+            continue
+        category = tx.get("category") or {}
+        tx_type = tx.get("type") or "debit"
+        ranked.append(
             {
                 "description": tx.get("description", "Transaction"),
-                "amount": tx.get("amount", 0),
-                "created_at": tx.get("created_at"),
+                "amount": amount,
+                "created_at": _tx_when(tx),
                 "account_name": account_map.get(str(tx.get("account_id")), {}).get("name", "Account"),
+                "type": "transfer" if tx_type in {"transfer", "transfer_out", "transfer_in"} else tx_type,
+                "category_name": category.get("name") if isinstance(category, dict) else None,
             }
         )
-    return rows
+    ranked.sort(key=lambda row: row["amount"], reverse=True)
+    return ranked
 
 
 async def fetch_daily_trend(uid: ObjectId, trend_start: datetime, trend_end: datetime) -> list[dict]:
@@ -188,6 +224,66 @@ async def fetch_daily_trend(uid: ObjectId, trend_start: datetime, trend_end: dat
                 "expense": daily_map.get(day_key, {}).get("debit", 0),
             }
         )
+    return out
+
+
+async def fetch_monthly_trend(uid: ObjectId, trend_start: datetime, trend_end: datetime) -> list[dict]:
+    cursor = db.transactions.aggregate(
+        [
+            {
+                "$match": {
+                    "user_id": uid,
+                    "deleted_at": None,
+                    "is_failed": {"$ne": True},
+                    "created_at": {"$gte": trend_start, "$lt": trend_end},
+                    "type": {"$in": ["credit", "debit"]},
+                }
+            },
+            {
+                "$group": {
+                    "_id": {
+                        "month": {
+                            "$dateToString": {
+                                "format": "%Y-%m",
+                                "date": "$created_at",
+                                "timezone": APP_TIMEZONE,
+                            }
+                        },
+                        "type": "$type",
+                    },
+                    "total": {"$sum": "$amount"},
+                }
+            },
+        ]
+    )
+
+    monthly_map: dict[str, dict[str, float]] = {}
+    async for row in cursor:
+        month_key = row["_id"]["month"]
+        tx_type = row["_id"]["type"]
+        monthly_map.setdefault(month_key, {"credit": 0, "debit": 0})
+        monthly_map[month_key][tx_type] = row.get("total", 0) or 0
+
+    current = trend_start.astimezone(APP_ZONE).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    end_local = trend_end.astimezone(APP_ZONE)
+    out: list[dict] = []
+    while current < end_local:
+        month_key = current.strftime("%Y-%m")
+        income = monthly_map.get(month_key, {}).get("credit", 0)
+        expense = monthly_map.get(month_key, {}).get("debit", 0)
+        out.append(
+            {
+                "month": month_key,
+                "month_short": current.strftime("%b"),
+                "month_label": current.strftime("%b %Y"),
+                "income": income,
+                "expense": expense,
+                "net": income - expense,
+            }
+        )
+        next_month = (current.month % 12) + 1
+        next_year = current.year + (1 if current.month == 12 else 0)
+        current = datetime(next_year, next_month, 1, tzinfo=APP_ZONE)
     return out
 
 

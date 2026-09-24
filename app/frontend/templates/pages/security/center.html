@@ -1,0 +1,65 @@
+{% extends "base/base.html" %}
+{% block title %}Security · {{ FT_APP_NAME }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/pages/planning.css?v={{ FT_APP_VERSION }}-head1">
+{% endblock %}
+{% block content %}
+<section class="pln sec">
+  <header class="pln-hero">
+    <div>
+      <h1>Security Center</h1>
+    </div>
+  </header>
+
+  <article class="pln-panel">
+    <div class="sec-status">
+      <span class="sec-dot {% if overview.protected %}is-ok{% endif %}"></span>
+      <div>
+        <div class="pln-muted">Security status</div>
+        <strong>{{ overview.status }}</strong>
+      </div>
+    </div>
+  </article>
+
+  <article class="pln-panel">
+    <h2>Authentication</h2>
+    <div class="pln-row"><span>Password</span><strong>{{ overview.password.status }}</strong></div>
+    <div class="pln-row"><span>Passkey</span><strong>{{ overview.passkey.status }}</strong></div>
+    <div class="pln-row"><span>Google</span><strong>{{ overview.google.status }}</strong></div>
+    <div class="pln-row"><span>Telegram</span><strong>{{ overview.telegram.status }}</strong></div>
+    <div class="pln-actions" style="margin-top:0.85rem">
+      <a class="ft-btn ft-btn--secondary ft-btn--sm" href="{{ overview.password.manage_href }}">Change password / passkeys</a>
+      <a class="ft-btn ft-btn--ghost ft-btn--sm" href="{{ overview.telegram.manage_href }}">Telegram login</a>
+    </div>
+  </article>
+
+  <article class="pln-panel">
+    <h2>Sessions</h2>
+    <p class="pln-copy">{{ overview.session_count }} active · Last login {% if overview.last_login_at %}{{ overview.last_login_at | datetimeformat }}{% else %}—{% endif %}</p>
+    {% for sess in overview.sessions %}
+    <div class="pln-row">
+      <span>{{ sess.method }}{% if sess.current %} · this device{% endif %}<br><span class="pln-muted">{{ sess.user_agent }}</span></span>
+      <strong>{% if sess.last_seen_at %}{{ sess.last_seen_at | datetimeformat }}{% endif %}</strong>
+    </div>
+    {% else %}
+    <p class="pln-empty">Session records appear after the next sign-in.</p>
+    {% endfor %}
+    <form method="post" action="/security/sessions/revoke-others" style="margin-top:0.85rem">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+      <button class="ft-btn ft-btn--secondary" type="submit">Sign out other sessions</button>
+    </form>
+  </article>
+
+  <article class="pln-panel">
+    <h2>Recent activity</h2>
+    {% for ev in overview.events %}
+    <div class="pln-row">
+      <span>{{ ev.action | replace('_', ' ') | title }}</span>
+      <strong>{% if ev.timestamp %}{{ ev.timestamp | datetimeformat }}{% endif %}</strong>
+    </div>
+    {% else %}
+    <p class="pln-empty">No recent security events.</p>
+    {% endfor %}
+  </article>
+</section>
+{% endblock %}

@@ -1,0 +1,21 @@
+<a class="dash-panel dash-kpi dash-club-tile is-worth ft-reveal" style="--delay:140ms" href="/planning/net-worth">
+  <div class="dash-panel__head">
+    <div>
+      <h2>
+        <span class="dash-ico is-worth"><i class="fa-solid fa-scale-balanced" aria-hidden="true"></i></span>
+        Net Worth
+      </h2>
+    </div>
+    <i class="fa-solid fa-chevron-right dash-kpi__go" aria-hidden="true"></i>
+  </div>
+  <div class="dash-kpi__value ft-money {% if (worth.amount or 0) < 0 %}is-negative{% endif %}" data-countup="{{ worth.amount or 0 }}">₹ {{ (worth.amount or 0) | money }}</div>
+  <div class="dash-spark-wrap">
+    <svg class="dash-spark" data-spark="net" aria-label="Net worth trend"></svg>
+    <div class="dash-tooltip" data-spark-tip hidden></div>
+  </div>
+  {% if net_pct is not none and net_pct|abs <= 40 %}
+  <div class="dash-delta {% if net_pct >= 0 %}is-up{% else %}is-down{% endif %}">
+    {% if net_pct >= 0 %}↑ +{{ net_pct }}%{% else %}↓ {{ net_pct }}%{% endif %} from last month
+  </div>
+  {% endif %}
+</a>

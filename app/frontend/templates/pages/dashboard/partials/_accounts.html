@@ -1,0 +1,43 @@
+{% set account_sum = namespace(positive=0) %}
+{% for account in acc_ns.accounts %}
+  {% if (account.balance or 0) > 0 %}
+    {% set account_sum.positive = account_sum.positive + (account.balance or 0) %}
+  {% endif %}
+{% endfor %}
+<article class="dash-panel dash-accounts ft-reveal" style="--delay:220ms" aria-labelledby="dash-accounts-title">
+  <div class="dash-panel__head">
+    <div>
+      <h2 id="dash-accounts-title">
+        <span class="dash-ico"><i class="fa-solid fa-building-columns" aria-hidden="true"></i></span>
+        Accounts
+      </h2>
+    </div>
+    <a class="dash-link" href="/accounts">View all</a>
+  </div>
+
+  {% if acc_ns.accounts %}
+  <div class="dash-accounts__list">
+    {% for account in acc_ns.accounts %}
+    {% set value = account.balance or 0 %}
+    {% set share = ((value / account_sum.positive) * 100) if account_sum.positive and value > 0 else 0 %}
+    <a class="dash-accounts__row tone-{{ loop.index0 % 5 }}{% if value < 0 %} is-negative{% endif %}" href="/accounts">
+      <div class="dash-accounts__copy">
+        <strong>{{ account.name or account.bank_name or 'Account' }}</strong>
+        <span>{{ (account.type or 'account') | replace('_', ' ') | title }}</span>
+      </div>
+      <b class="ft-money{% if value < 0 %} is-negative{% endif %}">
+        {% if value < 0 %}-₹ {{ (value|abs) | money }}{% else %}₹ {{ value | money }}{% endif %}
+      </b>
+      <div class="dash-accounts__bar" aria-hidden="true">
+        <i style="width: {{ [share, 100] | min }}%"></i>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="dash-empty">
+    <strong>No accounts yet</strong>
+    <a class="dash-link" href="/accounts">Add account</a>
+  </div>
+  {% endif %}
+</article>

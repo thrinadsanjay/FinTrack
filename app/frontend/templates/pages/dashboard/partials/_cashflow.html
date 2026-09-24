@@ -1,0 +1,91 @@
+<article
+  class="dash-panel dash-cashflow ft-reveal"
+  style="--delay:200ms"
+  aria-labelledby="dash-cashflow-title"
+  data-month-income="{{ summary.month_income or 0 }}"
+  data-month-expense="{{ summary.month_expense or 0 }}"
+  data-month-label="{{ summary.cashflow_month_label or 'This month' }}"
+  data-cashflow-endpoint="/dashboard/cashflow"
+>
+  {% set flow_ns = namespace(income=summary.month_income or 0, expense=summary.month_expense or 0) %}
+  {% if cashflow_default == '12m' %}
+    {% set flow_ns.income = 0 %}
+    {% set flow_ns.expense = 0 %}
+    {% for row in summary.trend_monthly or [] %}
+      {% set flow_ns.income = flow_ns.income + (row.income or 0) %}
+      {% set flow_ns.expense = flow_ns.expense + (row.expense or 0) %}
+    {% endfor %}
+  {% endif %}
+  {% set flow_net = flow_ns.income - flow_ns.expense %}
+  <div class="dash-cashflow__head">
+    <div>
+      <h2 id="dash-cashflow-title">
+        <span class="dash-ico"><i class="fa-solid fa-chart-column" aria-hidden="true"></i></span>
+        Cash Flow Overview
+      </h2>
+    </div>
+    {% if has_cashflow %}
+    <div class="dash-cashflow__controls">
+      <label class="dash-cashflow__range">
+        <span class="visually-hidden">Cash flow range</span>
+        <select data-cashflow-range>
+          <option value="week">This week</option>
+          <option value="month" selected>This month</option>
+          <option value="3m">Last 3 months</option>
+          <option value="6m">Last 6 months</option>
+          <option value="year">This year</option>
+        </select>
+      </label>
+      <span class="dash-cashflow__arrows">
+        <button type="button" data-cashflow-prev aria-label="Previous period">‹</button>
+        <button type="button" data-cashflow-next aria-label="Next period" disabled>›</button>
+      </span>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="dash-cashflow__metrics" role="group" aria-label="Cash flow summary">
+    <div>
+      <span>Income</span>
+      <strong class="is-in" data-cashflow-income>₹ {{ flow_ns.income | money }}</strong>
+    </div>
+    <div>
+      <span>Expense</span>
+      <strong class="is-out" data-cashflow-expense>₹ {{ flow_ns.expense | money }}</strong>
+    </div>
+    <div>
+      <span>Net</span>
+      <strong
+        class="{% if flow_net > 0 %}is-in{% elif flow_net < 0 %}is-out{% else %}is-zero{% endif %}"
+        data-cashflow-net
+      >
+        {% if flow_net < 0 %}-₹ {{ (flow_net|abs) | money }}{% elif flow_net > 0 %}+₹ {{ flow_net | money }}{% else %}₹ {{ flow_net | money }}{% endif %}
+      </strong>
+    </div>
+  </div>
+
+  {% if has_cashflow %}
+  <div class="dash-cashflow__legend">
+    <span><i class="is-in" aria-hidden="true"></i> Income</span>
+    <span><i class="is-out" aria-hidden="true"></i> Expense</span>
+    <span><i class="is-net" aria-hidden="true"></i> Balance</span>
+  </div>
+  <p class="dash-cashflow__note" data-cashflow-note hidden></p>
+  <div class="dash-cashflow__plot">
+    <canvas
+      class="dash-cashflow__chart"
+      data-cashflow-chart
+      role="img"
+      tabindex="0"
+      aria-labelledby="dash-cashflow-title"
+      aria-label="Income, expense, and net cash flow"
+    ></canvas>
+    <div class="dash-tooltip dash-cashflow__tip" data-cashflow-tip hidden></div>
+  </div>
+  {% else %}
+  <div class="dash-cashflow__empty">
+    <strong>No cash flow recorded yet</strong>
+    <a class="dash-cashflow__add" href="/transactions/add">Add transaction →</a>
+  </div>
+  {% endif %}
+</article>

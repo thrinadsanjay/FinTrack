@@ -43,7 +43,10 @@ class _FakeDb:
         self.telegram_otp_verifications = _FakeCollection()
         self.telegram_register_intents = _FakeCollection()
         self.telegram_tx_sessions = _FakeCollection()
-        self.backup_runs = _FakeCollection()
+    def __getattr__(self, name):
+        coll = _FakeCollection()
+        setattr(self, name, coll)
+        return coll
 
 
 class TestInitIndexes(unittest.IsolatedAsyncioTestCase):
@@ -67,6 +70,16 @@ class TestInitIndexes(unittest.IsolatedAsyncioTestCase):
         created_recurring_specs = [spec for spec, _ in fake_db.recurring_deposits.created]
         self.assertIn([("is_active", 1), ("next_run", 1)], created_recurring_specs)
         self.assertIn([("user_id", 1), ("is_active", 1), ("next_run", 1)], created_recurring_specs)
+
+        created_health = [spec for spec, _ in fake_db.financial_health_snapshots.created]
+        self.assertIn([("user_id", 1), ("date_key", 1)], created_health)
+        created_goals = [spec for spec, _ in fake_db.financial_goals.created]
+        self.assertIn([("user_id", 1), ("status", 1), ("created_at", -1)], created_goals)
+
+        created_sessions = [spec for spec, _ in fake_db.auth_sessions.created]
+        self.assertIn([("sid", 1)], created_sessions)
+        created_rules = [spec for spec, _ in fake_db.financial_rules.created]
+        self.assertIn([("user_id", 1), ("enabled", 1), ("priority", -1)], created_rules)
 
         self.assertIn("name_1", fake_db.accounts.dropped)
 

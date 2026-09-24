@@ -1,0 +1,48 @@
+<article class="dash-panel dash-bills-panel dash-span-8 ft-reveal" style="--delay:290ms">
+  <div class="dash-panel__head">
+    <div>
+      <h2>
+        <span class="dash-ico"><i class="fa-solid fa-calendar-day" aria-hidden="true"></i></span>
+        Upcoming Bills &amp; Commitments
+      </h2>
+      <p>Next 7 days</p>
+    </div>
+    <a class="dash-link" href="/planning/calendar">View all</a>
+  </div>
+  {% if bills %}
+  <div class="dash-bills">
+    {% for bill in bills[:6] %}
+    {% set due_in = bill.due_at | days_until if bill.due_at else none %}
+    <div class="dash-bill">
+      <span class="dash-bill__icon is-{{ bill.type or 'debit' }}"><i class="fa-solid fa-receipt" aria-hidden="true"></i></span>
+      <div>
+        <strong>{{ bill.description or 'Recurring payment' }}</strong>
+        <span>{% if bill.due_at %}{{ bill.due_at | dateformat('%d %b') }}{% else %}{{ bill.account_name }}{% endif %}</span>
+      </div>
+      <div class="dash-bill__amt {% if bill.type == 'credit' %}is-pos{% else %}is-neg{% endif %}">
+        {% if bill.type != 'credit' %}-{% endif %}₹ {{ (bill.amount or 0) | money }}
+        {% if bill.due_at %}
+        <em class="dash-badge {% if due_in is not none and due_in <= 2 %}is-urgent{% elif due_in is not none and due_in <= 5 %}is-soon{% else %}is-normal{% endif %}">{{ bill.due_at | relative_due }}</em>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="dash-empty">
+    <div class="dash-empty__art is-cal" aria-hidden="true">
+      <svg viewBox="0 0 72 56" fill="none">
+        <rect x="8" y="10" width="56" height="40" rx="8" stroke="currentColor" stroke-width="1.7"/>
+        <path d="M8 22h56" stroke="currentColor" stroke-width="1.7"/>
+        <path d="M22 6v10M50 6v10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+        <rect x="18" y="28" width="10" height="8" rx="2" fill="currentColor" opacity=".35"/>
+        <rect x="32" y="28" width="10" height="8" rx="2" fill="currentColor" opacity=".18"/>
+        <rect x="46" y="28" width="10" height="8" rx="2" fill="currentColor" opacity=".18"/>
+      </svg>
+    </div>
+    <strong>No bills due in the next 7 days</strong>
+    <p>Your scheduled commitments are clear.</p>
+    <a class="ft-btn ft-btn--secondary" href="/planning/calendar">Open calendar</a>
+  </div>
+  {% endif %}
+</article>

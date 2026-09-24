@@ -1,0 +1,24 @@
+<article class="dash-panel dash-kpi dash-club-tile is-save ft-reveal" style="--delay:170ms">
+  <div class="dash-panel__head">
+    <div>
+      <h2>
+        <span class="dash-ico is-save"><i class="fa-solid fa-piggy-bank" aria-hidden="true"></i></span>
+        Savings Rate
+      </h2>
+    </div>
+  </div>
+  {% if savings is not none %}
+  <div class="dash-kpi__value">{{ savings }}%</div>
+  {% else %}
+  <div class="dash-kpi__value">—</div>
+  {% endif %}
+  <div class="dash-spark-wrap">
+    <svg class="dash-spark" data-spark="savings" aria-label="Savings rate trend"></svg>
+    <div class="dash-tooltip" data-spark-tip hidden></div>
+  </div>
+  {% if savings_delta is not none and savings_delta|abs <= 40 %}
+  <div class="dash-delta {% if savings_delta >= 0 %}is-up{% else %}is-down{% endif %}">
+    {% if savings_delta >= 0 %}↑ +{{ savings_delta }}%{% else %}↓ {{ savings_delta }}%{% endif %} from last month
+  </div>
+  {% endif %}
+</article>

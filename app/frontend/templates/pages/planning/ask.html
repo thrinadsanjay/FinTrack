@@ -1,0 +1,56 @@
+{% extends "base/base.html" %}
+{% block title %}Ask FinTracker · {{ FT_APP_NAME }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/pages/planning.css?v={{ FT_APP_VERSION }}-head1">
+{% endblock %}
+{% block content %}
+<section class="pln" data-ask-page data-ai-available="{{ 'true' if ai_available else 'false' }}">
+  <header class="pln-hero">
+    <div>
+      <h1>Ask FinTracker</h1>
+      <p class="pln-copy">Live questions. <a href="/insights">Suggestions also live on Insights</a>.</p>
+    </div>
+  </header>
+
+  {% if not ai_available %}
+  <article class="pln-panel">
+    <p class="pln-copy">Optional language model is not configured (<code>OPENAI_API_KEY</code>). Calculated pages such as Health, Forecast, and Safe to Spend still work.</p>
+  </article>
+  {% endif %}
+
+  <article class="pln-panel">
+    <form class="pln-form" data-ask-form>
+      <label class="pln-span">Question
+        <input class="ft-input" data-ask-input name="question" maxlength="2000" placeholder="How much did I spend this month?" value="{{ request.query_params.get('q', '') }}">
+      </label>
+      <div class="pln-span">
+        <button class="ft-btn ft-btn--primary" type="submit" {% if not ai_available %}disabled{% endif %}>Ask</button>
+      </div>
+    </form>
+    <div class="ft-ask-prompts" style="margin-top:0.85rem">
+      <button type="button" class="ft-ask-chip" data-ask-example>How much did I spend this month?</button>
+      <button type="button" class="ft-ask-chip" data-ask-example>Can I afford this purchase?</button>
+      <button type="button" class="ft-ask-chip" data-ask-example>What changed from last month?</button>
+      <button type="button" class="ft-ask-chip" data-ask-example>How are my credit cards?</button>
+      <button type="button" class="ft-ask-chip" data-ask-example>How is my emergency fund progressing?</button>
+    </div>
+    <div class="ft-ask-reply" data-ask-reply hidden></div>
+  </article>
+
+  {% if recommendations %}
+  <article class="pln-panel">
+    <h2>Suggestions</h2>
+    <p class="pln-copy">Evidence-based notes. Not financial advice.</p>
+    {% for rec in recommendations %}
+    <a class="ft-rec-card is-{{ rec.tone }}" href="{{ rec.href }}">
+      <strong>{{ rec.title }}</strong>
+      <span>{{ rec.evidence }}</span>
+    </a>
+    {% endfor %}
+  </article>
+  {% endif %}
+</section>
+{% endblock %}
+{% block extra_js %}
+<script src="/static/js/ask.js?v={{ FT_APP_VERSION }}-burnt" defer></script>
+{% endblock %}

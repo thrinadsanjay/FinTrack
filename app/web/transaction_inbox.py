@@ -14,9 +14,11 @@ from app.services.dashboard import get_user_notifications
 from app.services.transaction_inbox import (
     approve_high_confidence_rows,
     approve_inbox_rows,
+    buffer_sms_messages,
     clear_pending_buffer,
     clear_sms_buffer,
     discard_inbox_rows,
+    skip_duplicate_inbox_rows,
     import_statement_to_inbox,
     ingest_sms_to_inbox,
     list_inbox_rows,
@@ -41,7 +43,7 @@ async def transaction_inbox_page(request: Request):
     notifications = await get_user_notifications(user["user_id"])
     return templates.TemplateResponse(
         request=request,
-        name="transaction_inbox.html",
+        name="pages/transactions/inbox.html",
         context={
             "request": request,
             "user": user,
@@ -92,6 +94,7 @@ async def transaction_inbox_upload_statement(
             "sample": result.get("stage2_sample", []),
             "inserted": result.get("stage3_inserted", 0),
             "duplicates": result.get("stage3_duplicates", 0),
+            "soft_duplicates": result.get("stage3_soft_duplicates", 0),
             "needs_attention": result.get("stage3_needs_attention", 0),
             "statement_total": result.get("statement_total", 0),
             "inbox_total": result.get("inbox_total", 0),
@@ -99,9 +102,9 @@ async def transaction_inbox_upload_statement(
             "stage2_errors": result.get("stage2_errors", [])[:5],
             "stage3_errors": result.get("stage3_errors", [])[:5],
             "detail": (
-                f"Parsed {result.get('stage1_parsed', 0)} rows, "
-                f"normalized {result.get('stage2_normalized', 0)}, "
-                f"inserted {result.get('stage3_inserted', 0)} to inbox"
+                f"Parsed {result.get('stage1_parsed', 0)} · "
+                f"added {result.get('stage3_inserted', 0)} missing · "
+                f"skipped {result.get('stage3_duplicates', 0)} already in ledger"
             )
         })
     except AppError as exc:
@@ -127,6 +130,7 @@ async def transaction_inbox_update_row(
             category_code=payload.get("category_code"),
             subcategory_code=payload.get("subcategory_code"),
             statement_date=payload.get("date"),
+            account_id=payload.get("account_id"),
         )
         return JSONResponse({"row": row})
     except AppError as exc:
@@ -183,6 +187,23 @@ async def transaction_inbox_discard(request: Request):
         return _json_error(exc)
 
 
+@router.post("/transaction-inbox/sms/buffer")
+@login_required
+async def transaction_inbox_sms_buffer(request: Request):
+    """Mobile: store raw SMS messages into sms_buffer before sync."""
+    payload = await request.json()
+    verify_csrf_token(request, payload.get("csrf_token"))
+    user = request.session.get("user")
+    try:
+        result = await buffer_sms_messages(
+            user_id=user["user_id"],
+            messages=list(payload.get("messages") or []),
+        )
+        return JSONResponse(result)
+    except AppError as exc:
+        return _json_error(exc)
+
+
 @router.post("/transaction-inbox/sms/ingest")
 @login_required
 async def transaction_inbox_sms_ingest(request: Request):
@@ -227,6 +248,19 @@ async def transaction_inbox_sms_clear_buffer(request: Request):
     user = request.session.get("user")
     try:
         result = await clear_sms_buffer(user_id=user["user_id"])
+        return JSONResponse(result)
+    except AppError as exc:
+        return _json_error(exc)
+
+
+@router.post("/transaction-inbox/skip-duplicates")
+@login_required
+async def transaction_inbox_skip_duplicates(request: Request):
+    payload = await request.json()
+    verify_csrf_token(request, payload.get("csrf_token"))
+    user = request.session.get("user")
+    try:
+        result = await skip_duplicate_inbox_rows(user_id=user["user_id"])
         return JSONResponse(result)
     except AppError as exc:
         return _json_error(exc)

@@ -2,6 +2,9 @@ from datetime import date, datetime
 
 from app.db.mongo import db
 
+TRANSFER_CATEGORY_CODE = "transfer"
+TRANSFER_SUBCATEGORY_CODE = "transfer"
+
 
 def parse_date_value(value: date | str | None) -> date | None:
     if value is None or value == "":
@@ -11,6 +14,17 @@ def parse_date_value(value: date | str | None) -> date | None:
     if isinstance(value, str):
         return datetime.fromisoformat(value).date()
     raise Exception("Invalid date value")
+
+
+def resolve_transfer_category_codes(
+    *,
+    tx_type: str,
+    category_code: str | None = None,
+    subcategory_code: str | None = None,
+) -> tuple[str, str]:
+    if tx_type in {"transfer", "card_payment"}:
+        return TRANSFER_CATEGORY_CODE, TRANSFER_SUBCATEGORY_CODE
+    return (category_code or "").strip(), (subcategory_code or "").strip()
 
 
 async def validate_category(*, category_code: str, subcategory_code: str, tx_type: str):

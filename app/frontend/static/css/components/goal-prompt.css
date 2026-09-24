@@ -1,0 +1,82 @@
+/* Post-save "link this investment to a goal?" prompt (layout/goal-link-prompt.html). */
+.gp-dialog {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  max-width: calc(100vw - 2rem);
+}
+
+.gp-dialog::backdrop { background: rgba(8, 12, 20, 0.62); }
+
+.gp-card {
+  display: grid;
+  gap: 0.75rem;
+  width: min(400px, calc(100vw - 2rem));
+  padding: 1.4rem 1.4rem 1.2rem;
+  border: 1px solid var(--ft-border);
+  border-radius: var(--ft-radius-xl);
+  background: var(--ft-raised);
+  text-align: center;
+}
+
+.gp-icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  margin: 0 auto;
+  border-radius: 14px;
+  background: var(--ft-accent-soft);
+  color: var(--ft-accent);
+  font-size: 1.1rem;
+}
+
+.gp-card h3 { margin: 0; font-size: 1.1rem; color: var(--ft-ink); }
+
+.gp-copy {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--ft-muted);
+}
+
+.gp-copy strong { color: var(--ft-ink); }
+
+.gp-note {
+  margin: 0;
+  padding: 0.7rem 0.8rem;
+  border-radius: 10px;
+  background: var(--ft-inset);
+  font-size: 0.83rem;
+  color: var(--ft-ink-soft);
+  text-align: left;
+}
+
+.gp-note strong { color: var(--ft-ink); }
+
+.gp-hint {
+  margin: 0;
+  font-size: 0.74rem;
+  color: var(--ft-muted);
+}
+
+.gp-step {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.gp-step[hidden] { display: none !important; }
+
+.gp-step--pick {
+  flex-direction: column;
+  text-align: left;
+}
+
+.gp-step--pick .ft-select { width: 100%; }
+
+.gp-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}

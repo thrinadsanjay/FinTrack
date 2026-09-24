@@ -1,0 +1,22 @@
+<article class="dash-panel dash-weekly ft-reveal" style="--delay:290ms" aria-labelledby="dash-weekly-title">
+  <div class="dash-panel__head">
+    <div>
+      <h2 id="dash-weekly-title">
+        <span class="dash-ico"><i class="fa-solid fa-chart-column" aria-hidden="true"></i></span>
+        Insights
+      </h2>
+    </div>
+  </div>
+  <p class="dash-weekly__axis">Weekly spend this month</p>
+  <div class="dash-weekly__chart" data-weekly-chart aria-label="Weekly expense totals this month">
+    <div class="dash-weekly__target" aria-hidden="true"></div>
+    {% for week in range(1, 6) %}
+    <div class="dash-weekly__item">
+      <span class="dash-weekly__bar"><i data-weekly-bar="{{ loop.index0 }}"></i></span>
+      <b>W{{ week }}</b>
+    </div>
+    {% endfor %}
+  </div>
+  <p class="dash-weekly__takeaway" data-weekly-takeaway>Comparing this month’s weekly spend.</p>
+  <div class="dash-weekly__empty" data-weekly-empty hidden>No expenses this month</div>
+</article>

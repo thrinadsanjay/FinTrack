@@ -14,7 +14,7 @@ ME_CONFIG_MONGODB_SSL="true"
 ME_CONFIG_MONGODB_SSL_CA_FILE=/certs/ca.pem
 ME_CONFIG_MONGODB_SSL_CERT_FILE=/certs/client-cert.pem
 
-# Backend
+# FinTracker app (API + UI)
 
 ENV=Dev
 <<<<<<< HEAD

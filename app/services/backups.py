@@ -15,7 +15,7 @@ from bson.json_util import dumps as bson_dumps, loads as bson_loads
 
 from app.db.mongo import db
 from app.helpers.recurring_schedule import legacy_cron_to_time, parse_clock_time, parse_timezone_name
-from app.services.admin_settings import get_admin_settings
+from app.services.admin_settings import get_admin_settings, invalidate_admin_settings_cache
 
 BACKUP_COLLECTION = "backup_runs"
 LOGO_UPLOAD_DIR = Path("app/frontend/static/uploads/logos")
@@ -593,6 +593,7 @@ async def _restore_archive_path(*, archive_path: Path, actor: dict | None = None
                 source_file = tmp_dir / "db" / f"{name}.ndjson"
                 restored_documents += await _restore_collection_from_file(name, source_file)
                 restored_collections += 1
+            invalidate_admin_settings_cache()
 
             restored_uploads = _restore_uploads(tmp_dir, bool(manifest.get("includes_uploads")))
 

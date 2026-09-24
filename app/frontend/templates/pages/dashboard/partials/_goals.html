@@ -1,0 +1,42 @@
+<article class="dash-panel dash-goals dash-span-5 ft-reveal" style="--delay:380ms">
+  <div class="dash-panel__head">
+    <div>
+      <h2>
+        <span class="dash-ico"><i class="fa-solid fa-flag" aria-hidden="true"></i></span>
+        Goals Progress
+      </h2>
+    </div>
+    <a class="dash-link" href="/planning/goals">Manage</a>
+  </div>
+  {% if plan.goals %}
+    {% for goal in plan.goals[:2] %}
+    <div class="dash-goal">
+      <div class="dash-goal__copy">
+        <strong>{{ goal.name }}</strong>
+        <span>₹ {{ (goal.current_amount or 0) | money }} / ₹ {{ (goal.target_amount or 0) | money }}</span>
+        <div class="dash-goal__bar"><span style="width: {{ goal.progress_pct or 0 }}%"></span></div>
+        <div class="dash-goal__pace">
+          <span>Pace {% if goal.monthly_pace is not none %}₹ {{ goal.monthly_pace | money }}/mo{% else %}—{% endif %}</span>
+          <span>Need ₹ {{ (goal.required_monthly or 0) | money }}/mo</span>
+          {% if goal.target_date %}<span>Target {{ goal.target_date | dateformat('%b %Y') }}</span>{% endif %}
+        </div>
+      </div>
+      <em>{{ (goal.progress_pct or 0) | round(0) }}%</em>
+    </div>
+    {% endfor %}
+  {% else %}
+  <div class="dash-empty">
+    <div class="dash-empty__art is-goal" aria-hidden="true">
+      <svg viewBox="0 0 72 56" fill="none">
+        <circle cx="36" cy="28" r="18" stroke="currentColor" stroke-width="1.6" opacity=".35"/>
+        <circle cx="36" cy="28" r="11" stroke="currentColor" stroke-width="1.6" opacity=".55"/>
+        <circle cx="36" cy="28" r="4" fill="currentColor"/>
+        <path d="M36 10v-6M50 16l5-5M22 16l-5-5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <strong>No active goals yet</strong>
+    <p>Create a goal to start tracking your progress.</p>
+    <a class="ft-btn ft-btn--primary" href="/planning/goals"><i class="fa-solid fa-plus" aria-hidden="true"></i> Create a Goal</a>
+  </div>
+  {% endif %}
+</article>

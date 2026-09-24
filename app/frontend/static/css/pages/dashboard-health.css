@@ -1,0 +1,409 @@
+/* Isolated Financial Health panel */
+
+.dash-panel.dash-health-panel {
+  overflow: hidden;
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+}
+
+.dash-health-panel .dash-panel__head {
+  flex: 0 0 auto;
+  margin-bottom: 4px;
+}
+
+.dash-health-panel .dash-panel__head h2 {
+  font-size: 0.75rem;
+  gap: 6px;
+}
+
+.dash-health-panel .dash-ico {
+  width: 22px;
+  height: 22px;
+  font-size: 0.68rem;
+}
+
+.dash-health-panel .dash-link {
+  font-size: 0.68rem;
+  color: var(--ft-faint);
+}
+
+.dash-health-panel__body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 8px;
+}
+
+.dash-health-orb {
+  width: 92px;
+  height: 92px;
+  margin: 0;
+  padding: 8px;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: 1px solid color-mix(in srgb, var(--ft-positive) 28%, var(--ft-border));
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.72), transparent 42%),
+    radial-gradient(circle at 50% 58%, var(--ft-positive-soft), var(--ft-surface) 72%);
+  box-shadow:
+    0 8px 20px rgba(50, 45, 40, 0.08),
+    0 0 0 4px color-mix(in srgb, var(--ft-positive) 8%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  color: var(--ft-ink);
+  font: inherit;
+  line-height: 1.1;
+  cursor: pointer;
+  transform: translateY(-2px);
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.dash-health-orb strong {
+  font-size: 1.45rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ft-positive);
+}
+
+.dash-health-orb span {
+  font-size: 0.72rem;
+  font-weight: 650;
+  color: var(--ft-ink-soft);
+  max-width: 76px;
+  text-align: center;
+  line-height: 1.15;
+}
+
+.dash-health-orb.is-excellent,
+.dash-health-orb.is-good {
+  border-color: color-mix(in srgb, var(--ft-positive) 32%, var(--ft-border));
+}
+
+.dash-health-orb.is-fair {
+  border-color: color-mix(in srgb, var(--ft-info) 32%, var(--ft-border));
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.72), transparent 42%),
+    radial-gradient(circle at 50% 58%, var(--ft-info-soft), var(--ft-surface) 72%);
+  box-shadow:
+    0 8px 20px rgba(50, 45, 40, 0.08),
+    0 0 0 4px color-mix(in srgb, var(--ft-info) 8%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.dash-health-orb.is-fair strong { color: var(--ft-info); }
+
+.dash-health-orb.is-watch {
+  border-color: color-mix(in srgb, var(--ft-warning) 34%, var(--ft-border));
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.72), transparent 42%),
+    radial-gradient(circle at 50% 58%, var(--ft-warning-soft), var(--ft-surface) 72%);
+  box-shadow:
+    0 8px 20px rgba(50, 45, 40, 0.08),
+    0 0 0 4px color-mix(in srgb, var(--ft-warning) 10%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.dash-health-orb.is-watch strong { color: var(--ft-warning); }
+
+.dash-health-orb.is-risk {
+  border-color: color-mix(in srgb, var(--ft-negative) 32%, var(--ft-border));
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.7), transparent 42%),
+    radial-gradient(circle at 50% 58%, var(--ft-negative-soft), var(--ft-surface) 72%);
+  box-shadow:
+    0 8px 20px rgba(50, 45, 40, 0.08),
+    0 0 0 4px color-mix(in srgb, var(--ft-negative) 8%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.dash-health-orb.is-risk strong { color: var(--ft-negative); }
+
+.dash-health-orb.is-insufficient {
+  border-color: var(--ft-border);
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.7), transparent 42%),
+    var(--ft-inset);
+  box-shadow:
+    0 6px 16px rgba(50, 45, 40, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.dash-health-orb.is-insufficient strong { color: var(--ft-muted); }
+
+.dash-health-orb:hover,
+.dash-health-orb:focus-visible,
+.dash-health-orb.is-open {
+  transform: translateY(-3px) scale(1.02);
+  outline: none;
+}
+
+.dash-health-orb.is-excellent:hover,
+.dash-health-orb.is-good:hover,
+.dash-health-orb.is-excellent:focus-visible,
+.dash-health-orb.is-good:focus-visible,
+.dash-health-orb.is-excellent.is-open,
+.dash-health-orb.is-good.is-open {
+  border-color: color-mix(in srgb, var(--ft-positive) 48%, var(--ft-border));
+}
+
+.dash-health-panel__status {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 650;
+  color: var(--ft-muted);
+  text-align: center;
+  line-height: 1.2;
+}
+
+.dash-health-panel__status.is-up { color: var(--ft-positive); }
+.dash-health-panel__status.is-down { color: var(--ft-negative); }
+
+.dash-health-pop {
+  position: fixed;
+  z-index: 80;
+  width: min(300px, calc(100vw - 16px));
+  max-height: min(280px, calc(100vh - 16px));
+  padding: 12px 14px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--ft-border);
+  background: var(--ft-surface);
+  box-shadow: 0 14px 32px rgba(50, 45, 40, 0.12);
+  color: var(--ft-ink);
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 160ms ease, transform 160ms ease;
+  pointer-events: none;
+}
+
+.dash-health-pop.is-on {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+.dash-health-pop[hidden] { display: none; }
+
+.dash-health-pop__arrow {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  left: var(--arrow-x, 50%);
+  background: var(--ft-surface);
+  border-right: 1px solid var(--ft-border);
+  border-bottom: 1px solid var(--ft-border);
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.dash-health-pop[data-place="above"] .dash-health-pop__arrow {
+  bottom: -5px;
+}
+
+.dash-health-pop[data-place="below"] .dash-health-pop__arrow {
+  top: -5px;
+  transform: translateX(-50%) rotate(225deg);
+}
+
+.dash-health-pop[data-place="sheet"] .dash-health-pop__arrow {
+  display: none;
+}
+
+.dash-health-pop__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.dash-health-pop__head strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.dash-health-pop__head strong i {
+  color: var(--ft-negative);
+  font-size: 0.72rem;
+}
+
+.dash-health-pop__close {
+  width: 26px;
+  height: 26px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: var(--ft-inset);
+  color: var(--ft-muted);
+  cursor: pointer;
+}
+
+.dash-health-pop__close:hover,
+.dash-health-pop__close:focus-visible {
+  color: var(--ft-ink);
+  background: var(--ft-hover);
+  outline: none;
+}
+
+.dash-health-pop__score {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.dash-health-pop__score b {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ft-ink);
+}
+
+.dash-health-pop__score span {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.dash-health-pop__score span.is-excellent,
+.dash-health-pop__score span.is-good { color: var(--ft-positive); }
+.dash-health-pop__score span.is-fair { color: var(--ft-info); }
+.dash-health-pop__score span.is-watch { color: var(--ft-warning); }
+.dash-health-pop__score span.is-risk { color: var(--ft-negative); }
+.dash-health-pop__score span.is-insufficient { color: var(--ft-muted); }
+
+.dash-health-pop__score small {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.68rem;
+  color: var(--ft-muted);
+}
+
+.dash-health-pop__reasons {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: auto;
+  max-height: 132px;
+}
+
+.dash-health-pop__reasons li {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--ft-ink-soft);
+}
+
+.dash-health-pop__reasons i {
+  margin-top: 2px;
+  font-size: 0.68rem;
+  flex-shrink: 0;
+}
+
+.dash-health-pop__reasons li.is-up i { color: var(--ft-positive); }
+.dash-health-pop__reasons li.is-down i { color: var(--ft-warning); }
+
+.dash-health-pop__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ft-accent);
+  font-size: 0.74rem;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.dash-health-pop__link:hover,
+.dash-health-pop__link:focus-visible {
+  color: var(--ft-accent-hover);
+}
+
+[data-theme="dark"] .dash-health-orb {
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.08), transparent 42%),
+    radial-gradient(circle at 50% 58%, var(--ft-positive-soft), var(--ft-elevated) 72%);
+  box-shadow:
+    0 10px 22px rgba(0, 0, 0, 0.28),
+    0 0 0 4px color-mix(in srgb, var(--ft-positive) 10%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+[data-theme="dark"] .dash-health-orb.is-fair {
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.08), transparent 42%),
+    radial-gradient(circle at 50% 58%, var(--ft-info-soft), var(--ft-elevated) 72%);
+}
+
+[data-theme="dark"] .dash-health-orb.is-watch {
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.08), transparent 42%),
+    radial-gradient(circle at 50% 58%, var(--ft-warning-soft), var(--ft-elevated) 72%);
+}
+
+[data-theme="dark"] .dash-health-orb.is-risk {
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.08), transparent 42%),
+    radial-gradient(circle at 50% 58%, var(--ft-negative-soft), var(--ft-elevated) 72%);
+}
+
+[data-theme="dark"] .dash-health-orb.is-insufficient {
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.05), transparent 42%),
+    var(--ft-inset);
+}
+
+[data-theme="dark"] .dash-health-pop {
+  background: var(--ft-elevated);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.42);
+}
+
+[data-theme="dark"] .dash-health-pop__arrow {
+  background: var(--ft-elevated);
+}
+
+@media (max-width: 767px) {
+  .dash-health-orb {
+    width: 86px;
+    height: 86px;
+  }
+
+  .dash-health-pop[data-place="sheet"] {
+    width: min(330px, calc(100vw - 16px));
+    left: 50% !important;
+    bottom: 12px;
+    top: auto !important;
+    transform: translateX(-50%);
+  }
+
+  .dash-health-pop[data-place="sheet"].is-on {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dash-health-orb,
+  .dash-health-pop {
+    transition: none;
+  }
+}

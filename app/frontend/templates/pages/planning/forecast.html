@@ -1,0 +1,62 @@
+{% extends "base/base.html" %}
+{% block title %}Cash Flow Forecast · {{ FT_APP_NAME }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/pages/planning.css?v={{ FT_APP_VERSION }}-head1">
+{% endblock %}
+{% block content %}
+{% set f = bundle.forecast or {} %}
+{% set hz = f.horizons or {} %}
+{% set month_end = ((overlay.forecast if overlay else {}) or {}).get('month_end_balance') %}
+<section class="pln" data-planning-page data-forecast-daily='{{ f.daily | default([]) | tojson }}'>
+  <header class="pln-hero">
+    <div>
+      <h1>Cash Flow Forecast</h1>
+    </div>
+  </header>
+
+  <div class="pln-kpis">
+    <article class="pln-kpi"><span class="pln-kpi__label">Today</span><div class="pln-kpi__value">₹ {{ (f.today_balance or 0) | money }}</div></article>
+    <article class="pln-kpi">
+      <span class="pln-kpi__label">This month-end</span>
+      <div class="pln-kpi__value">₹ {{ (month_end if month_end is not none else (f.today_balance or 0)) | money }}</div>
+      <div class="pln-kpi__meta">Same figure as the dashboard forecast panel</div>
+    </article>
+    <article class="pln-kpi">
+      <span class="pln-kpi__label">30 days from today</span>
+      <div class="pln-kpi__value">₹ {{ (hz['30'] or 0) | money }}</div>
+      <div class="pln-kpi__meta">Scheduled path only — not month-end</div>
+    </article>
+    <article class="pln-kpi"><span class="pln-kpi__label">60 days from today</span><div class="pln-kpi__value">₹ {{ (hz['60'] or 0) | money }}</div></article>
+    <article class="pln-kpi"><span class="pln-kpi__label">90 days from today</span><div class="pln-kpi__value">₹ {{ (hz['90'] or 0) | money }}</div></article>
+  </div>
+
+  <div class="pln-grid">
+    <article class="pln-panel">
+      <h2>Projected cash</h2>
+      <p class="pln-kpi__meta">Daily scheduled balance for the next 90 days</p>
+      <canvas class="pln-chart" data-forecast-chart width="720" height="220" aria-label="Projected cash chart with date and rupee axes"></canvas>
+      <div class="pln-kpi__meta">Lowest expected balance ₹ {{ (f.lowest_balance or 0) | money }}{% if f.lowest_date %} · {{ f.lowest_date | dateformat('%d %b %Y') }}{% endif %}</div>
+    </article>
+    <article class="pln-panel">
+      <h2>Next 30 days</h2>
+      {% if f.contributing_events %}
+        {% for event in f.contributing_events %}
+        <div class="pln-event">
+          <div>
+            <div>{{ event.label }}</div>
+            <div class="pln-certainty">{{ event.certainty }} · {{ event.date | dateformat('%d %b') }}</div>
+          </div>
+          <strong class="{% if event.amount < 0 %}is-neg{% else %}is-pos{% endif %}">{% if event.amount > 0 %}+{% endif %}₹ {{ event.amount | money }}</strong>
+        </div>
+        {% endfor %}
+      {% else %}
+        <p class="pln-empty">No scheduled or forecasted events in the next 30 days.</p>
+      {% endif %}
+    </article>
+  </div>
+  <p class="pln-disclaimer">Scheduled = next stored occurrence. Forecasted = later implied dates from the same rule. Historical estimates are excluded from this path.</p>
+</section>
+{% endblock %}
+{% block extra_js %}
+<script src="/static/js/planning.js?v={{ FT_APP_VERSION }}-fmt1" defer></script>
+{% endblock %}
