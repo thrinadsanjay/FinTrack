@@ -91,6 +91,31 @@
   data-month-expense="{{ summary.month_expense or 0 }}"
   data-current-balance="{{ balance_total }}"
 >
+  {# ---------- Mobile summary (hidden on desktop; see css/layout/mobile.css) ---------- #}
+  {% set m_name = ((user.full_name if user else '') or (user.username if user else '') or 'there').split(' ')[0] %}
+  <section class="dash-m" aria-label="Summary">
+    <p class="dash-m__hello">Hi, <strong>{{ m_name }}</strong></p>
+    <div class="dash-m__balance">
+      <span class="dash-m__label">Total balance</span>
+      <strong class="dash-m__amount">₹ {{ (balance_total or 0) | money }}</strong>
+      <div class="dash-m__flow">
+        <div class="is-in"><small>Income this month</small><strong>₹ {{ (summary.month_income or 0) | money }}</strong></div>
+        <div class="is-out"><small>Spent this month</small><strong>₹ {{ (summary.month_expense or 0) | money }}</strong></div>
+      </div>
+    </div>
+    <div class="dash-m__actions">
+      <a class="dash-m__action is-expense" href="/transactions/list?add=1&amp;tx_type=debit"><i class="fa-solid fa-arrow-down" aria-hidden="true"></i>Expense</a>
+      <a class="dash-m__action is-income" href="/transactions/list?add=1&amp;tx_type=credit"><i class="fa-solid fa-arrow-up" aria-hidden="true"></i>Income</a>
+      <a class="dash-m__action is-transfer" href="/transactions/list?add=1&amp;tx_type=transfer"><i class="fa-solid fa-right-left" aria-hidden="true"></i>Transfer</a>
+    </div>
+    <nav class="dash-m__links" aria-label="More">
+      <a href="/insights"><i class="fa-solid fa-lightbulb" aria-hidden="true"></i>Insights</a>
+      <a href="/planning/goals"><i class="fa-solid fa-flag" aria-hidden="true"></i>Goals</a>
+      <a href="/planning/calendar"><i class="fa-regular fa-calendar" aria-hidden="true"></i>Calendar</a>
+      <a href="/recurring"><i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i>Recurring</a>
+    </nav>
+  </section>
+
   <section class="dash-command__summary dash-span-12" aria-label="Financial snapshot">
     {% include "pages/dashboard/partials/_balance.html" %}
     {% include "pages/dashboard/partials/_kpi_club.html" %}

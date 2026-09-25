@@ -1,0 +1,94 @@
+name: Publish deployment bundle to main
+
+# `main` holds ONLY what a server needs to run FinTracker; no application code:
+#
+#   Development                 ->  main
+#   deploy/README.md            ->  README.md
+#   deploy/docker-compose.yml   ->  docker-compose.yml
+#   env.example                 ->  env.example
+#
+# Runs when one of those files changes on Development (after a merged PR), or
+# manually. Every other file is removed from main's tip, so a server that runs
+# `git clone --depth 1 --branch main --single-branch` gets exactly these 3 files.
+# Builds no image: image releases come from release.yml.
+on:
+  push:
+    branches:
+      - Development
+    paths:
+      - "deploy/README.md"
+      - "deploy/docker-compose.yml"
+      - "env.example"
+  workflow_dispatch:
+
+permissions:
+  contents: write # push to main
+
+concurrency:
+  group: publish-main
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Sync bundle to main
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Only publish from Development
+        if: github.ref != 'refs/heads/Development'
+        run: |
+          echo "::error::The deployment bundle is published from Development only (this run is on ${GITHUB_REF})."
+          exit 1
+
+      - name: Checkout Development
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: src
+          persist-credentials: false
+
+      - name: Checkout main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          path: main
+          # If main is protected, store a fine-grained token with contents:write
+          # on this repo as MAIN_BRANCH_TOKEN (see docs/CICD.md).
+          token: ${{ secrets.MAIN_BRANCH_TOKEN || github.token }}
+
+      - name: Replace main's tree with the bundle
+        run: |
+          set -euo pipefail
+          for f in deploy/README.md deploy/docker-compose.yml env.example; do
+            [ -f "src/$f" ] || { echo "::error::$f is missing on Development"; exit 1; }
+          done
+          cd main
+          git rm -r -q --ignore-unmatch -- .
+          cp ../src/deploy/README.md          README.md
+          cp ../src/deploy/docker-compose.yml docker-compose.yml
+          cp ../src/env.example               env.example
+          git add README.md docker-compose.yml env.example
+
+      - name: Commit and push
+        working-directory: main
+        env:
+          SRC_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if git diff --cached --quiet; then
+            echo "main already matches Development ${SRC_SHA::7}; nothing to publish."
+            exit 0
+          fi
+          git diff --cached --stat
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -q -m "Deployment bundle from Development ${SRC_SHA::7}"
+          git push origin HEAD:main
+          {
+            echo "## Deployment bundle published to \`main\`"
+            echo
+            echo "From Development \`${SRC_SHA::7}\`. On the server:"
+            echo
+            echo '```sh'
+            echo 'git pull && docker compose pull fintracker && docker compose up -d'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

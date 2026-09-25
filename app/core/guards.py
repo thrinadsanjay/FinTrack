@@ -61,6 +61,12 @@ def login_required(f):
             except (TypeError, ValueError):
                 request.session.clear()
                 return RedirectResponse("/login", status_code=303)
+        # A session signed out individually (Profile → Active sessions) ends here too.
+        from app.services.sessions import is_sid_revoked
+
+        if await is_sid_revoked(request.session.get("sid")):
+            request.session.clear()
+            return RedirectResponse("/login", status_code=303)
         return await f(request, *args, **kwargs)
     return decorated_function
 

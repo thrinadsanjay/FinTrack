@@ -13,6 +13,7 @@ from app.web.templates import templates
 from app.helpers.transaction_inputs import resolve_transfer_category_codes, validate_category
 from app.services.categorization_engine import categorize_transaction, learn_from_override
 from app.services.accounts import get_accounts
+from app.services.categories import get_categories_by_type
 from app.services.emi_conversion import convert_transaction_to_emi
 from app.services.goal_links import goal_prompt_for_new_entry
 from app.services.dashboard import get_user_notifications
@@ -434,6 +435,11 @@ async def _render_transactions_workspace(
     )
     notifications = await get_user_notifications(user["user_id"])
     rows = prepared["transactions"]
+    # Category filter options (expense + income), de-duplicated by code.
+    filter_categories: dict[str, str] = {}
+    for kind in ("debit", "credit"):
+        for cat in await get_categories_by_type(kind):
+            filter_categories.setdefault(cat["code"], cat["name"])
     context = {
         "request": request,
         "user": user,
@@ -444,6 +450,7 @@ async def _render_transactions_workspace(
         "groups": group_by_local_date(rows, prepared["user_tz"]),
         "columns": build_board_columns(rows, prepared["user_tz"]) if tx_view == "board" else [],
         "kpis": transaction_kpis(rows),
+        "filter_categories": sorted(filter_categories.items(), key=lambda kv: kv[1].lower()),
         "filters": {
             "account_id": account_id,
             "tx_type": tx_type,

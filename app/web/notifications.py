@@ -1,10 +1,14 @@
+from bson import ObjectId
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from app.core.csrf import verify_csrf_token
 from app.core.guards import login_required
 from app.services.audit import audit_log
-from app.services.notifications import archive_all, archive_by_ids, mark_all_read, mark_read_by_ids
+from app.services.dashboard import get_user_notifications
+from app.services.notifications import archive_all, archive_by_ids, list_notifications, mark_all_read, mark_read_by_ids
+from app.services.transaction_inbox import count_pending_review
+from app.web.templates import templates
 from app.services.web_push import (
     get_push_public_config,
     save_fcm_token,
@@ -12,6 +16,37 @@ from app.services.web_push import (
 )
 
 router = APIRouter()
+
+
+@router.get("")
+@login_required
+async def inbox_page(request: Request):
+    """Inbox: notifications + anything waiting for review (mobile bottom-nav destination)."""
+    user = request.session.get("user")
+    rows = await list_notifications(user_id=ObjectId(user["user_id"]), limit=100)
+    items = [
+        {
+            "id": str(n["_id"]),
+            "title": n.get("title") or "Notification",
+            "message": n.get("message") or "",
+            "is_read": bool(n.get("is_read")),
+            "at": n.get("updated_at") or n.get("created_at"),
+        }
+        for n in rows
+    ]
+    return templates.TemplateResponse(
+        request=request,
+        name="pages/inbox/inbox.html",
+        context={
+            "request": request,
+            "user": user,
+            "active_page": "inbox_center",
+            "items": items,
+            "unread": sum(1 for i in items if not i["is_read"]),
+            "pending_review": await count_pending_review(user["user_id"]),
+            "notifications": await get_user_notifications(user["user_id"]),
+        },
+    )
 
 
 @router.post("/read")

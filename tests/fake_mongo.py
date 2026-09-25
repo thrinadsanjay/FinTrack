@@ -182,6 +182,10 @@ class FakeCollection:
     def find(self, query=None, projection=None, session=None):
         return _Cursor([self._project(d) for d in self.docs if matches(d, query or {})])
 
+    async def count_documents(self, query, session=None):
+        await asyncio.sleep(0)
+        return sum(1 for d in self.docs if matches(d, query))
+
     async def insert_one(self, doc, session=None):
         await asyncio.sleep(0)
         doc.setdefault("_id", ObjectId())

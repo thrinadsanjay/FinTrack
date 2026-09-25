@@ -4,7 +4,6 @@ from datetime import datetime, timezone
 from datetime import timedelta
 import re
 import secrets
-from urllib.parse import quote_plus
 from bson import ObjectId
 from app.core.config import settings
 from app.core.csrf import verify_csrf_token
@@ -14,7 +13,10 @@ from app.db.mongo import db
 from app.services.auth import change_local_password
 from app.services.audit import audit_log
 from app.services.dashboard import get_user_notifications
-from app.services.users import get_user_by_id
+from app.helpers.flash import set_flash
+from app.helpers.labels import parse_user_agent
+from app.services.sessions import list_sessions, revoke_session
+from app.services.users import get_user_by_id, split_person_name, update_own_profile
 from app.services.admin_settings import get_admin_settings
 from app.helpers.phone import normalize_phone_number
 from app.services.passkeys import build_registration_options, verify_registration
@@ -73,14 +75,6 @@ async def edit_profile_page(request: Request):
     month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
     uid = ObjectId(session_user["user_id"])
 
-    reset_error = str(request.query_params.get("reset_error") or "").strip()
-    reset_updated = str(request.query_params.get("updated") or "").strip() == "1"
-    reset_modal_open = (
-        str(request.query_params.get("reset") or "").strip() == "1"
-        or reset_updated
-        or bool(reset_error)
-    )
-
     accounts_count = await db.accounts.count_documents({"user_id": uid, "deleted_at": None})
     tx_this_month = await db.transactions.count_documents(
         {
@@ -102,7 +96,25 @@ async def edit_profile_page(request: Request):
         {"user_id": uid, "is_read": False, "archived_at": None}
     )
 
+    current_sid = request.session.get("sid")
+    sessions = []
+    for row in await list_sessions(session_user["user_id"], current_sid=current_sid):
+        device = parse_user_agent(row.get("user_agent"))
+        sessions.append(
+            {
+                "id": row["id"],
+                "seen_at": row.get("last_seen_at") or row.get("created_at"),
+                "ip": row.get("ip") or "—",
+                "device": device["label"],
+                "device_icon": device["icon"],
+                "current": row.get("current"),
+            }
+        )
+    # Current session first, then most recently active.
+    sessions.sort(key=lambda s: not s["current"])
+
     identity = _profile_identity(db_user, session_user)
+    first_name, last_name = split_person_name(db_user)
     profile = {
         "user_id": session_user.get("user_id"),
         "username": identity["username"],
@@ -119,7 +131,12 @@ async def edit_profile_page(request: Request):
         "is_active": bool((db_user or {}).get("is_active", True)),
         "member_since": (db_user or {}).get("created_at"),
         "last_login_at": (db_user or {}).get("last_login_at"),
-        "password_updated_at": (db_user or {}).get("updated_at"),
+        "first_name": first_name,
+        "last_name": last_name,
+        "has_password": bool((db_user or {}).get("password_hash")),
+        # Older records have no password_changed_at; updated_at was the previous proxy.
+        "password_updated_at": (db_user or {}).get("password_changed_at") or (db_user or {}).get("updated_at"),
+        "sessions": sessions,
         "timezone": request.session.get("timezone", "Asia/Kolkata"),
         "theme": request.session.get("theme", "auto"),
         "notifications_enabled": True,
@@ -154,11 +171,63 @@ async def edit_profile_page(request: Request):
             "profile": profile,
             "notifications": notifications,
             "active_page": "profile",
-            "reset_password_modal_open": reset_modal_open,
-            "reset_password_error": reset_error,
-            "reset_password_updated": reset_updated,
         }
     )
+
+
+@router.post("/profile/sessions/{session_id}/revoke")
+@login_required
+async def revoke_session_submit(request: Request, session_id: str, csrf_token: str = Form(...)):
+    """Active sessions table: sign out one other device."""
+    verify_csrf_token(request, csrf_token)
+    session_user = request.session.get("user")
+    try:
+        revoked = await revoke_session(
+            session_user["user_id"], session_id, current_sid=request.session.get("sid")
+        )
+    except ValueError as exc:
+        set_flash(request, str(exc), tone="error")
+        return RedirectResponse("/profile#sessions", status_code=303)
+    if revoked:
+        await audit_log(
+            action="SESSION_REVOKED",
+            request=request,
+            user={"user_id": session_user["user_id"]},
+            meta={"session_id": session_id},
+        )
+        set_flash(request, "Session signed out.")
+    else:
+        set_flash(request, "That session has already ended.", tone="error")
+    return RedirectResponse("/profile#sessions", status_code=303)
+
+
+@router.post("/profile/update")
+@login_required
+async def update_profile_submit(
+    request: Request,
+    csrf_token: str = Form(...),
+    first_name: str = Form(""),
+    last_name: str = Form(""),
+    phone: str = Form(""),
+):
+    """Edit profile dialog: display name and phone only."""
+    verify_csrf_token(request, csrf_token)
+    session_user = request.session.get("user")
+    try:
+        result = await update_own_profile(
+            user_id=session_user["user_id"],
+            first_name=first_name,
+            last_name=last_name,
+            phone=phone,
+        )
+    except ValueError as exc:
+        set_flash(request, str(exc), tone="error")
+        return RedirectResponse("/profile", status_code=303)
+    # Keep the header/avatar name in sync without a re-login.
+    session_user["full_name"] = result["full_name"]
+    request.session["user"] = session_user
+    set_flash(request, "Profile updated.")
+    return RedirectResponse("/profile", status_code=303)
 
 
 @router.get("/profile/reset-password")
@@ -172,7 +241,13 @@ async def reset_password_page(request: Request):
     if not db_user or db_user.get("auth_provider") != "local":
         return RedirectResponse(_external_password_reset_url(db_user), status_code=303)
 
-    return RedirectResponse("/profile?reset=1", status_code=303)
+    return RedirectResponse("/profile#password", status_code=303)
+
+
+def _password_redirect(request: Request, message: str, *, error: bool = False) -> RedirectResponse:
+    """The password form lives on Profile (Reset password dialog); results come back as toasts."""
+    set_flash(request, message, tone="error" if error else "success")
+    return RedirectResponse("/profile#password", status_code=303)
 
 
 @router.post("/profile/reset-password")
@@ -191,15 +266,13 @@ async def reset_password_submit(
 
     db_user = await get_user_by_id(session_user["user_id"])
     if not db_user or db_user.get("auth_provider") != "local":
-        return RedirectResponse("/profile", status_code=303)
+        return RedirectResponse("/security", status_code=303)
 
     if new_password != confirm_password:
-        msg = quote_plus("New password and confirm password do not match.")
-        return RedirectResponse(f"/profile?reset=1&reset_error={msg}", status_code=303)
+        return _password_redirect(request, "New password and confirm password do not match.", error=True)
 
     if len(new_password) < 8:
-        msg = quote_plus("Password must be at least 8 characters.")
-        return RedirectResponse(f"/profile?reset=1&reset_error={msg}", status_code=303)
+        return _password_redirect(request, "Password must be at least 8 characters.", error=True)
 
     try:
         await change_local_password(
@@ -209,10 +282,11 @@ async def reset_password_submit(
             request=request,
         )
     except Exception as exc:
-        msg = quote_plus(str(getattr(exc, "detail", str(exc)) or "Failed to update password."))
-        return RedirectResponse(f"/profile?reset=1&reset_error={msg}", status_code=303)
+        return _password_redirect(
+            request, str(getattr(exc, "detail", str(exc)) or "Failed to update password."), error=True
+        )
 
-    return RedirectResponse("/profile?reset=1&updated=1", status_code=303)
+    return _password_redirect(request, "Password updated.")
 
 async def _send_telegram_message(bot_token: str, chat_id: str, text: str) -> None:
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"

@@ -4,6 +4,8 @@ asyncio_mode = "auto"
 filterwarnings = [
     # Starlette's TestClient on Python 3.12+ (upstream deprecation, not ours).
     "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
+    # passlib (third-party) probing argon2-cffi.
+    "ignore:Accessing argon2.__version__ is deprecated:DeprecationWarning",
 ]
 
 [tool.ruff]

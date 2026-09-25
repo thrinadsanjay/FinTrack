@@ -417,6 +417,53 @@ async def update_user_account(
     )
 
 
+async def update_own_profile(
+    *,
+    user_id: str,
+    first_name: str | None,
+    last_name: str | None,
+    phone: str | None,
+) -> dict:
+    """
+    Self-service profile edit (Profile → Edit profile).
+
+    Only display details: username and email identify the login and are not
+    editable here. Leaves `updated_at` alone, which older records use as the
+    "password last changed" fallback.
+    """
+    if not ObjectId.is_valid(user_id):
+        raise ValueError("Invalid user.")
+    first = str(first_name or "").strip()[:60]
+    last = str(last_name or "").strip()[:60]
+    phone_value = str(phone or "").strip()[:20]
+    if not first:
+        raise ValueError("First name is required.")
+    if phone_value and not re.fullmatch(r"\+?[0-9][0-9 ()-]{5,19}", phone_value):
+        raise ValueError("Enter a valid phone number, e.g. +91 98765 43210.")
+
+    update_set: dict = {
+        "first_name": first,
+        "last_name": last,
+        "full_name": compose_full_name(first, last),
+        "profile_updated_at": _now(),
+    }
+    update_op: dict = {"$set": update_set}
+    if phone_value:
+        update_set["phone"] = phone_value
+    else:
+        update_op["$unset"] = {"phone": ""}
+
+    result = await db.users.update_one({"_id": ObjectId(user_id), "deleted_at": None}, update_op)
+    if result.matched_count == 0:
+        raise ValueError("User not found.")
+    await audit_log(
+        action="USER_PROFILE_UPDATED",
+        user={"user_id": user_id},
+        meta={"fields": ["first_name", "last_name", "phone"]},
+    )
+    return {"full_name": update_set["full_name"], "phone": phone_value}
+
+
 async def update_user_password(user_id: str, new_password: str, *, must_reset_password: bool = False):
     result = await db.users.update_one(
         {"_id": ObjectId(user_id), "deleted_at": None},
@@ -424,6 +471,7 @@ async def update_user_password(user_id: str, new_password: str, *, must_reset_pa
             "$set": {
                 "password_hash": hash_password(new_password),
                 "must_reset_password": must_reset_password,
+                "password_changed_at": _now(),
                 "updated_at": _now(),
             }
         },

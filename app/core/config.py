@@ -1,5 +1,18 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings
-from pydantic import ConfigDict
+from pydantic import ConfigDict, model_validator
+
+# Written into release images by the Dockerfile (APP_VERSION build arg).
+BUILD_VERSION_FILE = Path(__file__).resolve().parents[2] / "VERSION"
+
+
+def read_build_version(path: Path = BUILD_VERSION_FILE) -> str | None:
+    try:
+        value = path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return value or None
 
 
 class Settings(BaseSettings):
@@ -73,6 +86,15 @@ class Settings(BaseSettings):
         env_prefix="",
         env_ignore_empty=True,
     )
+
+    @model_validator(mode="after")
+    def _prefer_build_version(self):
+        # A release image knows exactly which version it is; don't let a stale
+        # FT_APP_VERSION in .env mislabel it. Dev runs (no VERSION file) keep the env value.
+        baked = read_build_version()
+        if baked:
+            self.FT_APP_VERSION = baked
+        return self
 
     @property
     def is_production(self) -> bool:

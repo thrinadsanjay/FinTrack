@@ -1,0 +1,96 @@
+name: Open pull request
+
+# Called by ci.yml after lint, tests and the Docker build succeed on a
+# feature/fix branch. Opens (or refreshes) a PR into Development.
+# It never approves or merges: branch protection and reviewers decide that.
+#
+# Repo setting required: Settings -> Actions -> General ->
+#   "Allow GitHub Actions to create and approve pull requests".
+on:
+  workflow_call:
+    inputs:
+      ci-result:
+        type: string
+        required: true
+      docker-result:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  pull-request:
+    name: Create or update PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BASE: Development
+      HEAD_BRANCH: ${{ github.ref_name }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      CI_RESULT: ${{ inputs.ci-result }}
+      DOCKER_RESULT: ${{ inputs.docker-result }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Compose PR description
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "$BASE" >/dev/null 2>&1 || true
+          badge() { [ "$1" = "success" ] && echo "✅ passed" || echo "❌ $1"; }
+          {
+            echo "## Summary"
+            echo
+            echo "Automated PR for \`$HEAD_BRANCH\` → \`$BASE\`."
+            echo
+            if git rev-parse --verify -q "origin/$BASE" >/dev/null; then
+              count="$(git rev-list --count "origin/$BASE..HEAD")"
+              echo "**$count commit(s)** not yet in \`$BASE\`:"
+              echo
+              git log --no-merges --format='- %s (%h)' "origin/$BASE..HEAD" | head -n 50
+              echo
+              echo "<details><summary>Changed files</summary>"
+              echo
+              echo '```'
+              git diff --stat "origin/$BASE...HEAD" | tail -n 60
+              echo '```'
+              echo "</details>"
+            else
+              echo "_Base branch \`$BASE\` not found; commit list unavailable._"
+            fi
+            echo
+            echo "## Checks"
+            echo
+            echo "| Check | Status |"
+            echo "|---|---|"
+            echo "| Lint & tests | $(badge "$CI_RESULT") |"
+            echo "| Docker build | $(badge "$DOCKER_RESULT") |"
+            echo "| Head commit | \`${GITHUB_SHA:0:7}\` |"
+            echo
+            echo "[CI run]($RUN_URL)"
+            echo
+            echo "---"
+            echo "Merging into \`$BASE\` releases and deploys automatically. This PR requires review approval; it is never auto-merged."
+          } > "$RUNNER_TEMP/pr-body.md"
+
+      - name: Create or update the pull request
+        run: |
+          set -euo pipefail
+          existing="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$HEAD_BRANCH" --base "$BASE" --state open --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            gh pr edit "$existing" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/pr-body.md"
+            echo "Updated PR #$existing"
+            echo "PR: #$existing (updated)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            title="$(git log -1 --format=%s)"
+            url="$(gh pr create --repo "$GITHUB_REPOSITORY" --base "$BASE" --head "$HEAD_BRANCH" \
+                    --title "${HEAD_BRANCH}: ${title}" --body-file "$RUNNER_TEMP/pr-body.md")"
+            echo "Created $url"
+            echo "PR: $url (created)" >> "$GITHUB_STEP_SUMMARY"
+          fi

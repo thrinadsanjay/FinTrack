@@ -2231,3 +2231,8 @@ async def clear_sms_buffer(user_id: str) -> dict[str, int]:
     user_oid = _user_oid(user_id)
     result = await db.sms_buffer.delete_many({"user_id": user_oid})
     return {"cleared_count": int(result.deleted_count)}
+
+
+async def count_pending_review(user_id: str) -> int:
+    """Imported/SMS rows waiting for the user's review (Inbox attention card)."""
+    return await db.transaction_inbox.count_documents({"user_id": _user_oid(user_id), "status": "pending"})

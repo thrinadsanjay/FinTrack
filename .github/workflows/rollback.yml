@@ -1,0 +1,129 @@
+name: Rollback FinTracker
+
+# Manually redeploy any previously released, immutable version.
+# Version tags are never deleted or overwritten; only the `latest` pointer moves
+# (optional) so `latest` keeps meaning "what is deployed".
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to deploy, e.g. 1.0.4 (a leading "v" is accepted)
+        required: true
+        type: string
+      move_latest:
+        description: Also point Docker Hub `latest` at this version
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  # Shares the release queue: a rollback never races a release.
+  group: release-development
+  cancel-in-progress: false
+
+env:
+  DOCKER_IMAGE: ${{ vars.DOCKER_IMAGE || 'automationbuilder/fintracker' }}
+
+jobs:
+  rollback:
+    name: Roll back to ${{ inputs.version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: Development
+    steps:
+      - name: Validate version input
+        id: v
+        env:
+          RAW: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          version="${RAW#v}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Version must look like 1.0.4, got '${RAW}'"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout (deploy script)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Confirm the version exists on Docker Hub
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          set -euo pipefail
+          if ! docker buildx imagetools inspect "${DOCKER_IMAGE}:${VERSION}" >/dev/null 2>&1; then
+            echo "::error::${DOCKER_IMAGE}:${VERSION} was not found on Docker Hub."
+            exit 1
+          fi
+          echo "Found ${DOCKER_IMAGE}:${VERSION}"
+
+      - name: Deploy ${{ steps.v.outputs.version }}
+        id: ssh
+        uses: ./.github/actions/ssh-deploy
+        with:
+          version: ${{ steps.v.outputs.version }}
+          image: ${{ env.DOCKER_IMAGE }}
+          deploy-path: ${{ vars.DEPLOY_PATH }}
+          service: ${{ vars.COMPOSE_SERVICE || 'fintracker' }}
+          compose-file: ${{ vars.COMPOSE_FILE || '' }}
+          server-host: ${{ secrets.SERVER_HOST }}
+          server-user: ${{ secrets.SERVER_USER }}
+          server-port: ${{ vars.SERVER_PORT || '22' }}
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          ssh-known-hosts: ${{ secrets.SSH_KNOWN_HOSTS }}
+
+      - name: Point Docker Hub latest at ${{ steps.v.outputs.version }}
+        if: inputs.move_latest
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          set -euo pipefail
+          # Re-tags by digest; the immutable version tag itself is untouched.
+          docker buildx imagetools create --tag "${DOCKER_IMAGE}:latest" "${DOCKER_IMAGE}:${VERSION}"
+
+      - name: Rollback summary
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+          PREVIOUS: ${{ steps.ssh.outputs.previous-version }}
+          MOVE_LATEST: ${{ inputs.move_latest }}
+        run: |
+          cat <<EOF
+          ========================================
+          FinTracker Rollback Successful
+          ========================================
+
+          Application Version: ${VERSION}
+          Docker Image: ${DOCKER_IMAGE}:${VERSION}
+          Replaced: ${PREVIOUS:-unknown}
+          Docker Hub latest moved: ${MOVE_LATEST}
+          Environment: Development
+          Deployment Server: <masked>
+          Deployment Status: SUCCESS
+          ========================================
+          EOF
+          {
+            echo "## ↩️ FinTracker rolled back to ${VERSION}"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Now running | \`${DOCKER_IMAGE}:${VERSION}\` |"
+            echo "| Replaced | \`${PREVIOUS:-unknown}\` |"
+            echo "| Docker Hub \`latest\` moved | ${MOVE_LATEST} |"
+            echo "| Server | _masked_ |"
+          } >> "$GITHUB_STEP_SUMMARY"

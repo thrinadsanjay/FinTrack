@@ -1,0 +1,113 @@
+name: SSH deploy FinTracker
+description: >
+  Streams scripts/deploy/remote_deploy.sh to the deployment server over SSH
+  (strict host-key checking) and deploys one immutable image version.
+  Secrets are passed as inputs by the caller and are never echoed.
+
+inputs:
+  version:
+    description: Version to deploy (MAJOR.MINOR.PATCH)
+    required: true
+  image:
+    description: Image repository, e.g. automationbuilder/fintracker
+    required: true
+  deploy-path:
+    description: Directory on the server that holds the docker compose file
+    required: true
+  service:
+    description: Compose service name of the FinTracker container
+    required: false
+    default: fintracker
+  compose-file:
+    description: Optional compose file name inside deploy-path (default docker compose lookup)
+    required: false
+    default: ""
+  auto-rollback:
+    description: Restore the previously running image if verification fails
+    required: false
+    default: "true"
+  server-host:
+    required: true
+  server-user:
+    required: true
+  server-port:
+    required: false
+    default: "22"
+  ssh-private-key:
+    required: true
+  ssh-known-hosts:
+    description: known_hosts line(s) for the server (from `ssh-keyscan`, verified out of band)
+    required: true
+
+outputs:
+  previous-version:
+    description: Version that was running before this deployment
+    value: ${{ steps.deploy.outputs.previous-version }}
+
+runs:
+  using: composite
+  steps:
+    - name: Configure SSH (strict host-key checking)
+      shell: bash
+      env:
+        SSH_PRIVATE_KEY: ${{ inputs.ssh-private-key }}
+        SSH_KNOWN_HOSTS: ${{ inputs.ssh-known-hosts }}
+      run: |
+        set -euo pipefail
+        if [ -z "$SSH_PRIVATE_KEY" ] || [ -z "$SSH_KNOWN_HOSTS" ]; then
+          echo "::error::SSH_PRIVATE_KEY and SSH_KNOWN_HOSTS secrets are required"
+          exit 1
+        fi
+        install -m 700 -d "$HOME/.ssh"
+        umask 077
+        printf '%s\n' "$SSH_PRIVATE_KEY" > "$HOME/.ssh/fintracker_deploy"
+        printf '%s\n' "$SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+
+    - name: Deploy over SSH
+      id: deploy
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        IMAGE: ${{ inputs.image }}
+        DEPLOY_PATH: ${{ inputs.deploy-path }}
+        SERVICE: ${{ inputs.service }}
+        COMPOSE_FILE: ${{ inputs.compose-file }}
+        AUTO_ROLLBACK: ${{ inputs.auto-rollback }}
+        SERVER_HOST: ${{ inputs.server-host }}
+        SERVER_USER: ${{ inputs.server-user }}
+        SERVER_PORT: ${{ inputs.server-port }}
+      run: |
+        set -euo pipefail
+        [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::invalid version '$VERSION'"; exit 1; }
+        [[ "$SERVER_PORT" =~ ^[0-9]+$ ]] || { echo "::error::SERVER_PORT must be numeric"; exit 1; }
+        [ -n "$DEPLOY_PATH" ] || { echo "::error::DEPLOY_PATH variable is not set"; exit 1; }
+
+        # Remote env assignments are shell-quoted so paths/names can't inject commands.
+        remote_env="$(printf 'IMAGE=%q VERSION=%q DEPLOY_PATH=%q SERVICE=%q COMPOSE_FILE=%q AUTO_ROLLBACK=%q' \
+          "$IMAGE" "$VERSION" "$DEPLOY_PATH" "$SERVICE" "$COMPOSE_FILE" "$AUTO_ROLLBACK")"
+
+        set +e
+        ssh -i "$HOME/.ssh/fintracker_deploy" \
+            -p "$SERVER_PORT" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -o ConnectTimeout=20 \
+            -o ServerAliveInterval=15 \
+            "${SERVER_USER}@${SERVER_HOST}" \
+            "${remote_env} bash -s" \
+            < "$GITHUB_WORKSPACE/scripts/deploy/remote_deploy.sh" | tee "$RUNNER_TEMP/deploy.log"
+        status=${PIPESTATUS[0]}
+        set -e
+
+        prev="$(grep -E '^PREVIOUS_VERSION=' "$RUNNER_TEMP/deploy.log" | tail -n1 | cut -d= -f2- || true)"
+        echo "previous-version=${prev:-unknown}" >> "$GITHUB_OUTPUT"
+        if [ "$status" -ne 0 ]; then
+          echo "::error::Deployment of ${VERSION} failed on the server (exit ${status}). See the log above."
+          exit "$status"
+        fi
+
+    - name: Remove SSH material
+      if: always()
+      shell: bash
+      run: rm -f "$HOME/.ssh/fintracker_deploy" "$HOME/.ssh/known_hosts"

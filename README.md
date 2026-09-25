@@ -313,9 +313,13 @@ Use [.env.example](./.env.example) as the committed template for GitLab and envi
 
 ## Deployment
 
-### Option A: Docker Compose (Recommended)
+### Production server
 
-This path is intended to work on a fresh host with Docker Compose installed.
+Servers don't use this branch. They clone `main`, which holds only `README.md`, `docker-compose.yml` (pulls `automationbuilder/fintracker` from Docker Hub, plus MongoDB and mongo-express) and `env.example`. Those files are maintained here under [`deploy/`](deploy/) and `env.example`, and are published to `main` automatically. See [`deploy/README.md`](deploy/README.md).
+
+### Option A: Docker Compose (development)
+
+Builds the image locally and bind-mounts `app/` with auto-reload.
 
 From repository root:
 
@@ -452,186 +456,12 @@ Security and behavior notes:
 
 ## CI/CD Pipeline (GitHub Actions)
 
-FinTracker now includes a branch-based GitHub Actions pipeline aligned to your requested flow:
+Full guide: [`docs/CICD.md`](docs/CICD.md) — secrets, variables, server preparation, branch protection, rollback, test procedure.
 
-- `Enhancements`: active development branch
-- `Dev`: protected release branch that triggers production deployment after merge
-
-### CI workflow
-
-Workflow: `/.github/workflows/ci.yml`
-
-Triggers:
-
-- push to `Enhancements`
-- pull requests targeting `Dev`
-
-Checks executed:
-
-- install Python dependencies
-- run critical lint validation with `ruff`
-- run Python compile validation
-- run `pytest`
-
-### Manual approval before merge
-
-PR approval is enforced in GitHub Branch Protection, not inside a workflow file. For the `Dev` branch, configure:
-
-- require pull requests before merging
-- require at least 1 approval
-- require status checks to pass (`FinTracker CI`)
-- optionally restrict direct pushes to `Dev`
-
-GitHub will handle reviewer notifications automatically once branch protection and reviewer rules are configured.
-
-### CD workflow
-
-Workflow: `/.github/workflows/cd.yml`
-
-Trigger:
-
-- push to `Dev`
-- optional manual run via `workflow_dispatch`
-
-Deployment flow implemented:
-
-1. detect release bump from merged commit messages
-2. connect to the production server via SSH
-3. fetch and checkout the latest `Dev` ref on the server
-4. update `.env` with `CURRENT_VERSION`, `PREVIOUS_VERSION`, and `FT_APP_VERSION`
-5. run `docker compose pull`
-6. run `docker compose down --remove-orphans`
-7. run `docker compose up -d --build --remove-orphans`
-8. wait for startup
-9. run `/health` retry checks
-10. rollback automatically if health checks fail
-
-### Rollback workflow
-
-Workflow: `/.github/workflows/rollback.yml`
-
-Trigger:
-
-- manual `workflow_dispatch`
-
-It uses the last saved deployment state on the server and restores the previous Git ref and version markers.
-
-### Versioning rules
-
-Version bump is computed from commit messages pushed into `Dev`:
-
-- `BREAKING:` -> major bump
-- `feat:` -> minor bump
-- `fix:` -> patch bump
-- anything else -> patch bump
-
-Examples:
-
-- `v1.2.3` + `fix: update alert formatting` -> `v1.2.4`
-- `v1.2.3` + `feat: add support request metrics` -> `v1.3.0`
-- `v1.2.3` + `BREAKING: change auth model` -> `v2.0.0`
-
-### Required GitHub configuration
-
-Repository secrets:
-
-- `SSH_HOST`
-- `SSH_USER`
-- `SSH_KEY`
-
-Optional email notification secrets:
-
-- `EMAIL_SMTP_HOST`
-- `EMAIL_SMTP_PORT` (optional, defaults to `587`)
-- `EMAIL_SMTP_USERNAME`
-- `EMAIL_SMTP_PASSWORD`
-- `EMAIL_FROM`
-- `EMAIL_TO`
-- `EMAIL_SMTP_SECURE` (optional, use `true` for SMTPS or `false` for STARTTLS)
-
-If these email secrets are configured, GitHub Actions will send notifications for:
-
-- CI failures on `Enhancements` and PR validation
-- successful production deployments to `Dev`
-- failed production deployments where rollback was attempted
-- manual rollback success or failure
-
-Repository or environment variables:
-
-- `DEPLOY_PATH`
-
-Recommended production server prerequisites:
-
-- repository already cloned at `DEPLOY_PATH`
-- Docker Engine and Docker Compose plugin installed
-- production `.env` file already present
-- deploy user permitted to run `docker compose`
-
-### Scripts used by the pipeline
-
-- [`scripts/deploy.sh`](/home/sanjay/Application/FinTrack/scripts/deploy.sh)
-- [`scripts/health_check.sh`](/home/sanjay/Application/FinTrack/scripts/health_check.sh)
-- [`scripts/rollback.sh`](/home/sanjay/Application/FinTrack/scripts/rollback.sh)
-- [`scripts/version.sh`](/home/sanjay/Application/FinTrack/scripts/version.sh)
-
-These scripts are idempotent, write deployment progress to `deployments.log`, and perform automatic rollback when health checks fail.
-
-
-### End-to-end validation checklist
-
-Use this sequence to validate the pipeline after configuring GitHub secrets and branch protection:
-
-1. Configure repository secrets:
-   - `SSH_HOST`, `SSH_USER`, `SSH_KEY`
-   - optional email secrets if you want notifications
-2. Configure repository variable:
-   - `DEPLOY_PATH`
-3. Protect the `Dev` branch in GitHub:
-   - require pull request before merge
-   - require at least one approval
-   - require status check `FinTracker CI`
-4. Verify the production server:
-   - repo exists at `DEPLOY_PATH`
-   - `.env` exists
-   - `docker compose` works for the deploy user
-   - `http://localhost/health` returns success when the app is healthy
-5. Create a small test commit on `Enhancements` using a conventional message:
-   - `fix: validate ci pipeline`
-6. Push to `Enhancements` and confirm `FinTracker CI` passes.
-7. Open a PR from `Enhancements` to `Dev` and confirm approval is required.
-8. Approve and merge the PR.
-9. Confirm `FinTracker CD` starts automatically on push to `Dev`.
-10. On the production server, verify deployment state:
-    - `.env` updated with `CURRENT_VERSION` and `PREVIOUS_VERSION`
-    - `deployments.log` contains the new deployment entry
-    - containers restarted successfully
-11. Confirm application health:
-    - `curl http://localhost/health`
-    - open the app in browser and check login/dashboard manually
-12. If email secrets were configured, confirm the success notification arrived.
-
-### Rollback validation
-
-To validate rollback without breaking the live system permanently:
-
-1. Trigger the manual workflow `FinTracker Rollback` from GitHub Actions.
-2. Confirm the workflow succeeds.
-3. Confirm the server returns to the previously deployed ref/version.
-4. Check `deployments.log` for rollback entries.
-5. If email secrets were configured, confirm rollback notification arrived.
-
-### Useful server checks
-
-Run these on the production server when troubleshooting:
-
-```bash
-cd "$DEPLOY_PATH"
-git rev-parse --short HEAD
-cat .env | grep -E '^(CURRENT_VERSION|PREVIOUS_VERSION|FT_APP_VERSION)='
-docker compose -f docker/compose.yml ps
-curl -fsS http://localhost/health
-tail -n 50 deployments.log
-```
+- Push a `feature/*` (or `fix/*`, `bugfix/*`, `hotfix/*`, `chore/*`) branch → **CI** runs lint, tests and a Docker build, then opens a PR into `Development`.
+- A reviewed, approved PR merged into `Development` that changes the image (`app/**`, `Dockerfile`, `.dockerignore`, `requirements.txt`) → **Release FinTracker** bumps the patch version (git tags `vX.Y.Z`), pushes `automationbuilder/fintracker:X.Y.Z` and `:latest`, and deploys over SSH (`docker pull` + `docker compose up -d --no-deps fintracker`), verifying `/health` reports the new version.
+- Changes to `deploy/README.md`, `deploy/docker-compose.yml` or `env.example` → **Publish deployment bundle to main** (no image build). README, docs and tests changes trigger neither.
+- **Rollback FinTracker** (manual) redeploys any earlier version; failed deploys also restore the previous image automatically.
 
 ## First Boot Behavior
 
