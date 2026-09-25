@@ -1,5 +1,7 @@
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Import `app` and `tests` from the repo root however pytest is launched (`pytest` vs `python -m pytest`).
+pythonpath = ["."]
 asyncio_mode = "auto"
 filterwarnings = [
     # Starlette's TestClient on Python 3.12+ (upstream deprecation, not ours).
