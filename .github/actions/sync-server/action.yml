@@ -73,6 +73,7 @@ runs:
         remote_env="$(printf 'DEPLOY_PATH=%q' "$DEPLOY_PATH")"
         remote_script='set -euo pipefail; mkdir -p "$DEPLOY_PATH"; umask 077; cat > "$DEPLOY_PATH/.env.new"; mv "$DEPLOY_PATH/.env.new" "$DEPLOY_PATH/.env"'
 
+        # TEMPORARY while testing -- set StrictHostKeyChecking back to "yes" before production use
         ssh -i "$HOME/.ssh/fintracker_deploy" \
             -p "$SERVER_PORT" \
             -o BatchMode=yes \
@@ -98,6 +99,7 @@ runs:
         remote_env="$(printf 'REPO_URL=%q GIT_REF=%q DEPLOY_PATH=%q COMPOSE_FILE=%q' \
           "$REPO_URL" "$GIT_REF" "$DEPLOY_PATH" "$COMPOSE_FILE")"
 
+        # TEMPORARY while testing -- set StrictHostKeyChecking back to "yes" before production use
         ssh -i "$HOME/.ssh/fintracker_deploy" \
             -p "$SERVER_PORT" \
             -o BatchMode=yes \

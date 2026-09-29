@@ -67,6 +67,13 @@ jobs:
   ci:
     name: CI gate
     needs: guard
+    # ci.yml's open-pull-request job requests pull-requests: write; a called reusable
+    # workflow can never have more access than its caller grants, so that must be
+    # allowed here even though it never actually runs on a push to Development (its
+    # own `if:` only matches feature/fix/bugfix/hotfix/chore branches).
+    permissions:
+      contents: read
+      pull-requests: write
     uses: ./.github/workflows/ci.yml
 
   version:
