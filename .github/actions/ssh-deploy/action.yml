@@ -90,7 +90,7 @@ runs:
         ssh -i "$HOME/.ssh/fintracker_deploy" \
             -p "$SERVER_PORT" \
             -o BatchMode=yes \
-            -o StrictHostKeyChecking=yes \
+            -o StrictHostKeyChecking=no \
             -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
             -o ConnectTimeout=20 \
             -o ServerAliveInterval=15 \
