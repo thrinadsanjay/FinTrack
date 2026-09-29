@@ -73,7 +73,7 @@ from app.schedulers.loan_scheduler import run_loan_emi_cycles
 from app.services.telegram_polling import run_telegram_poll_once
 
 
-
+# Added for Testing CI/CD
 # ======================================================
 # LOGGING
 # ======================================================
