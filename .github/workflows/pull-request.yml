@@ -15,6 +15,27 @@ on:
       docker-result:
         type: string
         required: true
+      app-version:
+        description: Application version this run built (empty if not applicable)
+        type: string
+        required: false
+        default: ""
+      test-image:
+        description: Test Docker Hub image tag this run pushed (empty if not applicable)
+        type: string
+        required: false
+        default: ""
+      test-deploy-result:
+        description: Result of the test-server deployment (success/failure/skipped, empty if not applicable)
+        type: string
+        required: false
+        default: ""
+    outputs:
+      pr-url:
+        value: ${{ jobs.pull-request.outputs.pr-url }}
+      pr-action:
+        description: "created, updated, or unchanged"
+        value: ${{ jobs.pull-request.outputs.pr-action }}
 
 permissions:
   contents: read
@@ -25,6 +46,9 @@ jobs:
     name: Create or update PR
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    outputs:
+      pr-url: ${{ steps.pr.outputs.pr-url }}
+      pr-action: ${{ steps.pr.outputs.pr-action }}
     env:
       GH_TOKEN: ${{ github.token }}
       BASE: Development
@@ -32,6 +56,9 @@ jobs:
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       CI_RESULT: ${{ inputs.ci-result }}
       DOCKER_RESULT: ${{ inputs.docker-result }}
+      APP_VERSION: ${{ inputs.app-version }}
+      TEST_IMAGE: ${{ inputs.test-image }}
+      TEST_DEPLOY_RESULT: ${{ inputs.test-deploy-result }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -43,7 +70,7 @@ jobs:
         run: |
           set -euo pipefail
           git fetch --no-tags origin "$BASE" >/dev/null 2>&1 || true
-          badge() { [ "$1" = "success" ] && echo "✅ passed" || echo "❌ $1"; }
+          badge() { case "$1" in success) echo "✅ passed" ;; skipped) echo "⏭️ skipped" ;; *) echo "❌ $1" ;; esac; }
           {
             echo "## Summary"
             echo
@@ -73,6 +100,22 @@ jobs:
             echo "| Docker build | $(badge "$DOCKER_RESULT") |"
             echo "| Head commit | \`${GITHUB_SHA:0:7}\` |"
             echo
+            if [ -n "$APP_VERSION" ]; then
+              echo "## Test deployment"
+              echo
+              echo "| | |"
+              echo "|---|---|"
+              echo "| Application version | \`$APP_VERSION\` |"
+              [ -n "$TEST_IMAGE" ] && echo "| Test image | \`$TEST_IMAGE\` |"
+              if [ -n "$TEST_DEPLOY_RESULT" ]; then
+                echo "| Test deployment | $(badge "$TEST_DEPLOY_RESULT") |"
+              else
+                echo "| Test deployment | _not deployed (TEST_MODE=false)_ |"
+              fi
+              echo
+              echo "Please test the application on the test environment before approving this PR."
+              echo
+            fi
             echo "[CI run]($RUN_URL)"
             echo
             echo "---"
@@ -80,17 +123,23 @@ jobs:
           } > "$RUNNER_TEMP/pr-body.md"
 
       - name: Create or update the pull request
+        id: pr
         run: |
           set -euo pipefail
-          existing="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$HEAD_BRANCH" --base "$BASE" --state open --json number --jq '.[0].number // empty')"
+          existing="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$HEAD_BRANCH" --base "$BASE" --state open --json number,url --jq '.[0] // empty')"
           if [ -n "$existing" ]; then
-            gh pr edit "$existing" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/pr-body.md"
-            echo "Updated PR #$existing"
-            echo "PR: #$existing (updated)" >> "$GITHUB_STEP_SUMMARY"
+            number="$(jq -r .number <<<"$existing")"
+            url="$(jq -r .url <<<"$existing")"
+            gh pr edit "$number" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/pr-body.md"
+            echo "Updated PR #$number"
+            echo "PR: #$number (updated)" >> "$GITHUB_STEP_SUMMARY"
+            echo "pr-action=updated" >> "$GITHUB_OUTPUT"
           else
             title="$(git log -1 --format=%s)"
             url="$(gh pr create --repo "$GITHUB_REPOSITORY" --base "$BASE" --head "$HEAD_BRANCH" \
-                    --title "${HEAD_BRANCH}: ${title}" --body-file "$RUNNER_TEMP/pr-body.md")"
+                    --title "CI/CD: Promote ${HEAD_BRANCH} to ${BASE}" --body-file "$RUNNER_TEMP/pr-body.md")"
             echo "Created $url"
             echo "PR: $url (created)" >> "$GITHUB_STEP_SUMMARY"
+            echo "pr-action=created" >> "$GITHUB_OUTPUT"
           fi
+          echo "pr-url=$url" >> "$GITHUB_OUTPUT"

@@ -1,7 +1,14 @@
 name: CI
 
-# Validation only. Uses no secrets, so it is safe for pull requests from forks.
+# The `test`, `docker` and `open-pull-request` jobs use no secrets, so they are safe
+# for pull requests from forks. `build-test-image`, `deploy-test-server` and
+# `notify-approval-email` DO use secrets, but only ever run on a direct push (never
+# `pull_request`) to the `fix/cicd` branch specifically -- see docs/CICD.md "Test
+# pipeline" for the full flow.
 #  - push to any working branch  -> lint + tests + Docker build, then open/update a PR to Development
+#  - push to fix/cicd            -> also: build+push a <version>-test image; if TEST_MODE=true,
+#                                    deploy it to the test server and, on the PR's first creation,
+#                                    send an approval-notification email
 #  - pull_request to Development -> lint + tests + Docker build (required status checks)
 #  - workflow_call               -> reused by release.yml as the pre-release gate
 on:
@@ -21,6 +28,9 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   # Superseded pushes to a working branch are cancelled; release gates are never cancelled.
   cancel-in-progress: ${{ github.ref_name != 'Development' }}
+
+env:
+  DOCKER_IMAGE: ${{ vars.DOCKER_IMAGE || 'automationbuilder/fintracker' }}
 
 jobs:
   test:
@@ -88,10 +98,317 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  build-test-image:
+    name: Build & push test image
+    needs: [test, docker]
+    if: github.event_name == 'push' && github.ref_name == 'fix/cicd'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      test-image: ${{ steps.v.outputs.test-image }}
+    steps:
+      - name: Checkout (with tags)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # The test image reuses the CURRENT application version (latest vX.Y.Z tag) with
+      # a "-test" suffix -- it is not incremented on every commit. The production
+      # version only advances in release.yml, after a merge into Development.
+      - name: Current application version (no increment)
+        id: v
+        run: |
+          set -euo pipefail
+          semver='^v[0-9]+\.[0-9]+\.[0-9]+$'
+          latest="$(git tag --list 'v*' --sort=-v:refname | grep -E "$semver" | head -n1 || true)"
+          if [ -z "$latest" ]; then
+            echo "::warning::No vMAJOR.MINOR.PATCH tags found yet; using 0.0.0 for the test image."
+            version="0.0.0"
+          else
+            version="${latest#v}"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "test-image=${DOCKER_IMAGE}:${version}-test" >> "$GITHUB_OUTPUT"
+          echo "Test image: ${DOCKER_IMAGE}:${version}-test"
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build and push ${{ steps.v.outputs.test-image }}
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          build-args: |
+            APP_VERSION=${{ steps.v.outputs.version }}
+            VCS_REF=${{ github.sha }}
+          tags: ${{ steps.v.outputs.test-image }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy-test-server:
+    name: Deploy test image to test server
+    needs: build-test-image
+    if: github.event_name == 'push' && github.ref_name == 'fix/cicd' && vars.TEST_MODE == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: Development
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.build-test-image.outputs.version }}
+    steps:
+      - name: Checkout (deploy scripts)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Infrastructure credentials must NEVER fall back to production -- deploying a
+      # test build to the production server would be unsafe. Application config CAN
+      # fall back (handled by render_test_env.sh); server access cannot.
+      - name: Verify test-server configuration is present
+        env:
+          TEST_SERVER_HOST: ${{ secrets.TEST_SERVER_HOST }}
+          TEST_SERVER_USER: ${{ secrets.TEST_SERVER_USER }}
+          TEST_SSH_PRIVATE_KEY: ${{ secrets.TEST_SSH_PRIVATE_KEY }}
+          TEST_SSH_KNOWN_HOSTS: ${{ secrets.TEST_SSH_KNOWN_HOSTS }}
+          TEST_DEPLOY_PATH: ${{ vars.TEST_DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [ -n "$TEST_SERVER_HOST" ] || missing+=(TEST_SERVER_HOST)
+          [ -n "$TEST_SERVER_USER" ] || missing+=(TEST_SERVER_USER)
+          [ -n "$TEST_SSH_PRIVATE_KEY" ] || missing+=(TEST_SSH_PRIVATE_KEY)
+          [ -n "$TEST_SSH_KNOWN_HOSTS" ] || missing+=(TEST_SSH_KNOWN_HOSTS)
+          [ -n "$TEST_DEPLOY_PATH" ] || missing+=(TEST_DEPLOY_PATH)
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::TEST_MODE=true but required test-server config is missing: ${missing[*]}. Refusing to fall back to production server credentials -- see docs/CICD.md."
+            exit 1
+          fi
+
+      - name: Assemble test .env for the server
+        env:
+          # --- Core App ---
+          FT_ENV: ${{ vars.FT_ENV }}
+          TEST_FT_ENV: ${{ vars.TEST_FT_ENV }}
+          FT_APP_NAME: ${{ vars.FT_APP_NAME }}
+          TEST_FT_APP_NAME: ${{ vars.TEST_FT_APP_NAME }}
+          FT_APP_VERSION: ${{ vars.FT_APP_VERSION }}
+          TEST_FT_APP_VERSION: ${{ vars.TEST_FT_APP_VERSION }}
+          FT_BASE_URL: ${{ vars.FT_BASE_URL }}
+          TEST_FT_BASE_URL: ${{ vars.TEST_FT_BASE_URL }}
+          FT_SESSION_SECRET: ${{ secrets.FT_SESSION_SECRET }}
+          TEST_FT_SESSION_SECRET: ${{ secrets.TEST_FT_SESSION_SECRET }}
+          FT_EXTERNAL_PASSWORD_RESET_URL: ${{ vars.FT_EXTERNAL_PASSWORD_RESET_URL }}
+          TEST_FT_EXTERNAL_PASSWORD_RESET_URL: ${{ vars.TEST_FT_EXTERNAL_PASSWORD_RESET_URL }}
+          # --- Authentication / Google OAuth ---
+          FT_GOOGLE_CLIENT_ID: ${{ vars.FT_GOOGLE_CLIENT_ID }}
+          TEST_FT_GOOGLE_CLIENT_ID: ${{ vars.TEST_FT_GOOGLE_CLIENT_ID }}
+          FT_GOOGLE_CLIENT_SECRET: ${{ secrets.FT_GOOGLE_CLIENT_SECRET }}
+          TEST_FT_GOOGLE_CLIENT_SECRET: ${{ secrets.TEST_FT_GOOGLE_CLIENT_SECRET }}
+          FT_GOOGLE_ADMIN_EMAILS: ${{ vars.FT_GOOGLE_ADMIN_EMAILS }}
+          TEST_FT_GOOGLE_ADMIN_EMAILS: ${{ vars.TEST_FT_GOOGLE_ADMIN_EMAILS }}
+          FT_AUTH_ENABLED: ${{ vars.FT_AUTH_ENABLED }}
+          TEST_FT_AUTH_ENABLED: ${{ vars.TEST_FT_AUTH_ENABLED }}
+          FT_AUTH_PROVIDER: ${{ vars.FT_AUTH_PROVIDER }}
+          TEST_FT_AUTH_PROVIDER: ${{ vars.TEST_FT_AUTH_PROVIDER }}
+          FT_AUTH_ALLOW_LOCAL_LOGIN: ${{ vars.FT_AUTH_ALLOW_LOCAL_LOGIN }}
+          TEST_FT_AUTH_ALLOW_LOCAL_LOGIN: ${{ vars.TEST_FT_AUTH_ALLOW_LOCAL_LOGIN }}
+          # --- Bootstrap Admin ---
+          FT_DEFAULT_ADMIN_USERNAME: ${{ vars.FT_DEFAULT_ADMIN_USERNAME }}
+          TEST_FT_DEFAULT_ADMIN_USERNAME: ${{ vars.TEST_FT_DEFAULT_ADMIN_USERNAME }}
+          FT_DEFAULT_ADMIN_PASSWORD: ${{ secrets.FT_DEFAULT_ADMIN_PASSWORD }}
+          TEST_FT_DEFAULT_ADMIN_PASSWORD: ${{ secrets.TEST_FT_DEFAULT_ADMIN_PASSWORD }}
+          FT_DEFAULT_ADMIN_EMAIL: ${{ vars.FT_DEFAULT_ADMIN_EMAIL }}
+          TEST_FT_DEFAULT_ADMIN_EMAIL: ${{ vars.TEST_FT_DEFAULT_ADMIN_EMAIL }}
+          # --- Database ---
+          FT_MONGO_URI: ${{ secrets.FT_MONGO_URI }}
+          TEST_FT_MONGO_URI: ${{ secrets.TEST_FT_MONGO_URI }}
+          FT_MONGO_DB_NAME: ${{ vars.FT_MONGO_DB_NAME }}
+          TEST_FT_MONGO_DB_NAME: ${{ vars.TEST_FT_MONGO_DB_NAME }}
+          FT_CERTS_DIR: ${{ vars.FT_CERTS_DIR }}
+          TEST_FT_CERTS_DIR: ${{ vars.TEST_FT_CERTS_DIR }}
+          FT_MONGO_TRANSACTIONS: ${{ vars.FT_MONGO_TRANSACTIONS }}
+          TEST_FT_MONGO_TRANSACTIONS: ${{ vars.TEST_FT_MONGO_TRANSACTIONS }}
+          FT_DB_ENABLED: ${{ vars.FT_DB_ENABLED }}
+          TEST_FT_DB_ENABLED: ${{ vars.TEST_FT_DB_ENABLED }}
+          # --- Admin Application Defaults ---
+          FT_APP_LOGO_URL: ${{ vars.FT_APP_LOGO_URL }}
+          TEST_FT_APP_LOGO_URL: ${{ vars.TEST_FT_APP_LOGO_URL }}
+          FT_SUPPORT_EMAIL: ${{ vars.FT_SUPPORT_EMAIL }}
+          TEST_FT_SUPPORT_EMAIL: ${{ vars.TEST_FT_SUPPORT_EMAIL }}
+          FT_SUPPORT_PHONE: ${{ vars.FT_SUPPORT_PHONE }}
+          TEST_FT_SUPPORT_PHONE: ${{ vars.TEST_FT_SUPPORT_PHONE }}
+          FT_MAINTENANCE_MODE: ${{ vars.FT_MAINTENANCE_MODE }}
+          TEST_FT_MAINTENANCE_MODE: ${{ vars.TEST_FT_MAINTENANCE_MODE }}
+          FT_MAINTENANCE_MESSAGE: ${{ vars.FT_MAINTENANCE_MESSAGE }}
+          TEST_FT_MAINTENANCE_MESSAGE: ${{ vars.TEST_FT_MAINTENANCE_MESSAGE }}
+          # --- SMTP ---
+          FT_SMTP_ENABLED: ${{ vars.FT_SMTP_ENABLED }}
+          TEST_FT_SMTP_ENABLED: ${{ vars.TEST_FT_SMTP_ENABLED }}
+          FT_SMTP_HOST: ${{ vars.FT_SMTP_HOST }}
+          TEST_FT_SMTP_HOST: ${{ vars.TEST_FT_SMTP_HOST }}
+          FT_SMTP_PORT: ${{ vars.FT_SMTP_PORT }}
+          TEST_FT_SMTP_PORT: ${{ vars.TEST_FT_SMTP_PORT }}
+          FT_SMTP_USERNAME: ${{ vars.FT_SMTP_USERNAME }}
+          TEST_FT_SMTP_USERNAME: ${{ vars.TEST_FT_SMTP_USERNAME }}
+          FT_SMTP_PASSWORD: ${{ secrets.FT_SMTP_PASSWORD }}
+          TEST_FT_SMTP_PASSWORD: ${{ secrets.TEST_FT_SMTP_PASSWORD }}
+          FT_SMTP_FROM: ${{ vars.FT_SMTP_FROM }}
+          TEST_FT_SMTP_FROM: ${{ vars.TEST_FT_SMTP_FROM }}
+          FT_SMTP_TLS: ${{ vars.FT_SMTP_TLS }}
+          TEST_FT_SMTP_TLS: ${{ vars.TEST_FT_SMTP_TLS }}
+          # --- Telegram ---
+          FT_TELEGRAM_ENABLED: ${{ vars.FT_TELEGRAM_ENABLED }}
+          TEST_FT_TELEGRAM_ENABLED: ${{ vars.TEST_FT_TELEGRAM_ENABLED }}
+          FT_TELEGRAM_BOT_USERNAME: ${{ vars.FT_TELEGRAM_BOT_USERNAME }}
+          TEST_FT_TELEGRAM_BOT_USERNAME: ${{ vars.TEST_FT_TELEGRAM_BOT_USERNAME }}
+          FT_TELEGRAM_BOT_TOKEN: ${{ secrets.FT_TELEGRAM_BOT_TOKEN }}
+          TEST_FT_TELEGRAM_BOT_TOKEN: ${{ secrets.TEST_FT_TELEGRAM_BOT_TOKEN }}
+          FT_TELEGRAM_WEBHOOK_URL: ${{ vars.FT_TELEGRAM_WEBHOOK_URL }}
+          TEST_FT_TELEGRAM_WEBHOOK_URL: ${{ vars.TEST_FT_TELEGRAM_WEBHOOK_URL }}
+          FT_TELEGRAM_WEBHOOK_SECRET: ${{ secrets.FT_TELEGRAM_WEBHOOK_SECRET }}
+          TEST_FT_TELEGRAM_WEBHOOK_SECRET: ${{ secrets.TEST_FT_TELEGRAM_WEBHOOK_SECRET }}
+          FT_TELEGRAM_POLLING_ENABLED: ${{ vars.FT_TELEGRAM_POLLING_ENABLED }}
+          TEST_FT_TELEGRAM_POLLING_ENABLED: ${{ vars.TEST_FT_TELEGRAM_POLLING_ENABLED }}
+          # --- Push Notifications ---
+          FT_PUSH_ENABLED: ${{ vars.FT_PUSH_ENABLED }}
+          TEST_FT_PUSH_ENABLED: ${{ vars.TEST_FT_PUSH_ENABLED }}
+          FT_PUSH_VAPID_PUBLIC_KEY: ${{ vars.FT_PUSH_VAPID_PUBLIC_KEY }}
+          TEST_FT_PUSH_VAPID_PUBLIC_KEY: ${{ vars.TEST_FT_PUSH_VAPID_PUBLIC_KEY }}
+          FT_PUSH_FIREBASE_API_KEY: ${{ secrets.FT_PUSH_FIREBASE_API_KEY }}
+          TEST_FT_PUSH_FIREBASE_API_KEY: ${{ secrets.TEST_FT_PUSH_FIREBASE_API_KEY }}
+          FT_PUSH_FIREBASE_AUTH_DOMAIN: ${{ vars.FT_PUSH_FIREBASE_AUTH_DOMAIN }}
+          TEST_FT_PUSH_FIREBASE_AUTH_DOMAIN: ${{ vars.TEST_FT_PUSH_FIREBASE_AUTH_DOMAIN }}
+          FT_PUSH_FIREBASE_PROJECT_ID: ${{ vars.FT_PUSH_FIREBASE_PROJECT_ID }}
+          TEST_FT_PUSH_FIREBASE_PROJECT_ID: ${{ vars.TEST_FT_PUSH_FIREBASE_PROJECT_ID }}
+          FT_PUSH_FIREBASE_STORAGE_BUCKET: ${{ vars.FT_PUSH_FIREBASE_STORAGE_BUCKET }}
+          TEST_FT_PUSH_FIREBASE_STORAGE_BUCKET: ${{ vars.TEST_FT_PUSH_FIREBASE_STORAGE_BUCKET }}
+          FT_PUSH_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.FT_PUSH_FIREBASE_MESSAGING_SENDER_ID }}
+          TEST_FT_PUSH_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.TEST_FT_PUSH_FIREBASE_MESSAGING_SENDER_ID }}
+          FT_PUSH_FIREBASE_APP_ID: ${{ vars.FT_PUSH_FIREBASE_APP_ID }}
+          TEST_FT_PUSH_FIREBASE_APP_ID: ${{ vars.TEST_FT_PUSH_FIREBASE_APP_ID }}
+          FT_PUSH_FIREBASE_MEASUREMENT_ID: ${{ vars.FT_PUSH_FIREBASE_MEASUREMENT_ID }}
+          TEST_FT_PUSH_FIREBASE_MEASUREMENT_ID: ${{ vars.TEST_FT_PUSH_FIREBASE_MEASUREMENT_ID }}
+          FT_PUSH_FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FT_PUSH_FIREBASE_SERVICE_ACCOUNT_JSON }}
+          TEST_FT_PUSH_FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.TEST_FT_PUSH_FIREBASE_SERVICE_ACCOUNT_JSON }}
+          # --- Backup Defaults ---
+          FT_BACKUP_ENABLED: ${{ vars.FT_BACKUP_ENABLED }}
+          TEST_FT_BACKUP_ENABLED: ${{ vars.TEST_FT_BACKUP_ENABLED }}
+          FT_BACKUP_PROVIDER: ${{ vars.FT_BACKUP_PROVIDER }}
+          TEST_FT_BACKUP_PROVIDER: ${{ vars.TEST_FT_BACKUP_PROVIDER }}
+          FT_BACKUP_SCHEDULE_TIME: ${{ vars.FT_BACKUP_SCHEDULE_TIME }}
+          TEST_FT_BACKUP_SCHEDULE_TIME: ${{ vars.TEST_FT_BACKUP_SCHEDULE_TIME }}
+          FT_BACKUP_RETENTION_DAYS: ${{ vars.FT_BACKUP_RETENTION_DAYS }}
+          TEST_FT_BACKUP_RETENTION_DAYS: ${{ vars.TEST_FT_BACKUP_RETENTION_DAYS }}
+          FT_BACKUP_DESTINATION: ${{ vars.FT_BACKUP_DESTINATION }}
+          TEST_FT_BACKUP_DESTINATION: ${{ vars.TEST_FT_BACKUP_DESTINATION }}
+          # --- Logging and Scheduler ---
+          FT_LOG_LEVEL: ${{ vars.FT_LOG_LEVEL }}
+          TEST_FT_LOG_LEVEL: ${{ vars.TEST_FT_LOG_LEVEL }}
+          FT_DEBUG_LOG: ${{ vars.FT_DEBUG_LOG }}
+          TEST_FT_DEBUG_LOG: ${{ vars.TEST_FT_DEBUG_LOG }}
+          PORT: ${{ vars.PORT }}
+          TEST_PORT: ${{ vars.TEST_PORT }}
+          FT_APP_PORT: ${{ vars.FT_APP_PORT }}
+          TEST_FT_APP_PORT: ${{ vars.TEST_FT_APP_PORT }}
+          FT_SCHEDULER_ENABLED: ${{ vars.FT_SCHEDULER_ENABLED }}
+          TEST_FT_SCHEDULER_ENABLED: ${{ vars.TEST_FT_SCHEDULER_ENABLED }}
+          FT_SETTINGS_CACHE_SECONDS: ${{ vars.FT_SETTINGS_CACHE_SECONDS }}
+          TEST_FT_SETTINGS_CACHE_SECONDS: ${{ vars.TEST_FT_SETTINGS_CACHE_SECONDS }}
+          FT_LOG_DIR: ${{ vars.FT_LOG_DIR }}
+          TEST_FT_LOG_DIR: ${{ vars.TEST_FT_LOG_DIR }}
+          FT_LOG_FILE: ${{ vars.FT_LOG_FILE }}
+          TEST_FT_LOG_FILE: ${{ vars.TEST_FT_LOG_FILE }}
+          FT_AUDIT_LOG_FILE: ${{ vars.FT_AUDIT_LOG_FILE }}
+          TEST_FT_AUDIT_LOG_FILE: ${{ vars.TEST_FT_AUDIT_LOG_FILE }}
+          FT_TELEGRAM_LOG_FILE: ${{ vars.FT_TELEGRAM_LOG_FILE }}
+          TEST_FT_TELEGRAM_LOG_FILE: ${{ vars.TEST_FT_TELEGRAM_LOG_FILE }}
+          FT_SCHEDULER_LOG_FILE: ${{ vars.FT_SCHEDULER_LOG_FILE }}
+          TEST_FT_SCHEDULER_LOG_FILE: ${{ vars.TEST_FT_SCHEDULER_LOG_FILE }}
+          FT_ERROR_LOG_FILE: ${{ vars.FT_ERROR_LOG_FILE }}
+          TEST_FT_ERROR_LOG_FILE: ${{ vars.TEST_FT_ERROR_LOG_FILE }}
+          FT_LOG_MAX_BYTES: ${{ vars.FT_LOG_MAX_BYTES }}
+          TEST_FT_LOG_MAX_BYTES: ${{ vars.TEST_FT_LOG_MAX_BYTES }}
+          FT_LOG_BACKUP_COUNT: ${{ vars.FT_LOG_BACKUP_COUNT }}
+          TEST_FT_LOG_BACKUP_COUNT: ${{ vars.TEST_FT_LOG_BACKUP_COUNT }}
+          SCHEDULER_RUN_TIME: ${{ vars.SCHEDULER_RUN_TIME }}
+          TEST_SCHEDULER_RUN_TIME: ${{ vars.TEST_SCHEDULER_RUN_TIME }}
+          FT_NOTIFICATION_ALERT_INTERVAL_SECONDS: ${{ vars.FT_NOTIFICATION_ALERT_INTERVAL_SECONDS }}
+          TEST_FT_NOTIFICATION_ALERT_INTERVAL_SECONDS: ${{ vars.TEST_FT_NOTIFICATION_ALERT_INTERVAL_SECONDS }}
+          # --- AI ---
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          TEST_OPENAI_API_KEY: ${{ secrets.TEST_OPENAI_API_KEY }}
+          # --- Docker Compose (test stack) ---
+          FT_PUBLIC_PORT: ${{ vars.FT_PUBLIC_PORT }}
+          TEST_FT_PUBLIC_PORT: ${{ vars.TEST_FT_PUBLIC_PORT }}
+          FT_MONGO_BIND: ${{ vars.FT_MONGO_BIND }}
+          TEST_FT_MONGO_BIND: ${{ vars.TEST_FT_MONGO_BIND }}
+          FT_MONGO_PORT: ${{ vars.FT_MONGO_PORT }}
+          TEST_FT_MONGO_PORT: ${{ vars.TEST_FT_MONGO_PORT }}
+          FT_MONGO_EXPRESS_BIND: ${{ vars.FT_MONGO_EXPRESS_BIND }}
+          TEST_FT_MONGO_EXPRESS_BIND: ${{ vars.TEST_FT_MONGO_EXPRESS_BIND }}
+          FT_MONGO_EXPRESS_PORT: ${{ vars.FT_MONGO_EXPRESS_PORT }}
+          TEST_FT_MONGO_EXPRESS_PORT: ${{ vars.TEST_FT_MONGO_EXPRESS_PORT }}
+          FT_MONGO_IMAGE_TAG: ${{ vars.FT_MONGO_IMAGE_TAG }}
+          TEST_FT_MONGO_IMAGE_TAG: ${{ vars.TEST_FT_MONGO_IMAGE_TAG }}
+          FT_MONGO_VOLUME: ${{ vars.FT_MONGO_VOLUME }}
+          TEST_FT_MONGO_VOLUME: ${{ vars.TEST_FT_MONGO_VOLUME }}
+          MONGO_INITDB_DATABASE: ${{ vars.MONGO_INITDB_DATABASE }}
+          TEST_MONGO_INITDB_DATABASE: ${{ vars.TEST_MONGO_INITDB_DATABASE }}
+          MONGO_INITDB_ROOT_USERNAME: ${{ vars.MONGO_INITDB_ROOT_USERNAME }}
+          TEST_MONGO_INITDB_ROOT_USERNAME: ${{ vars.TEST_MONGO_INITDB_ROOT_USERNAME }}
+          MONGO_INITDB_ROOT_PASSWORD: ${{ secrets.MONGO_INITDB_ROOT_PASSWORD }}
+          TEST_MONGO_INITDB_ROOT_PASSWORD: ${{ secrets.TEST_MONGO_INITDB_ROOT_PASSWORD }}
+          ME_CONFIG_MONGODB_SERVER: ${{ vars.ME_CONFIG_MONGODB_SERVER }}
+          TEST_ME_CONFIG_MONGODB_SERVER: ${{ vars.TEST_ME_CONFIG_MONGODB_SERVER }}
+          ME_CONFIG_MONGODB_PORT: ${{ vars.ME_CONFIG_MONGODB_PORT }}
+          TEST_ME_CONFIG_MONGODB_PORT: ${{ vars.TEST_ME_CONFIG_MONGODB_PORT }}
+          ME_CONFIG_BASICAUTH_USERNAME: ${{ vars.ME_CONFIG_BASICAUTH_USERNAME }}
+          TEST_ME_CONFIG_BASICAUTH_USERNAME: ${{ vars.TEST_ME_CONFIG_BASICAUTH_USERNAME }}
+          ME_CONFIG_BASICAUTH_PASSWORD: ${{ secrets.ME_CONFIG_BASICAUTH_PASSWORD }}
+          TEST_ME_CONFIG_BASICAUTH_PASSWORD: ${{ secrets.TEST_ME_CONFIG_BASICAUTH_PASSWORD }}
+          ME_CONFIG_OPTIONS_EDITORTHEME: ${{ vars.ME_CONFIG_OPTIONS_EDITORTHEME }}
+          TEST_ME_CONFIG_OPTIONS_EDITORTHEME: ${{ vars.TEST_ME_CONFIG_OPTIONS_EDITORTHEME }}
+        run: |
+          FINTRACKER_VERSION="${VERSION}-test" bash scripts/deploy/render_test_env.sh > "$RUNNER_TEMP/fintracker-test.env"
+
+      - name: Deploy to the test server
+        uses: ./.github/actions/test-deploy
+        with:
+          deploy-path: ${{ vars.TEST_DEPLOY_PATH }}
+          env-file: ${{ runner.temp }}/fintracker-test.env
+          service: ${{ vars.TEST_COMPOSE_SERVICE || vars.COMPOSE_SERVICE || 'fintracker' }}
+          compose-file: ${{ vars.TEST_COMPOSE_FILE || vars.COMPOSE_FILE || '' }}
+          server-host: ${{ secrets.TEST_SERVER_HOST }}
+          server-user: ${{ secrets.TEST_SERVER_USER }}
+          server-port: ${{ vars.TEST_SERVER_PORT || '22' }}
+          ssh-private-key: ${{ secrets.TEST_SSH_PRIVATE_KEY }}
+          ssh-known-hosts: ${{ secrets.TEST_SSH_KNOWN_HOSTS }}
+
+      - name: Remove local test .env copy
+        if: always()
+        run: rm -f "$RUNNER_TEMP/fintracker-test.env"
+
   open-pull-request:
     name: Open PR to Development
-    needs: [test, docker]
+    needs: [test, docker, build-test-image, deploy-test-server]
     if: >-
+      always() &&
+      needs.test.result == 'success' &&
+      needs.docker.result == 'success' &&
+      (needs.build-test-image.result == 'success' || needs.build-test-image.result == 'skipped') &&
+      (needs.deploy-test-server.result == 'success' || needs.deploy-test-server.result == 'skipped') &&
       github.event_name == 'push' && (
         startsWith(github.ref_name, 'feature/') ||
         startsWith(github.ref_name, 'fix/') ||
@@ -105,3 +422,60 @@ jobs:
     with:
       ci-result: ${{ needs.test.result }}
       docker-result: ${{ needs.docker.result }}
+      app-version: ${{ needs.build-test-image.outputs.version }}
+      test-image: ${{ needs.build-test-image.outputs.test-image }}
+      test-deploy-result: ${{ needs.deploy-test-server.result }}
+
+  notify-approval-email:
+    name: Send approval notification email
+    needs: [build-test-image, deploy-test-server, open-pull-request]
+    # Only the run that actually creates the PR emails -- an update to an already-open
+    # PR (e.g. a follow-up commit) does not re-send it (avoids duplicate emails).
+    if: >-
+      always() &&
+      needs.deploy-test-server.result == 'success' &&
+      needs.open-pull-request.result == 'success' &&
+      needs.open-pull-request.outputs.pr-action == 'created'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SMTP_HOST: ${{ secrets.CI_NOTIFY_SMTP_HOST }}
+      SMTP_PORT: ${{ secrets.CI_NOTIFY_SMTP_PORT }}
+      SMTP_USERNAME: ${{ secrets.CI_NOTIFY_SMTP_USERNAME }}
+      SMTP_PASSWORD: ${{ secrets.CI_NOTIFY_SMTP_PASSWORD }}
+      SMTP_FROM: ${{ secrets.CI_NOTIFY_SMTP_FROM }}
+      EMAIL_TO: ${{ vars.CI_NOTIFY_EMAIL_TO }}
+    steps:
+      - name: Check email configuration
+        id: check
+        run: |
+          if [ -n "$SMTP_HOST" ] && [ -n "$SMTP_PORT" ] && [ -n "$SMTP_USERNAME" ] && [ -n "$SMTP_PASSWORD" ] && [ -n "$SMTP_FROM" ] && [ -n "$EMAIL_TO" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Skipping approval email -- CI_NOTIFY_SMTP_* secrets / CI_NOTIFY_EMAIL_TO variable are not fully configured. See docs/CICD.md."
+          fi
+
+      - name: Send email
+        if: steps.check.outputs.configured == 'true'
+        uses: dawidd6/action-send-mail@67ce3558d613188179559c61d3565140cf389968 # v22
+        with:
+          server_address: ${{ secrets.CI_NOTIFY_SMTP_HOST }}
+          server_port: ${{ secrets.CI_NOTIFY_SMTP_PORT }}
+          username: ${{ secrets.CI_NOTIFY_SMTP_USERNAME }}
+          password: ${{ secrets.CI_NOTIFY_SMTP_PASSWORD }}
+          from: ${{ secrets.CI_NOTIFY_SMTP_FROM }}
+          to: ${{ vars.CI_NOTIFY_EMAIL_TO }}
+          subject: "FinTracker Test Deployment Ready — PR Approval Required"
+          body: |
+            FinTracker has been successfully deployed to the test environment.
+
+            Version: ${{ needs.build-test-image.outputs.version }}
+            Test image: ${{ needs.build-test-image.outputs.test-image }}
+            Branch: ${{ github.ref_name }}
+            Target: Development
+            Test deployment: SUCCESS
+
+            Please test the application and approve the Pull Request if validation is successful.
+
+            Pull request: ${{ needs.open-pull-request.outputs.pr-url }}

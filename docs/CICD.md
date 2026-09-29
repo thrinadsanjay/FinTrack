@@ -41,15 +41,58 @@ required check. To rebuild without a code change (e.g. base-image security patch
 
 | File | Trigger | What it does |
 |---|---|---|
-| `.github/workflows/ci.yml` | push to any branch except `Development`/`main`; PRs into `Development`; called by release | Secret-scan, `ruff`, `pytest`, dependency audit (informational), Docker build (not pushed). On `feature/`, `fix/`, `bugfix/`, `hotfix/`, `chore/` branches, when all pass, calls `pull-request.yml`. Uses **no secrets** (safe for fork PRs). |
-| `.github/workflows/pull-request.yml` | called by CI | Opens a PR `branch → Development` (or refreshes the existing one) with commits, changed files, CI and Docker build status. Never approves or merges. |
+| `.github/workflows/ci.yml` | push to any branch except `Development`/`main`; PRs into `Development`; called by release | `test`/`docker` jobs: lint, tests, Docker build (not pushed) -- use **no secrets** (safe for fork PRs). On `feature/`, `fix/`, `bugfix/`, `hotfix/`, `chore/` branches, when those pass, calls `pull-request.yml`. On a push to `fix/cicd` specifically, also: `build-test-image` (builds+pushes `<version>-test`), `deploy-test-server` (if `TEST_MODE=true`), `notify-approval-email` (once, when the PR is first created). See [Test pipeline](#test-pipeline). |
+| `.github/workflows/pull-request.yml` | called by CI | Opens a PR `branch → Development` (or refreshes the existing one) with commits, changed files, CI/Docker status and, when supplied, the test-deployment summary. Never approves or merges. |
 | `.github/workflows/release.yml` | push to `Development` touching image content (see above); manual | Guard → CI gate → version → build & push → git tag → deploy → summary. Serialized (`concurrency: release-development`), never cancelled. |
 | `.github/workflows/publish-main.yml` | push to `Development` touching the deployment bundle; manual | Job `publish`: replaces `main`'s tree with `deploy/README.md` → `README.md`, `deploy/docker-compose.yml` → `docker-compose.yml`, `env.example`. Builds nothing. Job `sync-server` (only if `publish` actually changed `main`): assembles `.env` from Secrets/Variables and calls `sync-server` to clone/pull `main` on the server and `compose up -d` the full stack. |
 | `.github/workflows/rollback.yml` | manual (**Actions → Rollback FinTracker**) | Redeploys an existing version; optionally moves Docker Hub `latest` to it. Shares the release queue. |
 | `.github/actions/ssh-deploy/` | used by release & rollback | Strict host-key SSH; streams `scripts/deploy/remote_deploy.sh` to the server. Recreates only the `fintracker` service for one new image version (Docker or rootless Podman, auto-detected). |
 | `.github/actions/sync-server/` | used by `publish-main.yml` | Strict host-key SSH; writes the rendered `.env`, then streams `scripts/deploy/sync_server.sh` to clone/pull `main` and bring the **full stack** up (Docker or rootless Podman, auto-detected). |
+| `.github/actions/test-deploy/` | used by `ci.yml`'s `deploy-test-server` job | Strict host-key SSH; writes the rendered test `.env`, then streams `scripts/deploy/test_deploy.sh`. Unlike `sync-server`, it never clones/resets the test server's directory -- only `compose pull && compose up -d` against whatever compose file is already there. |
 
 Third-party actions are pinned to commit SHAs (tag noted in a comment).
+
+## Test pipeline
+
+`fix/cicd` is the test/CI branch (a real branch name, not a naming pattern -- picked because it already
+matches `ci.yml`'s existing `fix/` prefix gate for opening a PR). Pushing to it runs everything the CI job
+type normally does, plus:
+
+```
+fix/cicd push ─► test + docker (lint, tests, Docker build validation)
+              ─► build-test-image: current version (latest vX.Y.Z tag, NOT incremented) + "-test"
+                 ─► push automationbuilder/fintracker:<version>-test to Docker Hub
+              ─► deploy-test-server (only if repo Variable TEST_MODE = "true"):
+                 ─► render .env: TEST_<KEY> overrides <KEY> per app variable, TEST_SERVER_* required (no
+                    fallback to production server credentials)
+                 ─► SSH: write .env, `compose pull && compose up -d`, verify /health
+              ─► open-pull-request: create/update PR fix/cicd → Development (includes version, test
+                 image, test-deploy status in the body)
+              ─► notify-approval-email: only on the run that CREATES the PR (not on later updates)
+```
+
+* **Version:** the test image reuses the current production version number (the latest `vX.Y.Z` git tag)
+  with a `-test` suffix -- it is **not** incremented on every `fix/cicd` commit. Multiple commits before
+  approval just rebuild/replace the same `<version>-test` tag. The production version only advances in
+  `release.yml`, after an approved merge into `Development`.
+* **`TEST_MODE=false`** (or unset): builds and pushes the `-test` image, opens/updates the PR, but never
+  touches the test server, and no email is sent (matches the "First successful **test deployment**" gate
+  on the email).
+* **App variables** (`FT_*`, `MONGO_*`, `ME_CONFIG_*`, `OPENAI_API_KEY`, ...): `scripts/deploy/render_test_env.sh`
+  prefers `TEST_<KEY>` over `<KEY>` for every key `scripts/deploy/render_env.sh` (production) knows about,
+  falling back to the production value when no `TEST_` override exists. You only need to set `TEST_<KEY>`
+  where the test environment must actually differ (e.g. a separate test database) -- nothing else needs
+  duplicating. Which source each key resolved from (never the value) is logged in the run.
+* **Server credentials** (`TEST_SERVER_HOST`, `TEST_SERVER_USER`, `TEST_SSH_PRIVATE_KEY`,
+  `TEST_SSH_KNOWN_HOSTS`, `TEST_SERVER_PORT`, `TEST_DEPLOY_PATH`) do **not** fall back to the production
+  server secrets. If `TEST_MODE=true` and any are missing, `deploy-test-server` fails immediately with a
+  clear error rather than risking a test build reaching the production server.
+* **The test server already has a compose file** (same shape as `deploy/docker-compose.yml`) at
+  `TEST_DEPLOY_PATH`; nothing here overwrites it. The rendered `.env` sets `FINTRACKER_VERSION=<version>-test`,
+  so the existing `image: ...:${FINTRACKER_VERSION:-latest}` line resolves to the test tag without any
+  compose-file change -- the same mechanism production uses to pin a version.
+* **Approval:** `pull-request.yml` never merges. Manual review/approval of the PR is the promotion gate;
+  merging it into `Development` is what starts `release.yml` (unchanged -- see Versioning above).
 
 ## Versioning
 
@@ -84,6 +127,32 @@ Third-party actions are pinned to commit SHAs (tag noted in a comment).
 | `SSH_PRIVATE_KEY` | Private key (ed25519) whose public key is in the deploy user's `authorized_keys` |
 | `SSH_KNOWN_HOSTS` | **Additional, required.** The server's host key line(s) for strict host-key verification (see below). Without it the pipeline would have to disable host-key checking, which it refuses to do. |
 
+**Required only if `TEST_MODE=true`** (test-server infrastructure -- deliberately does **not** fall back to
+the production secrets above; see [Test pipeline](#test-pipeline)):
+
+| Name | Value |
+|---|---|
+| `TEST_SERVER_HOST` | Test server hostname or IP |
+| `TEST_SERVER_USER` | Test deployment user (not root) |
+| `TEST_SSH_PRIVATE_KEY` | Private key for the test server's deploy user |
+| `TEST_SSH_KNOWN_HOSTS` | Test server's host key line(s) (`ssh-keyscan`) |
+
+**Optional** (approval-notification email -- new for the test pipeline, no existing mechanism was found in
+the repo; the `FT_SMTP_*` keys are the *application's* own SMTP config, unrelated). If left unset,
+`notify-approval-email` logs a warning and skips sending rather than failing the run:
+
+| Name | Value |
+|---|---|
+| `CI_NOTIFY_SMTP_HOST` | SMTP server address |
+| `CI_NOTIFY_SMTP_PORT` | SMTP port (e.g. `465`) |
+| `CI_NOTIFY_SMTP_USERNAME` | SMTP auth username |
+| `CI_NOTIFY_SMTP_PASSWORD` | SMTP auth password / app password |
+| `CI_NOTIFY_SMTP_FROM` | `"FinTracker CI <ci@example.com>"` |
+
+**Optional per-key test overrides** for any app Secret in [App configuration](#app-configuration-env-on-the-server)
+(`FT_SESSION_SECRET`, `FT_GOOGLE_CLIENT_SECRET`, `FT_MONGO_URI`, ...): prefix with `TEST_`, e.g.
+`TEST_FT_SESSION_SECRET`, `TEST_FT_MONGO_URI`. Only needed where the test value must differ from production.
+
 ### Variables
 
 | Name | Value | Notes |
@@ -93,6 +162,13 @@ Third-party actions are pinned to commit SHAs (tag noted in a comment).
 | `SERVER_PORT` | `22` | default if unset |
 | `COMPOSE_SERVICE` | `fintracker` | optional; compose service name of the app |
 | `COMPOSE_FILE` | *(empty)* | optional; e.g. `docker-compose.prod.yml` if not the default name |
+| `TEST_MODE` | `true` / `false` | **test pipeline gate.** `false`/unset: build+push the `-test` image and open the PR, but never touch the test server. `true`: also deploy to and verify the test server. |
+| `TEST_DEPLOY_PATH` | e.g. `/opt/fintracker-test` | **required if `TEST_MODE=true`**: directory on the test server that already holds a compose file. No fallback to `DEPLOY_PATH`. |
+| `TEST_SERVER_PORT` | `22` | optional; default if unset |
+| `TEST_COMPOSE_SERVICE` | `fintracker` | optional; falls back to `COMPOSE_SERVICE`, then `fintracker` |
+| `TEST_COMPOSE_FILE` | *(empty)* | optional; falls back to `COMPOSE_FILE` |
+| `CI_NOTIFY_EMAIL_TO` | recipient address | required (with the `CI_NOTIFY_SMTP_*` secrets above) for the approval email |
+| `TEST_<KEY>` | — | optional per-key test override for any app Variable, e.g. `TEST_FT_BASE_URL`, `TEST_FT_MONGO_DB_NAME` |
 
 ### App configuration (`.env` on the server)
 
