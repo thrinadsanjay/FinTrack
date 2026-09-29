@@ -2,8 +2,11 @@
 
 GitHub Actions builds, versions and publishes the FinTracker image to Docker Hub, then deploys it to the
 server over SSH. Code lives on `Development`; the `main` branch holds only the deployment bundle
-(`README.md`, `docker-compose.yml`, `env.example`), which the server clones. The pipeline never edits
-files on the server.
+(`README.md`, `docker-compose.yml`, `env.example`), which the server clones (or updates) automatically.
+The server's `.env` is generated on every publish from GitHub Secrets/Variables — one per key in
+`env.example` (see [Secrets](#secrets) / [Variables](#variables) below) — so nothing is hand-edited on the
+server. The compose step auto-detects the container engine and works with either Docker or rootless
+Podman.
 
 ```
 feature/* push ──► CI (lint · tests · Docker build) ──► auto PR  feature/* → Development
@@ -18,6 +21,8 @@ Release FinTracker:  merged-PR guard ─► CI gate ─► next version (git tag
 
 Publish bundle:      deploy/README.md, deploy/docker-compose.yml, env.example changed on Development
                      ─► main = exactly those 3 files (no image is built)
+                     ─► sync-server: assemble .env from Secrets/Variables ─► SSH ─► clone/pull main
+                        on the server ─► compose up -d (Docker or rootless Podman, auto-detected)
 ```
 
 ### What triggers what
@@ -39,9 +44,10 @@ required check. To rebuild without a code change (e.g. base-image security patch
 | `.github/workflows/ci.yml` | push to any branch except `Development`/`main`; PRs into `Development`; called by release | Secret-scan, `ruff`, `pytest`, dependency audit (informational), Docker build (not pushed). On `feature/`, `fix/`, `bugfix/`, `hotfix/`, `chore/` branches, when all pass, calls `pull-request.yml`. Uses **no secrets** (safe for fork PRs). |
 | `.github/workflows/pull-request.yml` | called by CI | Opens a PR `branch → Development` (or refreshes the existing one) with commits, changed files, CI and Docker build status. Never approves or merges. |
 | `.github/workflows/release.yml` | push to `Development` touching image content (see above); manual | Guard → CI gate → version → build & push → git tag → deploy → summary. Serialized (`concurrency: release-development`), never cancelled. |
-| `.github/workflows/publish-main.yml` | push to `Development` touching the deployment bundle; manual | Replaces `main`'s tree with `deploy/README.md` → `README.md`, `deploy/docker-compose.yml` → `docker-compose.yml`, `env.example`. Builds nothing. |
+| `.github/workflows/publish-main.yml` | push to `Development` touching the deployment bundle; manual | Job `publish`: replaces `main`'s tree with `deploy/README.md` → `README.md`, `deploy/docker-compose.yml` → `docker-compose.yml`, `env.example`. Builds nothing. Job `sync-server` (only if `publish` actually changed `main`): assembles `.env` from Secrets/Variables and calls `sync-server` to clone/pull `main` on the server and `compose up -d` the full stack. |
 | `.github/workflows/rollback.yml` | manual (**Actions → Rollback FinTracker**) | Redeploys an existing version; optionally moves Docker Hub `latest` to it. Shares the release queue. |
-| `.github/actions/ssh-deploy/` | used by release & rollback | Strict host-key SSH; streams `scripts/deploy/remote_deploy.sh` to the server. |
+| `.github/actions/ssh-deploy/` | used by release & rollback | Strict host-key SSH; streams `scripts/deploy/remote_deploy.sh` to the server. Recreates only the `fintracker` service for one new image version (Docker or rootless Podman, auto-detected). |
+| `.github/actions/sync-server/` | used by `publish-main.yml` | Strict host-key SSH; writes the rendered `.env`, then streams `scripts/deploy/sync_server.sh` to clone/pull `main` and bring the **full stack** up (Docker or rootless Podman, auto-detected). |
 
 Third-party actions are pinned to commit SHAs (tag noted in a comment).
 
@@ -87,6 +93,35 @@ Third-party actions are pinned to commit SHAs (tag noted in a comment).
 | `SERVER_PORT` | `22` | default if unset |
 | `COMPOSE_SERVICE` | `fintracker` | optional; compose service name of the app |
 | `COMPOSE_FILE` | *(empty)* | optional; e.g. `docker-compose.prod.yml` if not the default name |
+
+### App configuration (`.env` on the server)
+
+`sync-server` (in `publish-main.yml`) renders the server's `.env` from one Secret or Variable per key in
+`env.example` — same name, no prefix. `scripts/deploy/render_env.sh` is the source of truth for the exact
+key list and order; the table below classifies each as a **Secret** (credential/token) or a **Variable**
+(plain config). A key with nothing configured for it renders empty, which `docker-compose.yml`'s
+`${VAR:-default}` substitution treats the same as unset. Any of these can be skipped if you're happy with
+the compose file's built-in default.
+
+| Secrets (credentials/tokens) | Variables (plain config) |
+|---|---|
+| `FT_SESSION_SECRET` | `FT_ENV`, `FT_APP_NAME`, `FT_APP_VERSION`, `FT_BASE_URL`, `FT_EXTERNAL_PASSWORD_RESET_URL` |
+| `FT_GOOGLE_CLIENT_SECRET` | `FT_GOOGLE_CLIENT_ID`, `FT_GOOGLE_ADMIN_EMAILS`, `FT_AUTH_ENABLED`, `FT_AUTH_PROVIDER`, `FT_AUTH_ALLOW_LOCAL_LOGIN` |
+| `FT_DEFAULT_ADMIN_PASSWORD` | `FT_DEFAULT_ADMIN_USERNAME`, `FT_DEFAULT_ADMIN_EMAIL` |
+| `FT_MONGO_URI` (may embed credentials) | `FT_MONGO_DB_NAME`, `FT_CERTS_DIR`, `FT_MONGO_TRANSACTIONS`, `FT_DB_ENABLED` |
+| `FT_SMTP_PASSWORD` | `FT_APP_LOGO_URL`, `FT_SUPPORT_EMAIL`, `FT_SUPPORT_PHONE`, `FT_MAINTENANCE_MODE`, `FT_MAINTENANCE_MESSAGE`, `FT_SMTP_ENABLED`, `FT_SMTP_HOST`, `FT_SMTP_PORT`, `FT_SMTP_USERNAME`, `FT_SMTP_FROM`, `FT_SMTP_TLS` |
+| `FT_TELEGRAM_BOT_TOKEN` | `FT_TELEGRAM_ENABLED`, `FT_TELEGRAM_BOT_USERNAME`, `FT_TELEGRAM_WEBHOOK_URL`, `FT_TELEGRAM_POLLING_ENABLED` |
+| `FT_TELEGRAM_WEBHOOK_SECRET` | |
+| `FT_PUSH_FIREBASE_API_KEY` | `FT_PUSH_ENABLED`, `FT_PUSH_VAPID_PUBLIC_KEY`, `FT_PUSH_FIREBASE_AUTH_DOMAIN`, `FT_PUSH_FIREBASE_PROJECT_ID`, `FT_PUSH_FIREBASE_STORAGE_BUCKET`, `FT_PUSH_FIREBASE_MESSAGING_SENDER_ID`, `FT_PUSH_FIREBASE_APP_ID`, `FT_PUSH_FIREBASE_MEASUREMENT_ID` |
+| `FT_PUSH_FIREBASE_SERVICE_ACCOUNT_JSON` | `FT_BACKUP_ENABLED`, `FT_BACKUP_PROVIDER`, `FT_BACKUP_SCHEDULE_TIME`, `FT_BACKUP_RETENTION_DAYS`, `FT_BACKUP_DESTINATION` |
+| `OPENAI_API_KEY` | `FT_LOG_LEVEL`, `FT_DEBUG_LOG`, `PORT`, `FT_APP_PORT`, `FT_SCHEDULER_ENABLED`, `FT_SETTINGS_CACHE_SECONDS`, `FT_LOG_DIR`, `FT_LOG_FILE`, `FT_AUDIT_LOG_FILE`, `FT_TELEGRAM_LOG_FILE`, `FT_SCHEDULER_LOG_FILE`, `FT_ERROR_LOG_FILE`, `FT_LOG_MAX_BYTES`, `FT_LOG_BACKUP_COUNT`, `SCHEDULER_RUN_TIME`, `FT_NOTIFICATION_ALERT_INTERVAL_SECONDS` |
+| `MONGO_INITDB_ROOT_PASSWORD` | `FINTRACKER_VERSION`, `FT_PUBLIC_PORT`, `FT_MONGO_BIND`, `FT_MONGO_PORT`, `FT_MONGO_EXPRESS_BIND`, `FT_MONGO_EXPRESS_PORT`, `FT_MONGO_IMAGE_TAG`, `FT_MONGO_VOLUME`, `MONGO_INITDB_DATABASE`, `MONGO_INITDB_ROOT_USERNAME`, `ME_CONFIG_MONGODB_SERVER`, `ME_CONFIG_MONGODB_PORT`, `ME_CONFIG_BASICAUTH_USERNAME`, `ME_CONFIG_OPTIONS_EDITORTHEME` |
+| `ME_CONFIG_BASICAUTH_PASSWORD` | |
+
+Adding a new key to `env.example` means adding it in three places: `env.example` itself,
+`scripts/deploy/render_env.sh`, and the `env:` block of the `sync-server` job's *Assemble .env* step
+(GitHub Actions has no way to look up a secret/variable by a name built at runtime — each one is a
+literal reference).
 
 No credentials go into variables.
 
@@ -143,7 +178,14 @@ Also recommended: protect tags `v*` (Rules → Rulesets → Tag) so only Actions
 
 ## Server preparation (one time)
 
-As root / sudo on the server:
+`sync-server` now creates `DEPLOY_PATH` and clones `main` itself on first run and writes `.env` from
+GitHub Secrets/Variables, so steps 2's manual clone/`.env` copy are optional (useful for a sanity check,
+harmless if skipped — `sync_server.sh` clones into an empty/missing directory on its own).
+
+Pick **Docker** or **rootless Podman** for step 1, whichever the server already runs; both deploy scripts
+auto-detect the engine, so nothing else in the pipeline changes.
+
+### Option A — Docker
 
 ```bash
 # 1. Dedicated deploy user that can run Docker (docker group = root-equivalent; keep the key safe)
@@ -152,14 +194,38 @@ sudo usermod -aG docker deploy
 # login shell must be bash (the pipeline runs `bash -s`)
 sudo chsh -s /bin/bash deploy
 
-# 2. Deployment directory owned by deploy
-sudo mkdir -p /opt/fintracker
-sudo chown deploy:deploy /opt/fintracker
-# clone the deployment bundle (see deploy/README.md, published as main's README)
-sudo -u deploy git clone --depth 1 --branch main --single-branch https://github.com/thrinadsanjay/FinTrack.git /opt/fintracker
-sudo -u deploy cp /opt/fintracker/env.example /opt/fintracker/.env   # or copy your existing .env
+# 2. (Optional) pre-seed the deployment directory; sync-server clones it on first run otherwise
+sudo mkdir -p /opt/fintracker && sudo chown deploy:deploy /opt/fintracker
 
-# 3. SSH key for GitHub Actions (on your workstation)
+# 3. Sanity check as deploy
+sudo -u deploy -i bash -c 'docker compose version'
+```
+
+### Option B — Rootless Podman
+
+```bash
+# 1. Dedicated, unprivileged deploy user (no docker/sudo group needed)
+sudo adduser --disabled-password --gecos "" deploy
+sudo chsh -s /bin/bash deploy
+sudo loginctl enable-linger deploy   # user services (and the ssh session) survive without a login shell
+
+# 2. subuid/subgid ranges for rootless containers (usually added automatically on Debian/Ubuntu/Fedora;
+#    verify with `grep deploy /etc/subuid /etc/subgid` and add a range if missing)
+grep -q '^deploy:' /etc/subuid || echo "deploy:100000:65536" | sudo tee -a /etc/subuid
+grep -q '^deploy:' /etc/subgid || echo "deploy:100000:65536" | sudo tee -a /etc/subgid
+
+# 3. (Optional) pre-seed the deployment directory; sync-server clones it on first run otherwise
+sudo mkdir -p /opt/fintracker && sudo chown deploy:deploy /opt/fintracker
+
+# 4. Sanity check as deploy (needs a real login session for XDG_RUNTIME_DIR; podman-compose is an
+#    alternative if the podman version here has no built-in `compose` subcommand)
+sudo -u deploy -i bash -c 'podman compose version || podman-compose version'
+```
+
+### Both options
+
+```bash
+# SSH key for GitHub Actions (on your workstation)
 ssh-keygen -t ed25519 -C "github-actions-fintracker" -f fintracker_deploy -N ""
 # public key -> server
 sudo -u deploy mkdir -p ~deploy/.ssh && sudo -u deploy chmod 700 ~deploy/.ssh
@@ -167,17 +233,36 @@ cat fintracker_deploy.pub | sudo -u deploy tee -a ~deploy/.ssh/authorized_keys
 sudo -u deploy chmod 600 ~deploy/.ssh/authorized_keys
 # private key contents -> GitHub secret SSH_PRIVATE_KEY, then delete the local copy
 
-# 4. Host key for SSH_KNOWN_HOSTS — capture it, then verify the fingerprint on the server itself
+# Host key for SSH_KNOWN_HOSTS — capture it, then verify the fingerprint on the server itself
 ssh-keyscan -p 22 -t ed25519 <server-host>            # paste output into SSH_KNOWN_HOSTS
 ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub       # (on the server) fingerprints must match
-
-# 5. Sanity check as deploy
-sudo -u deploy -i bash -c 'docker compose version && cd /opt/fintracker && docker compose config --services'
 ```
 
 The image is public on Docker Hub only if the repository is public. For a **private** repository, log the
-deploy user in once with a *read-only* token: `sudo -u deploy docker login -u <user>` (the pipeline never
-sends Docker credentials to the server).
+deploy user in once with a *read-only* token (`sudo -u deploy docker login -u <user>` or
+`sudo -u deploy podman login -u <user> docker.io`); the pipeline never sends registry credentials to the
+server.
+
+### Autostart on boot
+
+This is a one-time, manual step (installing a systemd unit needs privileges the CI `deploy` user
+deliberately does not have — it is never part of the automated pipeline). `systemctl/fintracker-compose.service`
+is an engine-detecting template; `scripts/deploy/install_autostart.sh` installs it for whichever engine is
+present:
+
+```bash
+DEPLOY_PATH=/opt/fintracker DEPLOY_USER=deploy scripts/deploy/install_autostart.sh
+```
+
+* **Docker:** installs a *system* unit (`/etc/systemd/system/fintracker-compose.service`), run this with
+  `sudo`. Strictly optional — `docker.service` is enabled by default and every container already has
+  `restart: unless-stopped`, so Docker alone already recovers after a reboot. This unit just gives a
+  uniform `systemctl start|stop|status fintracker-compose` lever.
+* **Rootless Podman:** installs a *user* unit (`~deploy/.config/systemd/user/fintracker-compose.service`)
+  and runs `loginctl enable-linger deploy`. Run this **as** `deploy`, not root/sudo. This one is **required**:
+  rootless Podman has no persistent daemon of its own to bring containers back after a reboot, so without
+  linger + a user unit the stack stays down until someone logs in and runs `podman compose up -d` by hand.
+  Manage it with `systemctl --user status|restart|stop fintracker-compose` (as `deploy`).
 
 ## Server compose file
 
@@ -194,9 +279,10 @@ no `build:`. Change it on `Development` under `deploy/`; the server picks it up 
 
 ### `latest` and pulling
 
-`docker compose up -d` never re-downloads a tag that already exists locally, so a newer `latest` on Docker
-Hub is ignored until you pull. The automatic deploy handles this (it pulls the exact version and re-points
-the local `latest`). For manual updates always run:
+`compose up -d` never re-downloads a tag that already exists locally, so a newer `latest` on Docker Hub is
+ignored until you pull. The automatic deploy handles this (it pulls the exact version and re-points the
+local `latest`). For manual updates always run (`docker` shown; substitute `podman` / `podman-compose` on
+a rootless-Podman server):
 
 ```bash
 git pull && docker compose pull fintracker && docker compose up -d
@@ -205,16 +291,22 @@ git pull && docker compose pull fintracker && docker compose up -d
 The compose file deliberately has no `pull_policy: always`: after a failed deploy the script restores the
 previous image by re-pointing the local `latest`, and an always-pull would fetch the broken one again.
 
-What a deploy runs on the server (`scripts/deploy/remote_deploy.sh`):
+What a deploy runs on the server (`scripts/deploy/remote_deploy.sh`; `ENGINE` is `docker` or `podman`,
+auto-detected):
 
-1. `docker pull automationbuilder/fintracker:X.Y.Z` (exact version, not a moving tag)
-2. `docker tag …:X.Y.Z …:latest` (local pointer used by compose)
-3. `docker compose up -d --no-deps fintracker` — **only** the app container is recreated; MongoDB and
+1. `ENGINE pull automationbuilder/fintracker:X.Y.Z` (exact version, not a moving tag)
+2. `ENGINE tag …:X.Y.Z …:latest` (local pointer used by compose)
+3. `compose up -d --no-deps fintracker` — **only** the app container is recreated; MongoDB and
    other services are neither pulled nor restarted (so a `mongo:latest` image can't upgrade by accident)
-4. Verify for up to 180 s: container `running`, running image = new image, Docker health not `unhealthy`,
+4. Verify for up to 180 s: container `running`, running image = new image, health not `unhealthy`,
    and `/health` (queried inside the container) reports `X.Y.Z`
-5. On failure: print `docker compose ps` + last 100 log lines, **restore the previous image** so the site
+5. On failure: print `compose ps` + last 100 log lines, **restore the previous image** so the site
    stays up, and exit non-zero → the GitHub job fails.
+
+What a bundle sync runs on the server (`scripts/deploy/sync_server.sh`, called by `sync-server` after
+every successful publish to `main`): clone `main` into `DEPLOY_PATH` (first run) or `git fetch` + `reset
+--hard origin/main` (later runs; untracked files like `.env` and TLS certs are never touched), then
+`compose config` (fails fast on a bad `.env`) and `compose up -d` for the **full stack**.
 
 ## Database safety
 
@@ -255,8 +347,11 @@ What a deploy runs on the server (`scripts/deploy/remote_deploy.sh`):
 ## Assumptions
 
 * The server is `linux/amd64` (images are built for that platform; add `linux/arm64` in `release.yml` if needed).
-* The server has Docker Engine + Compose v2, and the deploy user's login shell is bash.
+* The server has **either** Docker Engine + Compose v2 **or** rootless Podman (`podman compose` or the
+  standalone `podman-compose`) — both deploy scripts probe for `docker` first, then fall back to `podman`.
+  The deploy user's login shell is bash either way (the pipeline runs `bash -s`).
 * The compose service is `fintracker`; the container has Python (it does — the app image) for the in-container health query.
 * `Development` is the only deployment target (environment name "Development"). `main` only carries the
-  deployment bundle and is written by `publish-main.yml`.
+  deployment bundle and is written by `publish-main.yml`; `sync-server` keeps the server's clone of it
+  current and brings the full stack up after every publish.
 * The dev stack in `docker/compose.yml` (local builds, `--reload`) is unrelated to deployment.

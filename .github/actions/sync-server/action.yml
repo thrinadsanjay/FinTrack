@@ -1,0 +1,115 @@
+name: Sync FinTracker deployment bundle to the server
+description: >
+  Streams a rendered .env file and scripts/deploy/sync_server.sh to the
+  deployment server over SSH (strict host-key checking). The server clones or
+  updates its copy of the `main` branch and runs `compose up -d` for the full
+  stack, using whichever container engine is available (Docker, or rootless
+  Podman). Secrets are passed as inputs by the caller and are never echoed.
+
+inputs:
+  repo-url:
+    description: HTTPS clone URL of the repository
+    required: true
+  git-ref:
+    description: Branch to clone/pull on the server
+    required: false
+    default: main
+  deploy-path:
+    description: Directory on the server that holds (or will hold) the clone
+    required: true
+  env-file:
+    description: Path (on the runner) to the rendered .env content to write to the server
+    required: true
+  compose-file:
+    description: Optional compose file name inside deploy-path (default docker compose lookup)
+    required: false
+    default: ""
+  server-host:
+    required: true
+  server-user:
+    required: true
+  server-port:
+    required: false
+    default: "22"
+  ssh-private-key:
+    required: true
+  ssh-known-hosts:
+    description: known_hosts line(s) for the server (from `ssh-keyscan`, verified out of band)
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Configure SSH (strict host-key checking)
+      shell: bash
+      env:
+        SSH_PRIVATE_KEY: ${{ inputs.ssh-private-key }}
+        SSH_KNOWN_HOSTS: ${{ inputs.ssh-known-hosts }}
+      run: |
+        set -euo pipefail
+        if [ -z "$SSH_PRIVATE_KEY" ] || [ -z "$SSH_KNOWN_HOSTS" ]; then
+          echo "::error::SSH_PRIVATE_KEY and SSH_KNOWN_HOSTS secrets are required"
+          exit 1
+        fi
+        install -m 700 -d "$HOME/.ssh"
+        umask 077
+        printf '%s\n' "$SSH_PRIVATE_KEY" > "$HOME/.ssh/fintracker_deploy"
+        printf '%s\n' "$SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+
+    - name: Write .env on the server
+      shell: bash
+      env:
+        ENV_FILE: ${{ inputs.env-file }}
+        DEPLOY_PATH: ${{ inputs.deploy-path }}
+        SERVER_HOST: ${{ inputs.server-host }}
+        SERVER_USER: ${{ inputs.server-user }}
+        SERVER_PORT: ${{ inputs.server-port }}
+      run: |
+        set -euo pipefail
+        [[ "$SERVER_PORT" =~ ^[0-9]+$ ]] || { echo "::error::SERVER_PORT must be numeric"; exit 1; }
+        [ -n "$DEPLOY_PATH" ] || { echo "::error::DEPLOY_PATH variable is not set"; exit 1; }
+        [ -s "$ENV_FILE" ] || { echo "::error::env-file '$ENV_FILE' is missing or empty"; exit 1; }
+
+        remote_env="$(printf 'DEPLOY_PATH=%q' "$DEPLOY_PATH")"
+        remote_script='set -euo pipefail; mkdir -p "$DEPLOY_PATH"; umask 077; cat > "$DEPLOY_PATH/.env.new"; mv "$DEPLOY_PATH/.env.new" "$DEPLOY_PATH/.env"'
+
+        ssh -i "$HOME/.ssh/fintracker_deploy" \
+            -p "$SERVER_PORT" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -o ConnectTimeout=20 \
+            "${SERVER_USER}@${SERVER_HOST}" \
+            "${remote_env} bash -c $(printf '%q' "$remote_script")" \
+            < "$ENV_FILE"
+
+    - name: Sync repo and bring the stack up
+      shell: bash
+      env:
+        REPO_URL: ${{ inputs.repo-url }}
+        GIT_REF: ${{ inputs.git-ref }}
+        DEPLOY_PATH: ${{ inputs.deploy-path }}
+        COMPOSE_FILE: ${{ inputs.compose-file }}
+        SERVER_HOST: ${{ inputs.server-host }}
+        SERVER_USER: ${{ inputs.server-user }}
+        SERVER_PORT: ${{ inputs.server-port }}
+      run: |
+        set -euo pipefail
+        remote_env="$(printf 'REPO_URL=%q GIT_REF=%q DEPLOY_PATH=%q COMPOSE_FILE=%q' \
+          "$REPO_URL" "$GIT_REF" "$DEPLOY_PATH" "$COMPOSE_FILE")"
+
+        ssh -i "$HOME/.ssh/fintracker_deploy" \
+            -p "$SERVER_PORT" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -o ConnectTimeout=20 \
+            -o ServerAliveInterval=15 \
+            "${SERVER_USER}@${SERVER_HOST}" \
+            "${remote_env} bash -s" \
+            < "$GITHUB_WORKSPACE/scripts/deploy/sync_server.sh"
+
+    - name: Remove SSH material
+      if: always()
+      shell: bash
+      run: rm -f "$HOME/.ssh/fintracker_deploy" "$HOME/.ssh/known_hosts"

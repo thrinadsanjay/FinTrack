@@ -10,7 +10,16 @@ This branch holds only what a server needs to run FinTracker:
 
 Application code lives on the `Development` branch. This branch is generated from it automatically. Don't edit it here: change `deploy/` or `env.example` on `Development` instead.
 
-## First-time setup
+**The clone and `.env` on the server are now managed automatically** by `.github/workflows/publish-main.yml`
+(job `sync-server`): every time this bundle changes, it renders `.env` from GitHub Secrets/Variables (see
+`docs/CICD.md`) and clones/pulls this branch on the server, then runs `compose up -d` for the full stack —
+detecting Docker or rootless Podman automatically. The steps below are for a manual first-time server
+setup, a manual re-run, or troubleshooting; they are no longer required for normal operation.
+
+## First-time setup (manual / reference)
+
+`docker compose` is shown below; on a server running rootless Podman instead, substitute
+`podman compose` (or the standalone `podman-compose`) throughout.
 
 ```sh
 git clone --depth 1 --branch main --single-branch https://github.com/thrinadsanjay/FinTrack.git /opt/fintracker

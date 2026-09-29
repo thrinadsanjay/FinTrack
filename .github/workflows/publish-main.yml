@@ -33,6 +33,8 @@ jobs:
     name: Sync bundle to main
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    outputs:
+      published: ${{ steps.commit.outputs.published }}
     steps:
       - name: Only publish from Development
         if: github.ref != 'refs/heads/Development'
@@ -69,6 +71,7 @@ jobs:
           git add README.md docker-compose.yml env.example
 
       - name: Commit and push
+        id: commit
         working-directory: main
         env:
           SRC_SHA: ${{ github.sha }}
@@ -76,6 +79,7 @@ jobs:
           set -euo pipefail
           if git diff --cached --quiet; then
             echo "main already matches Development ${SRC_SHA::7}; nothing to publish."
+            echo "published=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           git diff --cached --stat
@@ -83,12 +87,150 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -q -m "Deployment bundle from Development ${SRC_SHA::7}"
           git push origin HEAD:main
+          echo "published=true" >> "$GITHUB_OUTPUT"
           {
             echo "## Deployment bundle published to \`main\`"
             echo
-            echo "From Development \`${SRC_SHA::7}\`. On the server:"
+            echo "From Development \`${SRC_SHA::7}\`. The server is synced automatically by the"
+            echo "\`sync-server\` job below. To do it by hand instead:"
             echo
             echo '```sh'
             echo 'git pull && docker compose pull fintracker && docker compose up -d'
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  sync-server:
+    name: Sync bundle to the server
+    needs: publish
+    if: needs.publish.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: Development
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout (deploy scripts)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Assemble .env for the server
+        env:
+          # --- Core App ---
+          FT_ENV: ${{ vars.FT_ENV }}
+          FT_APP_NAME: ${{ vars.FT_APP_NAME }}
+          FT_APP_VERSION: ${{ vars.FT_APP_VERSION }}
+          FT_BASE_URL: ${{ vars.FT_BASE_URL }}
+          FT_SESSION_SECRET: ${{ secrets.FT_SESSION_SECRET }}
+          FT_EXTERNAL_PASSWORD_RESET_URL: ${{ vars.FT_EXTERNAL_PASSWORD_RESET_URL }}
+          # --- Authentication / Google OAuth ---
+          FT_GOOGLE_CLIENT_ID: ${{ vars.FT_GOOGLE_CLIENT_ID }}
+          FT_GOOGLE_CLIENT_SECRET: ${{ secrets.FT_GOOGLE_CLIENT_SECRET }}
+          FT_GOOGLE_ADMIN_EMAILS: ${{ vars.FT_GOOGLE_ADMIN_EMAILS }}
+          FT_AUTH_ENABLED: ${{ vars.FT_AUTH_ENABLED }}
+          FT_AUTH_PROVIDER: ${{ vars.FT_AUTH_PROVIDER }}
+          FT_AUTH_ALLOW_LOCAL_LOGIN: ${{ vars.FT_AUTH_ALLOW_LOCAL_LOGIN }}
+          # --- Bootstrap Admin ---
+          FT_DEFAULT_ADMIN_USERNAME: ${{ vars.FT_DEFAULT_ADMIN_USERNAME }}
+          FT_DEFAULT_ADMIN_PASSWORD: ${{ secrets.FT_DEFAULT_ADMIN_PASSWORD }}
+          FT_DEFAULT_ADMIN_EMAIL: ${{ vars.FT_DEFAULT_ADMIN_EMAIL }}
+          # --- Database ---
+          FT_MONGO_URI: ${{ secrets.FT_MONGO_URI }}
+          FT_MONGO_DB_NAME: ${{ vars.FT_MONGO_DB_NAME }}
+          FT_CERTS_DIR: ${{ vars.FT_CERTS_DIR }}
+          FT_MONGO_TRANSACTIONS: ${{ vars.FT_MONGO_TRANSACTIONS }}
+          FT_DB_ENABLED: ${{ vars.FT_DB_ENABLED }}
+          # --- Admin Application Defaults ---
+          FT_APP_LOGO_URL: ${{ vars.FT_APP_LOGO_URL }}
+          FT_SUPPORT_EMAIL: ${{ vars.FT_SUPPORT_EMAIL }}
+          FT_SUPPORT_PHONE: ${{ vars.FT_SUPPORT_PHONE }}
+          FT_MAINTENANCE_MODE: ${{ vars.FT_MAINTENANCE_MODE }}
+          FT_MAINTENANCE_MESSAGE: ${{ vars.FT_MAINTENANCE_MESSAGE }}
+          # --- SMTP ---
+          FT_SMTP_ENABLED: ${{ vars.FT_SMTP_ENABLED }}
+          FT_SMTP_HOST: ${{ vars.FT_SMTP_HOST }}
+          FT_SMTP_PORT: ${{ vars.FT_SMTP_PORT }}
+          FT_SMTP_USERNAME: ${{ vars.FT_SMTP_USERNAME }}
+          FT_SMTP_PASSWORD: ${{ secrets.FT_SMTP_PASSWORD }}
+          FT_SMTP_FROM: ${{ vars.FT_SMTP_FROM }}
+          FT_SMTP_TLS: ${{ vars.FT_SMTP_TLS }}
+          # --- Telegram ---
+          FT_TELEGRAM_ENABLED: ${{ vars.FT_TELEGRAM_ENABLED }}
+          FT_TELEGRAM_BOT_USERNAME: ${{ vars.FT_TELEGRAM_BOT_USERNAME }}
+          FT_TELEGRAM_BOT_TOKEN: ${{ secrets.FT_TELEGRAM_BOT_TOKEN }}
+          FT_TELEGRAM_WEBHOOK_URL: ${{ vars.FT_TELEGRAM_WEBHOOK_URL }}
+          FT_TELEGRAM_WEBHOOK_SECRET: ${{ secrets.FT_TELEGRAM_WEBHOOK_SECRET }}
+          FT_TELEGRAM_POLLING_ENABLED: ${{ vars.FT_TELEGRAM_POLLING_ENABLED }}
+          # --- Push Notifications ---
+          FT_PUSH_ENABLED: ${{ vars.FT_PUSH_ENABLED }}
+          FT_PUSH_VAPID_PUBLIC_KEY: ${{ vars.FT_PUSH_VAPID_PUBLIC_KEY }}
+          FT_PUSH_FIREBASE_API_KEY: ${{ secrets.FT_PUSH_FIREBASE_API_KEY }}
+          FT_PUSH_FIREBASE_AUTH_DOMAIN: ${{ vars.FT_PUSH_FIREBASE_AUTH_DOMAIN }}
+          FT_PUSH_FIREBASE_PROJECT_ID: ${{ vars.FT_PUSH_FIREBASE_PROJECT_ID }}
+          FT_PUSH_FIREBASE_STORAGE_BUCKET: ${{ vars.FT_PUSH_FIREBASE_STORAGE_BUCKET }}
+          FT_PUSH_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.FT_PUSH_FIREBASE_MESSAGING_SENDER_ID }}
+          FT_PUSH_FIREBASE_APP_ID: ${{ vars.FT_PUSH_FIREBASE_APP_ID }}
+          FT_PUSH_FIREBASE_MEASUREMENT_ID: ${{ vars.FT_PUSH_FIREBASE_MEASUREMENT_ID }}
+          FT_PUSH_FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FT_PUSH_FIREBASE_SERVICE_ACCOUNT_JSON }}
+          # --- Backup Defaults ---
+          FT_BACKUP_ENABLED: ${{ vars.FT_BACKUP_ENABLED }}
+          FT_BACKUP_PROVIDER: ${{ vars.FT_BACKUP_PROVIDER }}
+          FT_BACKUP_SCHEDULE_TIME: ${{ vars.FT_BACKUP_SCHEDULE_TIME }}
+          FT_BACKUP_RETENTION_DAYS: ${{ vars.FT_BACKUP_RETENTION_DAYS }}
+          FT_BACKUP_DESTINATION: ${{ vars.FT_BACKUP_DESTINATION }}
+          # --- Logging and Scheduler ---
+          FT_LOG_LEVEL: ${{ vars.FT_LOG_LEVEL }}
+          FT_DEBUG_LOG: ${{ vars.FT_DEBUG_LOG }}
+          PORT: ${{ vars.PORT }}
+          FT_APP_PORT: ${{ vars.FT_APP_PORT }}
+          FT_SCHEDULER_ENABLED: ${{ vars.FT_SCHEDULER_ENABLED }}
+          FT_SETTINGS_CACHE_SECONDS: ${{ vars.FT_SETTINGS_CACHE_SECONDS }}
+          FT_LOG_DIR: ${{ vars.FT_LOG_DIR }}
+          FT_LOG_FILE: ${{ vars.FT_LOG_FILE }}
+          FT_AUDIT_LOG_FILE: ${{ vars.FT_AUDIT_LOG_FILE }}
+          FT_TELEGRAM_LOG_FILE: ${{ vars.FT_TELEGRAM_LOG_FILE }}
+          FT_SCHEDULER_LOG_FILE: ${{ vars.FT_SCHEDULER_LOG_FILE }}
+          FT_ERROR_LOG_FILE: ${{ vars.FT_ERROR_LOG_FILE }}
+          FT_LOG_MAX_BYTES: ${{ vars.FT_LOG_MAX_BYTES }}
+          FT_LOG_BACKUP_COUNT: ${{ vars.FT_LOG_BACKUP_COUNT }}
+          SCHEDULER_RUN_TIME: ${{ vars.SCHEDULER_RUN_TIME }}
+          FT_NOTIFICATION_ALERT_INTERVAL_SECONDS: ${{ vars.FT_NOTIFICATION_ALERT_INTERVAL_SECONDS }}
+          # --- AI ---
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # --- Docker Compose (production stack) ---
+          FINTRACKER_VERSION: ${{ vars.FINTRACKER_VERSION }}
+          FT_PUBLIC_PORT: ${{ vars.FT_PUBLIC_PORT }}
+          FT_MONGO_BIND: ${{ vars.FT_MONGO_BIND }}
+          FT_MONGO_PORT: ${{ vars.FT_MONGO_PORT }}
+          FT_MONGO_EXPRESS_BIND: ${{ vars.FT_MONGO_EXPRESS_BIND }}
+          FT_MONGO_EXPRESS_PORT: ${{ vars.FT_MONGO_EXPRESS_PORT }}
+          FT_MONGO_IMAGE_TAG: ${{ vars.FT_MONGO_IMAGE_TAG }}
+          FT_MONGO_VOLUME: ${{ vars.FT_MONGO_VOLUME }}
+          MONGO_INITDB_DATABASE: ${{ vars.MONGO_INITDB_DATABASE }}
+          MONGO_INITDB_ROOT_USERNAME: ${{ vars.MONGO_INITDB_ROOT_USERNAME }}
+          MONGO_INITDB_ROOT_PASSWORD: ${{ secrets.MONGO_INITDB_ROOT_PASSWORD }}
+          ME_CONFIG_MONGODB_SERVER: ${{ vars.ME_CONFIG_MONGODB_SERVER }}
+          ME_CONFIG_MONGODB_PORT: ${{ vars.ME_CONFIG_MONGODB_PORT }}
+          ME_CONFIG_BASICAUTH_USERNAME: ${{ vars.ME_CONFIG_BASICAUTH_USERNAME }}
+          ME_CONFIG_BASICAUTH_PASSWORD: ${{ secrets.ME_CONFIG_BASICAUTH_PASSWORD }}
+          ME_CONFIG_OPTIONS_EDITORTHEME: ${{ vars.ME_CONFIG_OPTIONS_EDITORTHEME }}
+        run: bash scripts/deploy/render_env.sh > "$RUNNER_TEMP/fintracker.env"
+
+      - name: Sync repo and bring the stack up
+        uses: ./.github/actions/sync-server
+        with:
+          repo-url: ${{ github.server_url }}/${{ github.repository }}.git
+          git-ref: main
+          deploy-path: ${{ vars.DEPLOY_PATH }}
+          env-file: ${{ runner.temp }}/fintracker.env
+          compose-file: ${{ vars.COMPOSE_FILE || '' }}
+          server-host: ${{ secrets.SERVER_HOST }}
+          server-user: ${{ secrets.SERVER_USER }}
+          server-port: ${{ vars.SERVER_PORT || '22' }}
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          ssh-known-hosts: ${{ secrets.SSH_KNOWN_HOSTS }}
+
+      - name: Remove local .env copy
+        if: always()
+        run: rm -f "$RUNNER_TEMP/fintracker.env"

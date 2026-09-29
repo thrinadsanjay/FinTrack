@@ -2,10 +2,10 @@
 # Runs ON THE DEPLOYMENT SERVER (streamed over SSH by .github/actions/ssh-deploy).
 #
 # Deploys one immutable image version of the FinTracker service using the
-# server's own docker compose file (never modified here):
-#   1. docker pull  IMAGE:VERSION
-#   2. docker tag   IMAGE:VERSION -> IMAGE:latest   (local pointer the compose file uses)
-#   3. docker compose up -d --no-deps SERVICE        (only FinTracker is recreated)
+# server's own compose file (never modified here):
+#   1. ENGINE pull  IMAGE:VERSION                     (ENGINE is docker, or rootless podman)
+#   2. ENGINE tag   IMAGE:VERSION -> IMAGE:latest   (local pointer the compose file uses)
+#   3. compose up -d --no-deps SERVICE                (only FinTracker is recreated)
 #   4. verify: container running + /health reports VERSION
 #   5. on failure: logs, restore the previous image, exit non-zero
 #
@@ -31,17 +31,30 @@ HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-180}"
 [[ "$SERVICE" =~ ^[A-Za-z0-9._-]+$ ]] || die "SERVICE looks invalid: '$SERVICE'"
 [[ "$HEALTH_TIMEOUT" =~ ^[0-9]+$ ]] || die "HEALTH_TIMEOUT must be seconds"
 
-command -v docker >/dev/null || die "docker is not installed or not on PATH for $(id -un)"
-docker compose version >/dev/null 2>&1 || die "docker compose v2 plugin is required"
 [ -d "$DEPLOY_PATH" ] || die "DEPLOY_PATH does not exist: $DEPLOY_PATH"
 cd "$DEPLOY_PATH"
 
 # Compose files may reference ${FINTRACKER_VERSION}; plain ":latest" works too.
 export FINTRACKER_VERSION="$VERSION"
 
-compose() {
-  if [ -n "$COMPOSE_FILE" ]; then docker compose -f "$COMPOSE_FILE" "$@"; else docker compose "$@"; fi
-}
+# --- container engine / compose detection: Docker, or rootless Podman ---
+if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+  ENGINE=docker
+  docker compose version >/dev/null 2>&1 || die "docker is present but the compose v2 plugin is missing"
+  compose() { if [ -n "$COMPOSE_FILE" ]; then docker compose -f "$COMPOSE_FILE" "$@"; else docker compose "$@"; fi; }
+elif command -v podman >/dev/null 2>&1; then
+  ENGINE=podman
+  if podman compose version >/dev/null 2>&1; then
+    compose() { if [ -n "$COMPOSE_FILE" ]; then podman compose -f "$COMPOSE_FILE" "$@"; else podman compose "$@"; fi; }
+  elif command -v podman-compose >/dev/null 2>&1; then
+    compose() { if [ -n "$COMPOSE_FILE" ]; then podman-compose -f "$COMPOSE_FILE" "$@"; else podman-compose "$@"; fi; }
+  else
+    die "podman is installed but no compose implementation (podman compose / podman-compose) was found"
+  fi
+else
+  die "neither docker nor podman is installed or usable for $(id -un)"
+fi
+log "Using container engine: ${ENGINE}"
 
 compose config --services | grep -qx "$SERVICE" \
   || die "service '$SERVICE' not found in the compose file in $DEPLOY_PATH"
@@ -55,18 +68,18 @@ prev_cid="$(container_id || true)"
 prev_image_id=""
 prev_version="none"
 if [ -n "$prev_cid" ]; then
-  prev_image_id="$(docker inspect --format '{{.Image}}' "$prev_cid" 2>/dev/null || true)"
-  prev_version="$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' "$prev_image_id" 2>/dev/null || true)"
+  prev_image_id="$($ENGINE inspect --format '{{.Image}}' "$prev_cid" 2>/dev/null || true)"
+  prev_version="$($ENGINE image inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' "$prev_image_id" 2>/dev/null || true)"
   prev_version="${prev_version:-unknown}"
 fi
 log "Currently running: ${prev_version}"
 
 log "Pulling ${IMAGE}:${VERSION}"
-docker pull --quiet "${IMAGE}:${VERSION}" >/dev/null || die "docker pull ${IMAGE}:${VERSION} failed"
-new_image_id="$(docker image inspect --format '{{.Id}}' "${IMAGE}:${VERSION}")"
+$ENGINE pull --quiet "${IMAGE}:${VERSION}" >/dev/null || die "$ENGINE pull ${IMAGE}:${VERSION} failed"
+new_image_id="$($ENGINE image inspect --format '{{.Id}}' "${IMAGE}:${VERSION}")"
 
-# Point the local :latest at the exact version being deployed (does not touch Docker Hub).
-docker tag "${IMAGE}:${VERSION}" "${IMAGE}:latest"
+# Point the local :latest at the exact version being deployed (does not touch the registry).
+$ENGINE tag "${IMAGE}:${VERSION}" "${IMAGE}:latest"
 
 log "Recreating service '${SERVICE}' (other services untouched)"
 compose up -d --no-deps "$SERVICE"
@@ -82,9 +95,9 @@ verify() {
   while [ "$SECONDS" -lt "$deadline" ]; do
     cid="$(container_id || true)"
     if [ -n "$cid" ]; then
-      state="$(docker inspect --format '{{.State.Status}}' "$cid" 2>/dev/null || echo missing)"
-      image_id="$(docker inspect --format '{{.Image}}' "$cid" 2>/dev/null || echo "")"
-      health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid" 2>/dev/null || echo none)"
+      state="$($ENGINE inspect --format '{{.State.Status}}' "$cid" 2>/dev/null || echo missing)"
+      image_id="$($ENGINE inspect --format '{{.Image}}' "$cid" 2>/dev/null || echo "")"
+      health="$($ENGINE inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid" 2>/dev/null || echo none)"
       if [ "$state" = "exited" ] || [ "$state" = "dead" ]; then
         log "Container ${state}."
         return 1
@@ -116,7 +129,7 @@ compose logs --no-color --tail=100 "$SERVICE" || true
 
 if [ "$AUTO_ROLLBACK" = "true" ] && [ -n "$prev_image_id" ] && [ "$prev_image_id" != "$new_image_id" ]; then
   log "Restoring previous version (${prev_version}) so the service stays up"
-  docker tag "$prev_image_id" "${IMAGE}:latest"
+  $ENGINE tag "$prev_image_id" "${IMAGE}:latest"
   if [[ "$prev_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     export FINTRACKER_VERSION="$prev_version"
   else
