@@ -87,6 +87,7 @@ runs:
           "$IMAGE" "$VERSION" "$DEPLOY_PATH" "$SERVICE" "$COMPOSE_FILE" "$AUTO_ROLLBACK")"
 
         set +e
+        # TEMPORARY while testing -- set StrictHostKeyChecking back to "yes" before production use
         ssh -i "$HOME/.ssh/fintracker_deploy" \
             -p "$SERVER_PORT" \
             -o BatchMode=yes \
