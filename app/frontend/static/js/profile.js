@@ -136,13 +136,19 @@
     var passkeyCount = Number((controls && controls.getAttribute("data-passkey-count")) || "0") || 0;
     var biometricEnabled = String((controls && controls.getAttribute("data-biometric-enabled")) || "true") === "true";
 
+    var manageRow = root.querySelector("[data-passkey-manage]");
+
     function updateCount(count) {
       passkeyCount = Number(count) || 0;
       if (countText) {
-        countText.textContent =
-          passkeyCount + " passkey" + (passkeyCount === 1 ? "" : "s");
-        countText.classList.toggle("ft-badge--positive", passkeyCount > 0);
+        countText.textContent = passkeyCount > 0
+          ? passkeyCount + " passkey" + (passkeyCount === 1 ? "" : "s")
+          : "Not registered";
+        // Green only when biometric sign-in is actually on; amber when registered but off.
+        countText.classList.toggle("ft-badge--positive", passkeyCount > 0 && biometricEnabled);
+        countText.classList.toggle("ft-badge--warning", passkeyCount > 0 && !biometricEnabled);
       }
+      if (manageRow) manageRow.hidden = passkeyCount <= 0;
       if (deleteAllBtn) deleteAllBtn.disabled = passkeyCount <= 0;
       trigger.disabled = false;
     }
@@ -156,7 +162,7 @@
       var label = document.querySelector("[data-biometric-controls] .prf-toggle__label");
       if (statusText) {
         if (passkeyCount <= 0) {
-          statusText.textContent = "Not registered — add a passkey before enabling biometric login.";
+          statusText.textContent = "Add a passkey to sign in with your device.";
         } else if (biometricEnabled) {
           statusText.textContent = "Biometric login is enabled.";
         } else {
@@ -315,13 +321,95 @@
     });
   });
 
-  /* Smooth-scroll to hash sections from the profile menu */
-  if (window.location.hash) {
-    var target = document.querySelector(window.location.hash);
-    if (target) {
-      setTimeout(function () {
-        target.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 60);
-    }
+  /* ---------------- Dialogs: password, Telegram, disable, delete, edit ---------------- */
+  var lastOpener = null;
+
+  function dialogFor(name) {
+    return root.querySelector('[data-dialog="' + name + '"]');
+  }
+
+  /* Never show a browser-autofilled password: blank the fields and re-mask them. */
+  function clearSensitive(dialog) {
+    var form = dialog.querySelector("form[data-clear-on-open]");
+    if (!form) return;
+    // By name, so fields revealed with the eye toggle (type="text") are cleared too.
+    form.querySelectorAll('input[name$="_password"]').forEach(function (input) {
+      input.value = "";
+      input.type = "password";
+    });
+    form.querySelectorAll("[data-toggle-password]").forEach(function (btn) {
+      btn.setAttribute("aria-label", "Show password");
+      var icon = btn.querySelector("i");
+      if (icon) icon.className = "fa-regular fa-eye";
+    });
+  }
+
+  function openDialog(name, opener) {
+    var dialog = dialogFor(name);
+    if (!dialog || typeof dialog.showModal !== "function") return;
+    lastOpener = opener || null;
+    clearSensitive(dialog);
+    dialog.showModal();
+    var first = dialog.querySelector("input:not([type=hidden]):not([disabled]), button:not([data-dialog-close])");
+    if (first) first.focus();
+  }
+
+  root.querySelectorAll("[data-dialog-open]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      openDialog(btn.getAttribute("data-dialog-open"), btn);
+    });
+  });
+
+  root.querySelectorAll("dialog[data-dialog]").forEach(function (dialog) {
+    dialog.querySelectorAll("[data-dialog-close]").forEach(function (btn) {
+      btn.addEventListener("click", function () { dialog.close(); });
+    });
+    // Click on the backdrop closes; Escape is native to <dialog>.
+    dialog.addEventListener("click", function (event) {
+      if (event.target === dialog) dialog.close();
+    });
+    dialog.addEventListener("close", function () {
+      clearSensitive(dialog);
+      var form = dialog.querySelector("form[data-confirm-form]");
+      if (form) {
+        form.reset();
+        syncConfirm(form);
+      }
+      if (lastOpener) lastOpener.focus();
+    });
+  });
+
+  /* Destructive actions stay disabled until the user explicitly confirms. */
+  function syncConfirm(form) {
+    var submit = form.querySelector("[data-confirm-submit]");
+    if (!submit) return;
+    var ok = true;
+    form.querySelectorAll("[data-confirm-check]").forEach(function (box) { ok = ok && box.checked; });
+    form.querySelectorAll("[data-confirm-text]").forEach(function (input) {
+      ok = ok && input.value.trim() === input.getAttribute("data-confirm-text");
+    });
+    submit.disabled = !ok;
+  }
+
+  root.querySelectorAll("form[data-confirm-form]").forEach(function (form) {
+    form.addEventListener("input", function () { syncConfirm(form); });
+    form.addEventListener("change", function () { syncConfirm(form); });
+    form.addEventListener("submit", function (event) {
+      syncConfirm(form);
+      var submit = form.querySelector("[data-confirm-submit]");
+      if (submit && submit.disabled) event.preventDefault();
+    });
+    syncConfirm(form);
+  });
+
+  /* Telegram disabled by the administrator: keep focusable (tooltip), never act. */
+  var tgDisabled = root.querySelector("[data-telegram-disabled]");
+  if (tgDisabled) {
+    tgDisabled.addEventListener("click", function (event) { event.preventDefault(); });
+  }
+
+  /* After Telegram OTP verification the page reloads to /profile#telegram. */
+  if (window.location.hash === "#telegram" && dialogFor("telegram")) {
+    openDialog("telegram");
   }
 })();

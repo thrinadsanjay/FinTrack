@@ -33,7 +33,7 @@
     </div>
   </article>
 
-  <article class="pln-panel">
+  <article class="pln-panel" id="sessions">
     <h2>Sessions</h2>
     <p class="pln-copy">{{ overview.session_count }} active · Last login {% if overview.last_login_at %}{{ overview.last_login_at | datetimeformat }}{% else %}—{% endif %}</p>
     {% for sess in overview.sessions %}

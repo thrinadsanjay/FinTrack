@@ -14,6 +14,10 @@
     >
       <i class="fa-solid fa-bars" aria-hidden="true"></i>
     </button>
+    <a class="ft-header__brand" href="/" aria-label="FinTracker home">
+      <img src="/static/icons/FinTracker_exact.svg" alt="" width="26" height="26">
+      <span>FinTracker</span>
+    </a>
     <button type="button" class="ft-header__search" data-search-open>
       <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
       <span>Search transactions, accounts, categories…</span>
@@ -125,6 +129,10 @@
         <span class="ft-avatar" aria-hidden="true">{{ avatar_letter }}</span>
         <span>{{ display_name }}</span>
         <i class="fa-solid fa-chevron-down ft-user-chip__caret" aria-hidden="true"></i>
+      </button>
+      {# Mobile: one avatar button opens the account sheet (Profile · Help · Theme · Logout). #}
+      <button type="button" class="ft-header__avatar" data-account-sheet-open aria-haspopup="dialog" aria-label="Account menu">
+        <span class="ft-avatar" aria-hidden="true">{{ avatar_letter }}</span>
       </button>
 
       <div class="ft-menu" data-profile-menu role="menu" hidden>

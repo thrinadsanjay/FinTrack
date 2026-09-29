@@ -57,18 +57,56 @@
       <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
       <input class="ft-input" id="search" name="search" value="{{ f.search or '' }}" placeholder="Search description, amount, account…">
     </div>
-    <select class="ft-select" id="account_id" name="account_id" aria-label="Account">
-      <option value="">All accounts</option>
-      {% for acc in accounts %}
-      <option value="{{ acc._id }}" {% if f.account_id == acc._id|string %}selected{% endif %}>{{ acc.name or acc.bank_name }}</option>
-      {% endfor %}
-    </select>
-    <input class="ft-input" id="date_from" name="date_from" type="date" lang="en-IN" value="{{ f.date_from or '' }}" aria-label="From date">
-    <input class="ft-input" id="date_to" name="date_to" type="date" lang="en-IN" value="{{ f.date_to or '' }}" aria-label="To date">
-    <button class="ft-btn ft-btn--secondary" type="submit">Filter</button>
-    {% if active_filter_count %}
-    <a class="ft-btn ft-btn--ghost" href="/transactions/list?view=list">Clear</a>
-    {% endif %}
+    {% set sheet_filters = [f.account_id, f.category_code, f.date_from, f.date_to] | select | list | length %}
+    {# Mobile: search stays inline; the rest opens as a bottom sheet. #}
+    <button type="button" class="ft-btn ft-btn--secondary txa-filter-btn" data-sheet-open="#txa-filters" aria-label="Filters{% if sheet_filters %}, {{ sheet_filters }} active{% endif %}">
+      <i class="fa-solid fa-sliders" aria-hidden="true"></i>
+      {% if sheet_filters %}<span class="txa-filter-btn__count">{{ sheet_filters }}</span>{% endif %}
+    </button>
+    {# Desktop: display:contents keeps these controls inline in the toolbar exactly as before. #}
+    <div class="txa-toolbar__more ft-sheet" id="txa-filters" hidden>
+      <div class="ft-sheet__backdrop" data-sheet-close></div>
+      <div class="ft-sheet__panel" role="dialog" aria-modal="true" aria-labelledby="txa-filters-title">
+        <span class="ft-sheet__grip" aria-hidden="true"></span>
+        <h2 class="ft-sheet__title" id="txa-filters-title">Filters</h2>
+        <div class="ft-field">
+          <label for="account_id" class="txa-sheet-label">Account</label>
+          <select class="ft-select" id="account_id" name="account_id" aria-label="Account">
+            <option value="">All accounts</option>
+            {% for acc in accounts %}
+            <option value="{{ acc._id }}" {% if f.account_id == acc._id|string %}selected{% endif %}>{{ acc.name or acc.bank_name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="ft-field">
+          <label for="category_code" class="txa-sheet-label">Category</label>
+          <select class="ft-select" id="category_code" name="category_code" aria-label="Category">
+            <option value="">All categories</option>
+            {% for code, name in filter_categories or [] %}
+            <option value="{{ code }}" {% if f.category_code == code %}selected{% endif %}>{{ name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="txa-filter-row">
+          <div class="ft-field">
+            <label for="date_from" class="txa-sheet-label">From</label>
+            <input class="ft-input" id="date_from" name="date_from" type="date" lang="en-IN" value="{{ f.date_from or '' }}" aria-label="From date">
+          </div>
+          <div class="ft-field">
+            <label for="date_to" class="txa-sheet-label">To</label>
+            <input class="ft-input" id="date_to" name="date_to" type="date" lang="en-IN" value="{{ f.date_to or '' }}" aria-label="To date">
+          </div>
+        </div>
+        <div class="ft-sheet__actions">
+          {% if active_filter_count %}
+          <a class="ft-btn ft-btn--ghost" href="/transactions/list?view=list">Clear</a>
+          {% else %}
+          <button type="button" class="ft-btn ft-btn--ghost" data-sheet-close>Cancel</button>
+          {% endif %}
+          <button class="ft-btn ft-btn--primary" type="submit">Apply</button>
+        </div>
+      </div>
+    </div>
   </form>
 
   <section class="txa-table-card">

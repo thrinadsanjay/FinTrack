@@ -10,6 +10,7 @@ from app.services.sessions import list_sessions, touch_session
 
 SECURITY_ACTIONS = (
     "LOGIN_SUCCESS",
+    "SESSION_REVOKED",
     "LOGIN_FAILED",
     "OAUTH_LOGIN_SUCCESS",
     "PASSKEY_LOGIN_SUCCESS",
@@ -83,13 +84,13 @@ async def get_security_overview(request, user_id: str) -> dict:
         "password": {
             "status": password_status,
             "has_password": has_password,
-            "manage_href": "/profile#security",
+            "manage_href": "/profile#password",
         },
         "passkey": {
             "status": passkey_status,
             "count": len(passkeys),
             "enabled": bool(user.get("biometric_enabled", True)) and bool(passkeys),
-            "manage_href": "/profile#security",
+            "manage_href": "/profile#password",
         },
         "google": {
             "status": "Enabled" if google_enabled else "Not connected",

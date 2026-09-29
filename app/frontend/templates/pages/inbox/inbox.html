@@ -1,0 +1,55 @@
+{% extends "base/base.html" %}
+{% block title %}Inbox · {{ FT_APP_NAME }}{% endblock %}
+
+{% block content %}
+<section class="ibx" data-inbox-center>
+  <header class="ibx-head">
+    <h1>Inbox</h1>
+    <button type="button" class="ft-btn ft-btn--ghost ft-btn--sm" data-ibx-read-all {% if not unread %}hidden{% endif %}>
+      <i class="fa-solid fa-check-double" aria-hidden="true"></i> Mark all read
+    </button>
+  </header>
+
+  {% if pending_review %}
+  <a class="ibx-review" href="/transaction-inbox">
+    <i class="fa-solid fa-file-invoice" aria-hidden="true"></i>
+    <span>
+      <strong>{{ pending_review }} transaction{% if pending_review != 1 %}s{% endif %} to review</strong>
+      <span>Imported from statements or SMS, waiting for approval</span>
+    </span>
+    <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+  </a>
+  {% endif %}
+
+  {% if items %}
+  <ul class="ibx-list" data-ibx-list>
+    {% for n in items %}
+    <li class="ibx-item{% if not n.is_read %} is-unread{% endif %}" data-ibx-id="{{ n.id }}">
+      <span class="ibx-item__dot" aria-hidden="true"></span>
+      <div>
+        <p class="ibx-item__title">{% if not n.is_read %}<span class="sr-only">Unread: </span>{% endif %}{{ n.title }}</p>
+        {% if n.message %}<p class="ibx-item__msg">{{ n.message }}</p>{% endif %}
+        {% if n.at %}<span class="ibx-item__time">{{ n.at | datetimeformat }}</span>{% endif %}
+      </div>
+      <div class="ibx-item__tools">
+        {% if not n.is_read %}
+        <button type="button" class="ibx-tool" data-ibx-read aria-label="Mark as read: {{ n.title }}" title="Mark as read"><i class="fa-solid fa-check" aria-hidden="true"></i></button>
+        {% endif %}
+        <button type="button" class="ibx-tool" data-ibx-dismiss aria-label="Dismiss: {{ n.title }}" title="Dismiss"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <div class="ibx-empty" data-ibx-empty {% if items %}hidden{% endif %}>
+    <i class="fa-solid fa-circle-check" aria-hidden="true"></i>
+    <strong>You're all caught up</strong>
+    <span>Alerts about bills, recurring payments and your accounts show up here.</span>
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/inbox-center.js?v={{ FT_APP_VERSION }}-ibx1" defer></script>
+{% endblock %}

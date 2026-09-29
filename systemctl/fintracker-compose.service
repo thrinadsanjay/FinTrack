@@ -1,0 +1,19 @@
+[Unit]
+Description=FinTracker compose stack (deploy/docker-compose.yml on `main`)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+__USER_LINE__
+WorkingDirectory=__DEPLOY_PATH__
+ExecStart=/bin/bash -c 'if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then exec docker compose up -d; elif podman compose version >/dev/null 2>&1; then exec podman compose up -d; elif command -v podman-compose >/dev/null 2>&1; then exec podman-compose up -d; else echo "no working compose implementation found" >&2; exit 1; fi'
+ExecStop=/bin/bash -c 'if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then exec docker compose down; elif podman compose version >/dev/null 2>&1; then exec podman compose down; elif command -v podman-compose >/dev/null 2>&1; then exec podman-compose down; else exit 0; fi'
+TimeoutStartSec=300
+Restart=no
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=__WANTED_BY__

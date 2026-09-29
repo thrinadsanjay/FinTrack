@@ -3,7 +3,7 @@ Health check endpoint.
 
 Used by:
 - Load balancers
-- Kubernetes liveness probes
+- Container HEALTHCHECK / deployment verification (reports the running version)
 - Monitoring systems
 
 Must remain:
@@ -14,9 +14,11 @@ Must remain:
 
 from fastapi import APIRouter
 
+from app.core.config import settings
+
 router = APIRouter()
 
 
 @router.get("/health")
 def health_check():
-    return {"Error": 200, "status": "ok"}
+    return {"Error": 200, "status": "ok", "version": settings.FT_APP_VERSION}

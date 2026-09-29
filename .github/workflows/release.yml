@@ -1,0 +1,251 @@
+name: Release FinTracker
+
+# Runs when a pull request is merged into Development:
+#   guard -> CI gate -> next version -> build & push image -> git tag -> deploy over SSH
+#
+# Only changes to what goes INTO the image start a release: the Dockerfile copies
+# requirements.txt and app/ only. README, docs, tests, workflows and the deployment
+# bundle (deploy/, env.example) never build an image; publish-main.yml publishes the
+# bundle to `main` instead. Run this workflow manually to force a rebuild
+# (e.g. to pick up base-image security patches).
+#
+# Versioning: git tags vMAJOR.MINOR.PATCH are the single source of truth.
+# Each release bumps PATCH of the highest tag. Nothing is committed back to
+# Development, so there is no CI loop and branch protection needs no bypass.
+on:
+  push:
+    branches:
+      - Development
+    paths:
+      - "app/**"
+      - "Dockerfile"
+      - ".dockerignore"
+      - "requirements.txt"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # One release at a time, in merge order. Never cancel a running release.
+  group: release-development
+  cancel-in-progress: false
+
+env:
+  DOCKER_IMAGE: ${{ vars.DOCKER_IMAGE || 'automationbuilder/fintracker' }}
+
+jobs:
+  guard:
+    name: Merged-PR guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      pr: ${{ steps.check.outputs.pr }}
+    steps:
+      - name: Only deploy commits that came from a merged pull request
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF}" != "refs/heads/Development" ]; then
+            echo "::error::Releases are built from Development only (this run is on ${GITHUB_REF})."
+            exit 1
+          fi
+          pr="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" \
+                --jq '[.[] | select(.merged_at != null and .base.ref == "Development")][0].number // empty')"
+          if [ -z "$pr" ]; then
+            echo "::error::${GITHUB_SHA::7} was pushed to Development without a merged pull request. Nothing is released or deployed; merge changes through a reviewed PR."
+            exit 1
+          fi
+          echo "pr=$pr" >> "$GITHUB_OUTPUT"
+          echo "Commit ${GITHUB_SHA::7} comes from merged PR #$pr"
+
+  ci:
+    name: CI gate
+    needs: guard
+    uses: ./.github/workflows/ci.yml
+
+  version:
+    name: Determine version
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      previous: ${{ steps.v.outputs.previous }}
+      rerun: ${{ steps.v.outputs.rerun }}
+    steps:
+      - name: Checkout (with tags)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Next patch version from git tags
+        id: v
+        run: |
+          set -euo pipefail
+          semver='^v[0-9]+\.[0-9]+\.[0-9]+$'
+          latest="$(git tag --list 'v*' --sort=-v:refname | grep -E "$semver" | head -n1 || true)"
+          # Re-running a release for the same commit reuses its version.
+          here="$(git tag --points-at HEAD --list 'v*' --sort=-v:refname | grep -E "$semver" | head -n1 || true)"
+          if [ -n "$here" ]; then
+            version="${here#v}"; rerun=true
+          elif [ -z "$latest" ]; then
+            version="1.0.0"; rerun=false
+          else
+            IFS=. read -r major minor patch <<< "${latest#v}"
+            version="${major}.${minor}.$((patch + 1))"; rerun=false
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "previous=${latest#v}" >> "$GITHUB_OUTPUT"
+          echo "rerun=$rerun" >> "$GITHUB_OUTPUT"
+          echo "Previous release: ${latest:-none}  ->  this release: v${version}$( [ "$rerun" = true ] && echo ' (re-run)')"
+
+  build:
+    name: Build & push image
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write # create the release tag after a successful push
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      RERUN: ${{ needs.version.outputs.rerun }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Refuse to overwrite an immutable version tag
+        id: exists
+        run: |
+          set -euo pipefail
+          if docker buildx imagetools inspect "${DOCKER_IMAGE}:${VERSION}" >/dev/null 2>&1; then
+            if [ "$RERUN" = "true" ]; then
+              echo "${DOCKER_IMAGE}:${VERSION} already published by an earlier run of this commit; reusing it."
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "::error::${DOCKER_IMAGE}:${VERSION} already exists on Docker Hub but no git tag v${VERSION} points at this commit. Refusing to overwrite an immutable tag."
+              exit 1
+            fi
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and push ${{ env.DOCKER_IMAGE }}:${{ env.VERSION }} + latest
+        if: steps.exists.outputs.skip != 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          build-args: |
+            APP_VERSION=${{ env.VERSION }}
+            VCS_REF=${{ github.sha }}
+          tags: |
+            ${{ env.DOCKER_IMAGE }}:${{ env.VERSION }}
+            ${{ env.DOCKER_IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Tag the release commit v${{ env.VERSION }}
+        if: env.RERUN != 'true'
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "v${VERSION}" -m "FinTracker ${VERSION}" "$GITHUB_SHA"
+          # Tags pushed with GITHUB_TOKEN do not trigger workflows (no loop).
+          git push origin "refs/tags/v${VERSION}"
+
+  deploy:
+    name: Deploy to server
+    needs: [guard, version, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: Development
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - name: Checkout (deploy script)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Deploy ${{ env.VERSION }}
+        id: ssh
+        uses: ./.github/actions/ssh-deploy
+        with:
+          version: ${{ env.VERSION }}
+          image: ${{ env.DOCKER_IMAGE }}
+          deploy-path: ${{ vars.DEPLOY_PATH }}
+          service: ${{ vars.COMPOSE_SERVICE || 'fintracker' }}
+          compose-file: ${{ vars.COMPOSE_FILE || '' }}
+          server-host: ${{ secrets.SERVER_HOST }}
+          server-user: ${{ secrets.SERVER_USER }}
+          server-port: ${{ vars.SERVER_PORT || '22' }}
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          ssh-known-hosts: ${{ secrets.SSH_KNOWN_HOSTS }}
+
+      - name: Release summary
+        env:
+          PREVIOUS: ${{ steps.ssh.outputs.previous-version }}
+          PR: ${{ needs.guard.outputs.pr }}
+        run: |
+          cat <<EOF
+          ========================================
+          FinTracker Deployment Successful
+          ========================================
+
+          Application Version: ${VERSION}
+
+          Docker Image:
+          ${DOCKER_IMAGE}:${VERSION}
+
+          Latest:
+          ${DOCKER_IMAGE}:latest
+
+          Environment:
+          Development
+
+          Deployment Server:
+          <masked>
+
+          Previously Running:
+          ${PREVIOUS:-unknown}
+
+          Deployment Status:
+          SUCCESS
+          ========================================
+          EOF
+          {
+            echo "## ✅ FinTracker ${VERSION} deployed"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Version | \`${VERSION}\` (git tag \`v${VERSION}\`) |"
+            echo "| Image | \`${DOCKER_IMAGE}:${VERSION}\` |"
+            echo "| Latest | \`${DOCKER_IMAGE}:latest\` → same image |"
+            echo "| Environment | Development |"
+            echo "| Server | _masked_ |"
+            echo "| Previously running | \`${PREVIOUS:-unknown}\` |"
+            echo "| Pull request | #${PR} |"
+            echo
+            echo "Roll back: **Actions → Rollback FinTracker → Run workflow** with \`${PREVIOUS:-<version>}\`."
+          } >> "$GITHUB_STEP_SUMMARY"

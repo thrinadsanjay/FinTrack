@@ -1,29 +1,30 @@
-<nav class="ft-mobile-nav" aria-label="Mobile">
-  <a class="ft-mobile-nav__link {% if active_page == 'dashboard' %}is-active{% endif %}" href="/">
-    <i class="fa-solid fa-chart-pie" aria-hidden="true"></i>
-    <span>Home</span>
+{# Mobile primary navigation: exactly five items. Everything else is reached from
+   the account sheet (Profile · Help · Theme · Admin · Logout) or contextually. #}
+{% set notifications = notifications | default([]) %}
+{% set nav_unread = notifications.unread_count if notifications.unread_count is defined else (notifications | selectattr("is_read", "equalto", false) | list | length) %}
+{% set on_tx = active_page in ['listtransactions', 'alltransactions', 'transactions'] and not request.query_params.get('add') %}
+<nav class="ft-mobile-nav" aria-label="Primary">
+  <a class="ft-mobile-nav__link {% if active_page == 'dashboard' %}is-active{% endif %}" href="/" {% if active_page == 'dashboard' %}aria-current="page"{% endif %}>
+    <i class="fa-solid fa-house" aria-hidden="true"></i>
+    <span>Dashboard</span>
   </a>
-  <a class="ft-mobile-nav__link {% if active_page == 'accounts' %}is-active{% endif %}" href="/accounts">
+  <a class="ft-mobile-nav__link {% if on_tx %}is-active{% endif %}" href="/transactions/list" {% if on_tx %}aria-current="page"{% endif %}>
+    <i class="fa-solid fa-right-left" aria-hidden="true"></i>
+    <span>Transactions</span>
+  </a>
+  <a class="ft-mobile-nav__link ft-mobile-nav__add" href="/transactions/list?add=1" data-mobile-add aria-label="Add transaction">
+    <span class="ft-mobile-nav__plus" aria-hidden="true"><i class="fa-solid fa-plus"></i></span>
+    <span>Add</span>
+  </a>
+  <a class="ft-mobile-nav__link {% if active_page == 'accounts' %}is-active{% endif %}" href="/accounts" {% if active_page == 'accounts' %}aria-current="page"{% endif %}>
     <i class="fa-solid fa-wallet" aria-hidden="true"></i>
     <span>Accounts</span>
   </a>
-  <a class="ft-mobile-nav__link {% if request.query_params.get('add') %}is-active{% endif %}" href="/transactions/list?add=1">
-    <i class="fa-solid fa-plus" aria-hidden="true"></i>
-    <span>Add</span>
-  </a>
-  <a class="ft-mobile-nav__link {% if active_page in ['inbox', 'transactioninbox'] %}is-active{% endif %}" href="/transaction-inbox">
-    <i class="fa-solid fa-inbox" aria-hidden="true"></i>
+  <a class="ft-mobile-nav__link {% if active_page in ['inbox_center', 'transactioninbox'] %}is-active{% endif %}" href="/notifications" {% if active_page == 'inbox_center' %}aria-current="page"{% endif %}>
+    <span class="ft-mobile-nav__icon">
+      <i class="fa-solid fa-inbox" aria-hidden="true"></i>
+      {% if nav_unread > 0 %}<span class="ft-mobile-nav__dot" aria-label="{{ nav_unread }} unread">{{ nav_unread if nav_unread < 100 else '99+' }}</span>{% endif %}
+    </span>
     <span>Inbox</span>
   </a>
-  {% if user and user.is_admin %}
-  <a class="ft-mobile-nav__link {% if active_page == 'admin' %}is-active{% endif %}" href="/admin">
-    <i class="fa-solid fa-shield-halved" aria-hidden="true"></i>
-    <span>Admin</span>
-  </a>
-  {% else %}
-  <a class="ft-mobile-nav__link {% if active_page == 'profile' %}is-active{% endif %}" href="/profile">
-    <i class="fa-solid fa-user" aria-hidden="true"></i>
-    <span>Profile</span>
-  </a>
-  {% endif %}
 </nav>

@@ -5,7 +5,7 @@ import html
 from contextlib import asynccontextmanager
 from zoneinfo import ZoneInfo
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, PlainTextResponse, HTMLResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST, REGISTRY
@@ -363,6 +363,17 @@ async def prometheus_middleware(request: Request, call_next):
     )
 
     return response
+
+@app.get("/sw.js", include_in_schema=False)
+async def service_worker():
+    # Served from the root so it can control the whole app (scope "/").
+    # no-cache: browsers must revalidate so a new worker version rolls out promptly.
+    return FileResponse(
+        "app/frontend/static/sw.js",
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"},
+    )
+
 
 @app.get("/metrics")
 def metrics():

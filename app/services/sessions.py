@@ -140,6 +140,42 @@ async def list_sessions(user_id: str, current_sid: str | None = None) -> list[di
     return rows
 
 
+async def is_sid_revoked(sid: str | None) -> bool:
+    """True if this cookie's server-side session was individually signed out."""
+    if not sid:
+        return False
+    if sid in _REVOKED_SIDS:
+        return True
+    rec = await db.auth_sessions.find_one({"sid": sid}, {"revoked_at": 1})
+    if rec and rec.get("revoked_at"):
+        _REVOKED_SIDS.add(sid)
+        return True
+    return False
+
+
+async def revoke_session(user_id: str, session_id: str, *, current_sid: str | None) -> bool:
+    """
+    Sign out one of the user's other sessions. The current session is refused
+    (use Logout for that). Returns False if the session isn't found/active.
+    """
+    if not ObjectId.is_valid(session_id):
+        return False
+    rec = await db.auth_sessions.find_one(
+        {"_id": ObjectId(session_id), "user_id": ObjectId(user_id), "revoked_at": None},
+        {"sid": 1},
+    )
+    if not rec:
+        return False
+    if current_sid and rec.get("sid") == current_sid:
+        raise ValueError("You can't sign out the session you're using. Use Logout instead.")
+    result = await db.auth_sessions.update_one(
+        {"_id": rec["_id"], "revoked_at": None},
+        {"$set": {"revoked_at": _now()}},
+    )
+    invalidate_session_cache(sid=rec.get("sid"))
+    return result.modified_count == 1
+
+
 async def revoke_other_sessions(request: Request, user_id: str) -> int:
     current_sid = request.session.get("sid")
     now = _now()

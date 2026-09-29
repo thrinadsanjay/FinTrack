@@ -1,0 +1,107 @@
+name: CI
+
+# Validation only. Uses no secrets, so it is safe for pull requests from forks.
+#  - push to any working branch  -> lint + tests + Docker build, then open/update a PR to Development
+#  - pull_request to Development -> lint + tests + Docker build (required status checks)
+#  - workflow_call               -> reused by release.yml as the pre-release gate
+on:
+  push:
+    branches-ignore:
+      - Development
+      - main
+  pull_request:
+    branches:
+      - Development
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # Superseded pushes to a working branch are cancelled; release gates are never cancelled.
+  cancel-in-progress: ${{ github.ref_name != 'Development' }}
+
+jobs:
+  test:
+    name: Lint & tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Block committed private keys / certs
+        run: |
+          set -euo pipefail
+          if git ls-files | grep -E '\.(key|pem|p12|pfx|csr|srl)$|(^|/)certs/'; then
+            echo "::error::Key/cert material is tracked in git. Mount it at runtime instead (see docker/compose.yml)."
+            exit 1
+          fi
+          pre-commit run detect-private-key --all-files
+
+      - name: Lint (ruff)
+        run: ruff check app tests --output-format=github
+
+      - name: Tests (pytest)
+        run: pytest -q
+
+      - name: Dependency audit (informational)
+        continue-on-error: true
+        run: pip-audit -r requirements.txt
+
+  docker:
+    name: Docker build
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build image (validation only, not pushed)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: false
+          platforms: linux/amd64
+          tags: fintracker:ci-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  open-pull-request:
+    name: Open PR to Development
+    needs: [test, docker]
+    if: >-
+      github.event_name == 'push' && (
+        startsWith(github.ref_name, 'feature/') ||
+        startsWith(github.ref_name, 'fix/') ||
+        startsWith(github.ref_name, 'bugfix/') ||
+        startsWith(github.ref_name, 'hotfix/') ||
+        startsWith(github.ref_name, 'chore/'))
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: ./.github/workflows/pull-request.yml
+    with:
+      ci-result: ${{ needs.test.result }}
+      docker-result: ${{ needs.docker.result }}

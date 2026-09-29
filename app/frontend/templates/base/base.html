@@ -14,12 +14,25 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link rel="stylesheet" href="/static/css/app.css?v={{ FT_APP_VERSION }}-dash32">
   {% block extra_css %}{% endblock %}
-  <meta name="theme-color" content="#b96f42">
+  {# Mobile-first layer (<900px only); loaded after page CSS so it can reshape them. #}
+  <link rel="stylesheet" href="/static/css/layout/mobile.css?v={{ FT_APP_VERSION }}-mob2">
+  <link rel="manifest" href="/static/manifest.json">
+  {# Matches the header surface (--ft-chrome) so the status bar blends in when installed. #}
+  <meta name="theme-color" content="#e9e0d4" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#151c24" media="(prefers-color-scheme: dark)">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="FinTracker">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <script>
     (function () {
       try {
+        // ft_theme: "light" | "dark" | "system" (follows the OS setting).
         var saved = localStorage.getItem("ft_theme");
         var theme = saved || "light";
+        if (theme === "system") {
+          theme = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        }
         document.documentElement.setAttribute("data-theme", theme);
       } catch (_e) {}
       try {
@@ -82,6 +95,15 @@
 
   {% include "layout/toast-stack.html" %}
   {% if current_user %}
+    {% with user=current_user %}
+      {% include "layout/account-sheet.html" %}
+    {% endwith %}
+  {% endif %}
+  <div class="ft-offline" data-offline-banner role="status" aria-live="polite" hidden>
+    <i class="fa-solid fa-wifi" aria-hidden="true"></i>
+    <span>You're offline. Nothing can be saved until you reconnect.</span>
+  </div>
+  {% if current_user %}
     {% set goal_prompt = pop_goal_prompt(request) %}
     {% if goal_prompt %}{% include "layout/goal-link-prompt.html" %}{% endif %}
   {% endif %}
@@ -90,6 +112,7 @@
   <script src="/static/js/format.js?v={{ FT_APP_VERSION }}-fmt4" defer></script>
   <script src="/static/js/app.js?v={{ FT_APP_VERSION }}-dash3" defer></script>
   <script src="/static/js/shell.js?v={{ FT_APP_VERSION }}-nav4" defer></script>
+  <script src="/static/js/mobile.js?v={{ FT_APP_VERSION }}-mob1" defer></script>
   <script src="/static/js/chat-widget.js?v={{ FT_APP_VERSION }}-assist9" defer></script>
   {% if current_user %}
   <script src="/static/js/search.js?v={{ FT_APP_VERSION }}-dash2" defer></script>
