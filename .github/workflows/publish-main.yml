@@ -102,7 +102,10 @@ jobs:
   sync-server:
     name: Sync bundle to the server
     needs: publish
-    if: needs.publish.outputs.published == 'true'
+    # Runs whenever the bundle actually changed, OR on a manual run regardless -- the
+    # latter is the only way to re-push .env after adding/editing a Secret or Variable
+    # without also touching the compose file (nothing else triggers this workflow then).
+    if: needs.publish.outputs.published == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment:
