@@ -1,0 +1,113 @@
+name: Deploy FinTracker test image to the test server
+description: >
+  Streams a rendered test .env and scripts/deploy/test_deploy.sh to the test
+  server over SSH. Unlike sync-server, this never clones or resets the test
+  server's directory -- it assumes the compose file is already there and only
+  pulls the "<version>-test" image tag (via the .env FINTRACKER_VERSION points
+  at) and recreates the stack. Secrets are passed as inputs and never echoed.
+
+inputs:
+  deploy-path:
+    description: Directory on the test server that already holds a compose file
+    required: true
+  env-file:
+    description: Path (on the runner) to the rendered test .env content to write
+    required: true
+  service:
+    description: Compose service name of the FinTracker container
+    required: false
+    default: fintracker
+  compose-file:
+    description: Optional compose file name inside deploy-path (default docker compose lookup)
+    required: false
+    default: ""
+  server-host:
+    required: true
+  server-user:
+    required: true
+  server-port:
+    required: false
+    default: "22"
+  ssh-private-key:
+    required: true
+  ssh-known-hosts:
+    description: known_hosts line(s) for the test server (from `ssh-keyscan`, verified out of band)
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Configure SSH (strict host-key checking)
+      shell: bash
+      env:
+        SSH_PRIVATE_KEY: ${{ inputs.ssh-private-key }}
+        SSH_KNOWN_HOSTS: ${{ inputs.ssh-known-hosts }}
+      run: |
+        set -euo pipefail
+        if [ -z "$SSH_PRIVATE_KEY" ] || [ -z "$SSH_KNOWN_HOSTS" ]; then
+          echo "::error::TEST_SSH_PRIVATE_KEY and TEST_SSH_KNOWN_HOSTS secrets are required"
+          exit 1
+        fi
+        install -m 700 -d "$HOME/.ssh"
+        umask 077
+        printf '%s\n' "$SSH_PRIVATE_KEY" > "$HOME/.ssh/fintracker_test_deploy"
+        printf '%s\n' "$SSH_KNOWN_HOSTS" > "$HOME/.ssh/test_known_hosts"
+
+    - name: Write test .env on the server
+      shell: bash
+      env:
+        ENV_FILE: ${{ inputs.env-file }}
+        DEPLOY_PATH: ${{ inputs.deploy-path }}
+        SERVER_HOST: ${{ inputs.server-host }}
+        SERVER_USER: ${{ inputs.server-user }}
+        SERVER_PORT: ${{ inputs.server-port }}
+      run: |
+        set -euo pipefail
+        [[ "$SERVER_PORT" =~ ^[0-9]+$ ]] || { echo "::error::TEST_SERVER_PORT must be numeric"; exit 1; }
+        [ -n "$DEPLOY_PATH" ] || { echo "::error::TEST_DEPLOY_PATH variable is not set"; exit 1; }
+        [ -s "$ENV_FILE" ] || { echo "::error::env-file '$ENV_FILE' is missing or empty"; exit 1; }
+
+        remote_env="$(printf 'DEPLOY_PATH=%q' "$DEPLOY_PATH")"
+        remote_script='set -euo pipefail; [ -d "$DEPLOY_PATH" ] || { echo "DEPLOY_PATH does not exist: $DEPLOY_PATH" >&2; exit 1; }; umask 077; cat > "$DEPLOY_PATH/.env.new"; mv "$DEPLOY_PATH/.env.new" "$DEPLOY_PATH/.env"'
+
+        # TEMPORARY while testing -- set StrictHostKeyChecking back to "yes" before production use
+        ssh -i "$HOME/.ssh/fintracker_test_deploy" \
+            -p "$SERVER_PORT" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile="$HOME/.ssh/test_known_hosts" \
+            -o ConnectTimeout=20 \
+            "${SERVER_USER}@${SERVER_HOST}" \
+            "${remote_env} bash -c $(printf '%q' "$remote_script")" \
+            < "$ENV_FILE"
+
+    - name: Pull the test image and recreate the stack
+      shell: bash
+      env:
+        DEPLOY_PATH: ${{ inputs.deploy-path }}
+        SERVICE: ${{ inputs.service }}
+        COMPOSE_FILE: ${{ inputs.compose-file }}
+        SERVER_HOST: ${{ inputs.server-host }}
+        SERVER_USER: ${{ inputs.server-user }}
+        SERVER_PORT: ${{ inputs.server-port }}
+      run: |
+        set -euo pipefail
+        remote_env="$(printf 'DEPLOY_PATH=%q SERVICE=%q COMPOSE_FILE=%q' \
+          "$DEPLOY_PATH" "$SERVICE" "$COMPOSE_FILE")"
+
+        # TEMPORARY while testing -- set StrictHostKeyChecking back to "yes" before production use
+        ssh -i "$HOME/.ssh/fintracker_test_deploy" \
+            -p "$SERVER_PORT" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile="$HOME/.ssh/test_known_hosts" \
+            -o ConnectTimeout=20 \
+            -o ServerAliveInterval=15 \
+            "${SERVER_USER}@${SERVER_HOST}" \
+            "${remote_env} bash -s" \
+            < "$GITHUB_WORKSPACE/scripts/deploy/test_deploy.sh"
+
+    - name: Remove SSH material
+      if: always()
+      shell: bash
+      run: rm -f "$HOME/.ssh/fintracker_test_deploy" "$HOME/.ssh/test_known_hosts"
