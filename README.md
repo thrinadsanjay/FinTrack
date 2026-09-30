@@ -204,9 +204,7 @@ FinTrack/
 ├── docker/
 │   └── compose.yml
 ├── systemctl/
-│   ├── FinTracker.service
-│   ├── FinTracker_app.service
-│   └── deploy_app.sh
+│   └── fintracker-compose.service
 ├── Dockerfile
 ├── requirements.txt
 └── .env
