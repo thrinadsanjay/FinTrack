@@ -161,8 +161,11 @@ jobs:
     if: github.event_name == 'push' && github.ref_name == 'fix/cicd' && vars.TEST_MODE == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # A separate environment from "Development" (production) so test-server runs get
+    # their own lane in GitHub's Environments/Deployments view instead of mixing with
+    # production deployment history.
     environment:
-      name: Development
+      name: Test
     permissions:
       contents: read
     env:
