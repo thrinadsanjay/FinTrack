@@ -355,6 +355,8 @@ jobs:
           # --- Docker Compose (test stack) ---
           FT_PUBLIC_PORT: ${{ vars.FT_PUBLIC_PORT }}
           TEST_FT_PUBLIC_PORT: ${{ vars.TEST_FT_PUBLIC_PORT }}
+          FT_PUBLIC_BIND: ${{ vars.FT_PUBLIC_BIND }}
+          TEST_FT_PUBLIC_BIND: ${{ vars.TEST_FT_PUBLIC_BIND }}
           FT_MONGO_BIND: ${{ vars.FT_MONGO_BIND }}
           TEST_FT_MONGO_BIND: ${{ vars.TEST_FT_MONGO_BIND }}
           FT_MONGO_PORT: ${{ vars.FT_MONGO_PORT }}
@@ -383,6 +385,21 @@ jobs:
           TEST_ME_CONFIG_BASICAUTH_PASSWORD: ${{ secrets.TEST_ME_CONFIG_BASICAUTH_PASSWORD }}
           ME_CONFIG_OPTIONS_EDITORTHEME: ${{ vars.ME_CONFIG_OPTIONS_EDITORTHEME }}
           TEST_ME_CONFIG_OPTIONS_EDITORTHEME: ${{ vars.TEST_ME_CONFIG_OPTIONS_EDITORTHEME }}
+          # --- Reverse proxy (optional: docker-compose.nginx.yml overlay) ---
+          FT_NGINX_ENABLED: ${{ vars.FT_NGINX_ENABLED }}
+          TEST_FT_NGINX_ENABLED: ${{ vars.TEST_FT_NGINX_ENABLED }}
+          FT_DOMAIN: ${{ vars.FT_DOMAIN }}
+          TEST_FT_DOMAIN: ${{ vars.TEST_FT_DOMAIN }}
+          FT_FINTRACKER_SUBDOMAIN: ${{ vars.FT_FINTRACKER_SUBDOMAIN }}
+          TEST_FT_FINTRACKER_SUBDOMAIN: ${{ vars.TEST_FT_FINTRACKER_SUBDOMAIN }}
+          FT_MONGO_EXPRESS_SUBDOMAIN: ${{ vars.FT_MONGO_EXPRESS_SUBDOMAIN }}
+          TEST_FT_MONGO_EXPRESS_SUBDOMAIN: ${{ vars.TEST_FT_MONGO_EXPRESS_SUBDOMAIN }}
+          FT_NGINX_CERTS_DIR: ${{ vars.FT_NGINX_CERTS_DIR }}
+          TEST_FT_NGINX_CERTS_DIR: ${{ vars.TEST_FT_NGINX_CERTS_DIR }}
+          FT_NGINX_HTTP_PORT: ${{ vars.FT_NGINX_HTTP_PORT }}
+          TEST_FT_NGINX_HTTP_PORT: ${{ vars.TEST_FT_NGINX_HTTP_PORT }}
+          FT_NGINX_HTTPS_PORT: ${{ vars.FT_NGINX_HTTPS_PORT }}
+          TEST_FT_NGINX_HTTPS_PORT: ${{ vars.TEST_FT_NGINX_HTTPS_PORT }}
         run: |
           FINTRACKER_VERSION="${VERSION}-test" bash scripts/deploy/render_test_env.sh > "$RUNNER_TEMP/fintracker-test.env"
 

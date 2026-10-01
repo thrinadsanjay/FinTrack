@@ -2,15 +2,18 @@ name: Publish deployment bundle to main
 
 # `main` holds ONLY what a server needs to run FinTracker; no application code:
 #
-#   Development                 ->  main
-#   deploy/README.md            ->  README.md
-#   deploy/docker-compose.yml   ->  docker-compose.yml
-#   env.example                 ->  env.example
+#   Development                              ->  main
+#   deploy/README.md                         ->  README.md
+#   deploy/docker-compose.yml                ->  docker-compose.yml
+#   deploy/docker-compose.nginx.yml          ->  docker-compose.nginx.yml
+#   deploy/nginx/templates/*.template        ->  nginx/templates/*.template
+#   env.example                              ->  env.example
 #
 # Runs when one of those files changes on Development (after a merged PR), or
 # manually. Every other file is removed from main's tip, so a server that runs
-# `git clone --depth 1 --branch main --single-branch` gets exactly these 3 files.
-# Builds no image: image releases come from release.yml.
+# `git clone --depth 1 --branch main --single-branch` gets exactly this bundle.
+# Builds no image: image releases come from release.yml. The nginx overlay is
+# inert until FT_NGINX_ENABLED=true in .env (see docs/CICD.md "Reverse proxy").
 on:
   push:
     branches:
@@ -18,6 +21,8 @@ on:
     paths:
       - "deploy/README.md"
       - "deploy/docker-compose.yml"
+      - "deploy/docker-compose.nginx.yml"
+      - "deploy/nginx/templates/**"
       - "env.example"
   workflow_dispatch:
 
@@ -60,15 +65,19 @@ jobs:
       - name: Replace main's tree with the bundle
         run: |
           set -euo pipefail
-          for f in deploy/README.md deploy/docker-compose.yml env.example; do
+          for f in deploy/README.md deploy/docker-compose.yml deploy/docker-compose.nginx.yml \
+                   deploy/nginx/templates/default.conf.template env.example; do
             [ -f "src/$f" ] || { echo "::error::$f is missing on Development"; exit 1; }
           done
           cd main
           git rm -r -q --ignore-unmatch -- .
-          cp ../src/deploy/README.md          README.md
-          cp ../src/deploy/docker-compose.yml docker-compose.yml
-          cp ../src/env.example               env.example
-          git add README.md docker-compose.yml env.example
+          cp ../src/deploy/README.md                              README.md
+          cp ../src/deploy/docker-compose.yml                     docker-compose.yml
+          cp ../src/deploy/docker-compose.nginx.yml                docker-compose.nginx.yml
+          mkdir -p nginx/templates
+          cp ../src/deploy/nginx/templates/default.conf.template  nginx/templates/default.conf.template
+          cp ../src/env.example                                   env.example
+          git add README.md docker-compose.yml docker-compose.nginx.yml nginx/templates/default.conf.template env.example
 
       - name: Commit and push
         id: commit
@@ -204,6 +213,7 @@ jobs:
           # --- Docker Compose (production stack) ---
           FINTRACKER_VERSION: ${{ vars.FINTRACKER_VERSION }}
           FT_PUBLIC_PORT: ${{ vars.FT_PUBLIC_PORT }}
+          FT_PUBLIC_BIND: ${{ vars.FT_PUBLIC_BIND }}
           FT_MONGO_BIND: ${{ vars.FT_MONGO_BIND }}
           FT_MONGO_PORT: ${{ vars.FT_MONGO_PORT }}
           FT_MONGO_EXPRESS_BIND: ${{ vars.FT_MONGO_EXPRESS_BIND }}
@@ -218,6 +228,14 @@ jobs:
           ME_CONFIG_BASICAUTH_USERNAME: ${{ vars.ME_CONFIG_BASICAUTH_USERNAME }}
           ME_CONFIG_BASICAUTH_PASSWORD: ${{ secrets.ME_CONFIG_BASICAUTH_PASSWORD }}
           ME_CONFIG_OPTIONS_EDITORTHEME: ${{ vars.ME_CONFIG_OPTIONS_EDITORTHEME }}
+          # --- Reverse proxy (optional: docker-compose.nginx.yml overlay) ---
+          FT_NGINX_ENABLED: ${{ vars.FT_NGINX_ENABLED }}
+          FT_DOMAIN: ${{ vars.FT_DOMAIN }}
+          FT_FINTRACKER_SUBDOMAIN: ${{ vars.FT_FINTRACKER_SUBDOMAIN }}
+          FT_MONGO_EXPRESS_SUBDOMAIN: ${{ vars.FT_MONGO_EXPRESS_SUBDOMAIN }}
+          FT_NGINX_CERTS_DIR: ${{ vars.FT_NGINX_CERTS_DIR }}
+          FT_NGINX_HTTP_PORT: ${{ vars.FT_NGINX_HTTP_PORT }}
+          FT_NGINX_HTTPS_PORT: ${{ vars.FT_NGINX_HTTPS_PORT }}
         run: bash scripts/deploy/render_env.sh > "$RUNNER_TEMP/fintracker.env"
 
       - name: Sync repo and bring the stack up

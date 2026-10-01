@@ -1,0 +1,46 @@
+# Opt-in reverse-proxy overlay: terminates TLS and routes
+#   <FT_FINTRACKER_SUBDOMAIN>.<FT_DOMAIN>    -> fintracker
+#   <FT_MONGO_EXPRESS_SUBDOMAIN>.<FT_DOMAIN> -> mongo-express
+# over the existing ft-net network (see docker-compose.yml). Published to `main`
+# alongside docker-compose.yml; only layered in when FT_NGINX_ENABLED=true in .env --
+# the deploy scripts detect that and add `-f docker-compose.nginx.yml` automatically,
+# so this file being present is harmless until you opt in.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.nginx.yml up -d
+#
+# Config is rendered from nginx/templates/default.conf.template by nginx's own
+# entrypoint at container start (see that file). Certs: place the issued
+# fullchain.pem + privkey.pem (not the CSR) in FT_NGINX_CERTS_DIR first.
+#
+# Once nginx is the public entry point, set FT_PUBLIC_BIND=127.0.0.1 in .env so
+# fintracker is no longer reachable directly -- see docker-compose.yml's `ports:`
+# comment for why that's a variable here rather than a `ports:` override in this
+# overlay (compose merges `ports:` lists by concatenation, not replacement, so an
+# override here would just add a second, conflicting publish of the same port).
+# mongo-express already defaults to loopback-only (FT_MONGO_EXPRESS_BIND) either way.
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    hostname: nginx
+    restart: unless-stopped
+    environment:
+      FT_DOMAIN: ${FT_DOMAIN:?set FT_DOMAIN in .env to use the nginx overlay}
+      FT_FINTRACKER_SUBDOMAIN: ${FT_FINTRACKER_SUBDOMAIN:-fintracker}
+      FT_MONGO_EXPRESS_SUBDOMAIN: ${FT_MONGO_EXPRESS_SUBDOMAIN:-mongo}
+    ports:
+      - "${FT_NGINX_HTTP_PORT:-80}:80"
+      - "${FT_NGINX_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./nginx/templates:/etc/nginx/templates:ro
+      - ${FT_NGINX_CERTS_DIR:-./nginx-certs}:/etc/nginx/certs:ro
+    depends_on:
+      - fintracker
+      - mongo-express
+    networks:
+      - ft-net
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s

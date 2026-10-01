@@ -51,17 +51,29 @@ fi
 
 [ -f "$DEPLOY_PATH/.env" ] || die ".env is missing in ${DEPLOY_PATH} (should have been written before this script ran)"
 
+env_value() { grep -m1 "^${1}=" "$DEPLOY_PATH/.env" 2>/dev/null | cut -d= -f2-; }
+
+# docker-compose.yml, plus the optional nginx reverse-proxy overlay when enabled --
+# included automatically so a plain `compose up -d` always matches the real running
+# stack (e.g. so it doesn't drop the overlay's loopback-only port overrides).
+COMPOSE_F_ARGS=()
+[ -n "$COMPOSE_FILE" ] && COMPOSE_F_ARGS+=(-f "$COMPOSE_FILE")
+if [ "$(env_value FT_NGINX_ENABLED)" = "true" ] && [ -f "$DEPLOY_PATH/docker-compose.nginx.yml" ]; then
+  COMPOSE_F_ARGS+=(-f docker-compose.nginx.yml)
+  log "Reverse-proxy overlay enabled: including docker-compose.nginx.yml"
+fi
+
 # --- container engine / compose detection: Docker, or rootless Podman ---
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   ENGINE=docker
   docker compose version >/dev/null 2>&1 || die "docker is present but the compose v2 plugin is missing"
-  compose() { if [ -n "$COMPOSE_FILE" ]; then docker compose -f "$COMPOSE_FILE" "$@"; else docker compose "$@"; fi; }
+  compose() { docker compose "${COMPOSE_F_ARGS[@]}" "$@"; }
 elif command -v podman >/dev/null 2>&1; then
   ENGINE=podman
   if podman compose version >/dev/null 2>&1; then
-    compose() { if [ -n "$COMPOSE_FILE" ]; then podman compose -f "$COMPOSE_FILE" "$@"; else podman compose "$@"; fi; }
+    compose() { podman compose "${COMPOSE_F_ARGS[@]}" "$@"; }
   elif command -v podman-compose >/dev/null 2>&1; then
-    compose() { if [ -n "$COMPOSE_FILE" ]; then podman-compose -f "$COMPOSE_FILE" "$@"; else podman-compose "$@"; fi; }
+    compose() { podman-compose "${COMPOSE_F_ARGS[@]}" "$@"; }
   else
     die "podman is installed but no compose implementation (podman compose / podman-compose) was found"
   fi
@@ -73,16 +85,25 @@ log "Using container engine: ${ENGINE} (user: $(id -un), uid: $(id -u))"
 compose config >/dev/null || die "compose config validation failed -- check ${DEPLOY_PATH}/.env and the compose file"
 
 # Docker auto-creates a missing bind-mount host directory; rootless Podman does not
-# (fails with "statfs ...: no such file or directory"). Create it if missing so this
-# doesn't depend on the engine. Never touched if it already exists (real certs may live
-# there).
-certs_dir="$(grep -m1 '^FT_CERTS_DIR=' "$DEPLOY_PATH/.env" 2>/dev/null | cut -d= -f2-)"
-certs_dir="${certs_dir:-$DEPLOY_PATH/certs}"
-if [ ! -d "$certs_dir" ]; then
-  log "Creating missing certs mount directory: ${certs_dir}"
-  mkdir -p "$certs_dir" \
-    || die "could not create ${certs_dir} -- create it manually (e.g. sudo mkdir -p ${certs_dir} && sudo chown $(id -un): ${certs_dir}) and re-run"
-  chmod 700 "$certs_dir" 2>/dev/null || true
+# (fails with "statfs ...: no such file or directory"). Create any that are missing so
+# this doesn't depend on the engine. Never touched if it already exists (real certs may
+# live there).
+ensure_mount_dir() {
+  local dir="$1"
+  [ -d "$dir" ] && return 0
+  log "Creating missing mount directory: ${dir}"
+  mkdir -p "$dir" \
+    || die "could not create ${dir} -- create it manually (e.g. sudo mkdir -p ${dir} && sudo chown $(id -un): ${dir}) and re-run"
+  chmod 700 "$dir" 2>/dev/null || true
+}
+certs_dir="$(env_value FT_CERTS_DIR)"
+ensure_mount_dir "${certs_dir:-$DEPLOY_PATH/certs}"
+if [ "$(env_value FT_NGINX_ENABLED)" = "true" ]; then
+  nginx_certs_dir="$(env_value FT_NGINX_CERTS_DIR)"
+  ensure_mount_dir "${nginx_certs_dir:-$DEPLOY_PATH/nginx-certs}"
+  public_bind="$(env_value FT_PUBLIC_BIND)"
+  [ "$public_bind" = "127.0.0.1" ] \
+    || log "WARNING: FT_NGINX_ENABLED=true but FT_PUBLIC_BIND is not 127.0.0.1 -- fintracker is still reachable directly, bypassing nginx"
 fi
 
 log "Starting the full stack"

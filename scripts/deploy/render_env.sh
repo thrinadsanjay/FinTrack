@@ -6,11 +6,17 @@
 # Runs on the GitHub Actions runner, not on the server. Prints to stdout;
 # the caller redirects it to a file that is later streamed to the server by
 # .github/actions/sync-server. A key with no matching secret/variable is
-# rendered empty, which is equivalent to leaving it unset in env.example
-# (compose's ${VAR:-default} substitution treats empty the same as unset).
+# OMITTED entirely (not rendered as "KEY="), so it is truly unset in the
+# container's environment -- not just unset for compose's own ${VAR:-default}
+# substitution, but also for the app's own os.getenv("KEY", default) calls,
+# which (unlike compose) treat a set-but-empty variable as its actual value
+# "", not as "use the default". Emitting "KEY=" for ~20 of these previously
+# broke exactly that: FT_LOG_FILE unset "" silently became the log file path,
+# RotatingFileHandler("") resolved to the container's cwd, and logging crashed
+# with "IsADirectoryError: /app" (a directory, not a file) on startup.
 set -Eeuo pipefail
 
-kv() { printf '%s=%s\n' "$1" "${!1:-}"; }
+kv() { local v="${!1:-}"; [ -n "$v" ] && printf '%s=%s\n' "$1" "$v"; return 0; }
 
 # Keys with no compose-level default or requirement (deploy/README.md's "at least these"
 # list). Empty here means the app silently runs with a blank secret/URL, so fail the
@@ -138,6 +144,7 @@ echo
 echo "# --- Docker Compose (production stack: docker-compose.yml on the main branch) ---"
 kv FINTRACKER_VERSION
 kv FT_PUBLIC_PORT
+kv FT_PUBLIC_BIND
 kv FT_MONGO_BIND
 kv FT_MONGO_PORT
 kv FT_MONGO_EXPRESS_BIND
@@ -152,3 +159,13 @@ kv ME_CONFIG_MONGODB_PORT
 kv ME_CONFIG_BASICAUTH_USERNAME
 kv ME_CONFIG_BASICAUTH_PASSWORD
 kv ME_CONFIG_OPTIONS_EDITORTHEME
+
+echo
+echo "# --- Reverse proxy (optional: docker-compose.nginx.yml overlay) ---"
+kv FT_NGINX_ENABLED
+kv FT_DOMAIN
+kv FT_FINTRACKER_SUBDOMAIN
+kv FT_MONGO_EXPRESS_SUBDOMAIN
+kv FT_NGINX_CERTS_DIR
+kv FT_NGINX_HTTP_PORT
+kv FT_NGINX_HTTPS_PORT
