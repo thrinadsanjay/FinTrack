@@ -138,6 +138,7 @@ echo
 echo "# --- Docker Compose (production stack: docker-compose.yml on the main branch) ---"
 kv FINTRACKER_VERSION
 kv FT_PUBLIC_PORT
+kv FT_PUBLIC_BIND
 kv FT_MONGO_BIND
 kv FT_MONGO_PORT
 kv FT_MONGO_EXPRESS_BIND
@@ -152,3 +153,13 @@ kv ME_CONFIG_MONGODB_PORT
 kv ME_CONFIG_BASICAUTH_USERNAME
 kv ME_CONFIG_BASICAUTH_PASSWORD
 kv ME_CONFIG_OPTIONS_EDITORTHEME
+
+echo
+echo "# --- Reverse proxy (optional: docker-compose.nginx.yml overlay) ---"
+kv FT_NGINX_ENABLED
+kv FT_DOMAIN
+kv FT_FINTRACKER_SUBDOMAIN
+kv FT_MONGO_EXPRESS_SUBDOMAIN
+kv FT_NGINX_CERTS_DIR
+kv FT_NGINX_HTTP_PORT
+kv FT_NGINX_HTTPS_PORT
