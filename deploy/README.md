@@ -7,6 +7,7 @@ This branch holds only what a server needs to run FinTracker:
 | `docker-compose.yml` | MongoDB, mongo-express and FinTracker. The app image is pulled from Docker Hub (`automationbuilder/fintracker`); nothing is built here. |
 | `docker-compose.nginx.yml` | Opt-in overlay: TLS-terminating nginx in front of fintracker/mongo-express. Inert unless `FT_NGINX_ENABLED=true` in `.env` -- see `docs/CICD.md` "Reverse proxy (nginx)". |
 | `nginx/templates/default.conf.template` | nginx config template for the overlay above (rendered by nginx's own entrypoint at container start). |
+| `fintrack` | Convenience wrapper: `./fintrack up\|down\|restart\|ps\|logs\|pull`. Handles engine detection and the nginx overlay for you -- see "Safe operations" below. |
 | `env.example` | Template for `.env` (secrets and settings). |
 | `README.md` | This guide. |
 
@@ -77,7 +78,12 @@ Remove the line to go back to `latest`. A rollback from GitHub Actions (**Rollba
 
 ## Safe operations
 
-* `docker compose restart fintracker`: restart the app only.
-* `docker compose logs -f fintracker`: follow the logs.
-* `docker compose down`: stop everything. **Never add `-v`**, which deletes the database volume.
+`./fintrack` (in this directory) wraps the commands below and automatically includes
+`docker-compose.nginx.yml` when `FT_NGINX_ENABLED=true`, so prefer it over typing
+`docker compose` / `podman compose` directly -- it's the same logic the CI/CD deploy
+scripts and the `fintracker-compose` systemd unit use.
+
+* `./fintrack restart fintracker` (or `docker compose restart fintracker`): restart the app only.
+* `./fintrack logs fintracker` (or `docker compose logs -f fintracker`): follow the logs.
+* `./fintrack down` (or `docker compose down`): stop everything. **Never add `-v`**, which deletes the database volume.
 * Before a MongoDB upgrade, take a backup (Admin → Backups, or `mongodump`) and pin `FT_MONGO_IMAGE_TAG`.

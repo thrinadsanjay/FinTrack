@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# Convenience wrapper around the compose stack in this directory (the deployment
+# bundle published from Development -- don't edit this file on the server, the
+# next sync overwrites it). Run it from DEPLOY_PATH:
+#
+#   cd /opt/fintracker && ./fintrack up
+#
+# Detects the container engine (Docker, or rootless Podman) and automatically
+# layers in docker-compose.nginx.yml when FT_NGINX_ENABLED=true in .env -- same
+# logic scripts/deploy/{sync_server,test_deploy,remote_deploy}.sh use in CI, so
+# this never drifts from what an automated deploy would run.
+set -Eeuo pipefail
+
+log() { printf '[fintrack] %s\n' "$*"; }
+die() { printf '[fintrack] ERROR: %s\n' "$*" >&2; exit 1; }
+
+cd "$(dirname "${BASH_SOURCE[0]}")"
+
+[ -f docker-compose.yml ] || die "docker-compose.yml not found in $(pwd)"
+[ -f .env ] || die ".env not found in $(pwd) -- see README.md"
+
+usage() {
+  cat >&2 <<EOF
+Usage: $(basename "$0") <up|down|restart [service]|ps|logs [service]|pull [service]>
+
+  up       compose up -d && compose ps (never auto-pulls -- use "pull" first)
+  down     compose down (never -v -- does not delete the database volume)
+  restart  compose restart [service]
+  ps       compose ps
+  logs     compose logs -f --tail=200 [service]
+  pull     compose pull [service] (all services if none given -- pulling
+           without a service name can bump mongo's :latest; prefer
+           "pull fintracker" for a routine update)
+EOF
+}
+
+cmd="${1:-}"
+[ -n "$cmd" ] && shift
+case "$cmd" in
+  up | down | restart | ps | logs | pull) : ;;
+  *) usage; exit 1 ;;
+esac
+
+env_value() { grep -m1 "^${1}=" .env 2>/dev/null | cut -d= -f2-; }
+
+COMPOSE_F_ARGS=(-f docker-compose.yml)
+if [ "$(env_value FT_NGINX_ENABLED)" = "true" ] && [ -f docker-compose.nginx.yml ]; then
+  COMPOSE_F_ARGS+=(-f docker-compose.nginx.yml)
+fi
+
+if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+  compose() { docker compose "${COMPOSE_F_ARGS[@]}" "$@"; }
+elif command -v podman >/dev/null 2>&1; then
+  if podman compose version >/dev/null 2>&1; then
+    compose() { podman compose "${COMPOSE_F_ARGS[@]}" "$@"; }
+  elif command -v podman-compose >/dev/null 2>&1; then
+    compose() { podman-compose "${COMPOSE_F_ARGS[@]}" "$@"; }
+  else
+    die "podman is installed but no compose implementation (podman compose / podman-compose) was found"
+  fi
+else
+  die "neither docker nor podman is installed or usable for $(id -un)"
+fi
+
+case "$cmd" in
+  up)      compose up -d && compose ps ;;
+  down)    compose down ;;
+  restart) compose restart "$@" ;;
+  ps)      compose ps ;;
+  logs)    compose logs -f --tail=200 "$@" ;;
+  pull)    compose pull "$@" ;;
+  *)       usage; exit 1 ;;
+esac

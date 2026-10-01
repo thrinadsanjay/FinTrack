@@ -1,5 +1,5 @@
 [Unit]
-Description=FinTracker compose stack (deploy/docker-compose.yml on `main`)
+Description=FinTracker compose stack (docker-compose.yml + optional docker-compose.nginx.yml, on `main`)
 After=network-online.target
 Wants=network-online.target
 
@@ -8,8 +8,12 @@ Type=oneshot
 RemainAfterExit=yes
 __USER_LINE__
 WorkingDirectory=__DEPLOY_PATH__
-ExecStart=/bin/bash -c 'if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then exec docker compose up -d; elif podman compose version >/dev/null 2>&1; then exec podman compose up -d; elif command -v podman-compose >/dev/null 2>&1; then exec podman-compose up -d; else echo "no working compose implementation found" >&2; exit 1; fi'
-ExecStop=/bin/bash -c 'if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then exec docker compose down; elif podman compose version >/dev/null 2>&1; then exec podman compose down; elif command -v podman-compose >/dev/null 2>&1; then exec podman-compose down; else exit 0; fi'
+# ./fintrack (published alongside the compose files) does the engine detection and
+# automatically layers in docker-compose.nginx.yml when FT_NGINX_ENABLED=true in
+# .env -- see deploy/fintrack. Keeps this unit in sync with CI's own deploy scripts
+# instead of duplicating that logic here.
+ExecStart=__DEPLOY_PATH__/fintrack up
+ExecStop=__DEPLOY_PATH__/fintrack down
 TimeoutStartSec=300
 Restart=no
 StandardOutput=journal
