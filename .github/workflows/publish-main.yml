@@ -7,6 +7,7 @@ name: Publish deployment bundle to main
 #   deploy/docker-compose.yml                ->  docker-compose.yml
 #   deploy/docker-compose.nginx.yml          ->  docker-compose.nginx.yml
 #   deploy/nginx/templates/*.template        ->  nginx/templates/*.template
+#   deploy/fintrack                          ->  fintrack (executable)
 #   env.example                              ->  env.example
 #
 # Runs when one of those files changes on Development (after a merged PR), or
@@ -23,6 +24,7 @@ on:
       - "deploy/docker-compose.yml"
       - "deploy/docker-compose.nginx.yml"
       - "deploy/nginx/templates/**"
+      - "deploy/fintrack"
       - "env.example"
   workflow_dispatch:
 
@@ -66,7 +68,7 @@ jobs:
         run: |
           set -euo pipefail
           for f in deploy/README.md deploy/docker-compose.yml deploy/docker-compose.nginx.yml \
-                   deploy/nginx/templates/default.conf.template env.example; do
+                   deploy/nginx/templates/default.conf.template deploy/fintrack env.example; do
             [ -f "src/$f" ] || { echo "::error::$f is missing on Development"; exit 1; }
           done
           cd main
@@ -76,8 +78,10 @@ jobs:
           cp ../src/deploy/docker-compose.nginx.yml                docker-compose.nginx.yml
           mkdir -p nginx/templates
           cp ../src/deploy/nginx/templates/default.conf.template  nginx/templates/default.conf.template
+          cp ../src/deploy/fintrack                               fintrack
           cp ../src/env.example                                   env.example
-          git add README.md docker-compose.yml docker-compose.nginx.yml nginx/templates/default.conf.template env.example
+          git add README.md docker-compose.yml docker-compose.nginx.yml nginx/templates/default.conf.template fintrack env.example
+          git update-index --chmod=+x fintrack
 
       - name: Commit and push
         id: commit
