@@ -84,8 +84,12 @@ services:
       PORT: ${PORT:-8000}
       # Proxmox/LXC often blocks uvloop socketpair used for signal handling.
       UVICORN_LOOP: asyncio
+    # Public by default. Set FT_PUBLIC_BIND=127.0.0.1 when fronting this with the
+    # nginx overlay (deploy/docker-compose.nginx.yml) so it's no longer reachable
+    # directly -- a compose overlay can't cleanly override a `ports:` list (list
+    # fields merge by concatenation, not replacement), so this has to be a variable.
     ports:
-      - "${FT_PUBLIC_PORT:-8008}:${PORT:-8000}"
+      - "${FT_PUBLIC_BIND:-0.0.0.0}:${FT_PUBLIC_PORT:-8008}:${PORT:-8000}"
     volumes:
       - app_logs:/fintracker/logs
       - app_backups:/fintracker/backups
