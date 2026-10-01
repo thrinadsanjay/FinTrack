@@ -9,6 +9,13 @@
 # source each key resolved from (never the value) is logged to stderr so the run
 # log clearly shows what's overridden vs falling back to production config.
 #
+# A key resolving empty (no TEST_ override and no production value either) is
+# OMITTED from the .env entirely, not rendered as "KEY=" -- the app's own
+# os.getenv("KEY", default) calls (unlike compose's ${VAR:-default}) treat a
+# set-but-empty variable as its literal value "", not as "use the default".
+# See render_env.sh for the production-side version of this and the incident
+# (FT_LOG_FILE="" crashed logging setup on startup) that this fixes.
+#
 # FINTRACKER_VERSION is a deployment mechanic, not an app secret/variable pair:
 # the caller exports it directly (as "<version>-test") before running this script.
 set -Eeuo pipefail
@@ -21,7 +28,8 @@ kv() {
     value="${!key:-}"; src="production fallback"
   fi
   printf '  %-40s -> %s\n' "$key" "$src" >&2
-  printf '%s=%s\n' "$key" "$value"
+  [ -n "$value" ] && printf '%s=%s\n' "$key" "$value"
+  return 0
 }
 
 # Same "at least these" list as render_env.sh, checked against TEST_<KEY> OR <KEY>.
