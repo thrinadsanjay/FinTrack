@@ -72,6 +72,19 @@ log "Using container engine: ${ENGINE} (user: $(id -un), uid: $(id -u))"
 
 compose config >/dev/null || die "compose config validation failed -- check ${DEPLOY_PATH}/.env and the compose file"
 
+# Docker auto-creates a missing bind-mount host directory; rootless Podman does not
+# (fails with "statfs ...: no such file or directory"). Create it if missing so this
+# doesn't depend on the engine. Never touched if it already exists (real certs may live
+# there).
+certs_dir="$(grep -m1 '^FT_CERTS_DIR=' "$DEPLOY_PATH/.env" 2>/dev/null | cut -d= -f2-)"
+certs_dir="${certs_dir:-$DEPLOY_PATH/certs}"
+if [ ! -d "$certs_dir" ]; then
+  log "Creating missing certs mount directory: ${certs_dir}"
+  mkdir -p "$certs_dir" \
+    || die "could not create ${certs_dir} -- create it manually (e.g. sudo mkdir -p ${certs_dir} && sudo chown $(id -un): ${certs_dir}) and re-run"
+  chmod 700 "$certs_dir" 2>/dev/null || true
+fi
+
 log "Starting the full stack"
 compose up -d
 

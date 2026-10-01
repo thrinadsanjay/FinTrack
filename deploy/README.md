@@ -28,6 +28,12 @@ cp env.example .env
 chmod 600 .env
 # Edit .env: at least FT_SESSION_SECRET, FT_BASE_URL, FT_DEFAULT_ADMIN_PASSWORD,
 # ME_CONFIG_BASICAUTH_PASSWORD, and FT_CERTS_DIR if you use TLS certificates.
+#
+# FT_CERTS_DIR (default /etc/fintracker/certs) must exist before the first `up`, even
+# without TLS -- Docker auto-creates a missing bind-mount directory, rootless Podman
+# does not (fails with "statfs ...: no such file or directory").
+sudo mkdir -p "$(grep -m1 '^FT_CERTS_DIR=' .env | cut -d= -f2- || echo /etc/fintracker/certs)"
+sudo chown "$(id -un):" "$(grep -m1 '^FT_CERTS_DIR=' .env | cut -d= -f2- || echo /etc/fintracker/certs)"
 docker compose pull
 docker compose up -d
 docker compose ps
