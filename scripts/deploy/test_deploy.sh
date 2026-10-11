@@ -53,6 +53,15 @@ if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   compose() { docker compose "${COMPOSE_F_ARGS[@]}" "$@"; }
 elif command -v podman >/dev/null 2>&1; then
   ENGINE=podman
+  # Fail loudly with podman's own error (a crash here is usually the user running out of
+  # processes/threads or memory: "pthread_create failed: Resource temporarily unavailable").
+  if ! podman_err="$(podman info 2>&1 >/dev/null)"; then
+    printf '[engine] podman is not usable for %s (uid %s). Its output:\n%s\n' "$(id -un)" "$(id -u)" "$(printf '%s\n' "$podman_err" | tail -n 15)" >&2
+    printf '[engine] processes owned by this user: %s (limit: ulimit -u = %s); memory: %s\n' \
+      "$(ps -u "$(id -u)" --no-headers 2>/dev/null | wc -l)" "$(ulimit -u)" "$(free -h 2>/dev/null | awk '/^Mem:/{print $7" available of "$2}')" >&2
+    printf '[engine] busiest commands: %s\n' "$(ps -u "$(id -u)" -o comm= 2>/dev/null | sort | uniq -c | sort -rn | head -n 5 | tr -s ' ' | tr '\n' ';')" >&2
+    exit 1
+  fi
   if podman compose version >/dev/null 2>&1; then
     compose() { podman compose "${COMPOSE_F_ARGS[@]}" "$@"; }
   elif command -v podman-compose >/dev/null 2>&1; then
