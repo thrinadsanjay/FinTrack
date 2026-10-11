@@ -53,11 +53,20 @@ jobs:
         if: inputs.direct
         env:
           TEST_MODE: ${{ vars.TEST_MODE }}
+          FORCE_DEPLOY: ${{ vars.FORCE_DEPLOY }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
           set -euo pipefail
           if [ "${GITHUB_REF}" != "refs/heads/fix/cicd" ] || [ "${TEST_MODE}" = "true" ]; then
             echo "::error::Direct production releases run only from fix/cicd with TEST_MODE != true (ref ${GITHUB_REF}, TEST_MODE=${TEST_MODE:-unset})."
             exit 1
+          fi
+          # Force a release without application changes: repository variable FORCE_DEPLOY=true
+          # (every push while set), or "[force-deploy]" in the pushed commit's message (one push).
+          if [ "${FORCE_DEPLOY}" = "true" ] || [[ "${COMMIT_MSG}" == *"[force-deploy]"* ]]; then
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            echo "Forced release of ${GITHUB_SHA::7} ($( [ "${FORCE_DEPLOY}" = "true" ] && echo 'FORCE_DEPLOY=true' || echo '[force-deploy] in commit message' )); change detection skipped."
+            exit 0
           fi
           # Same rule as release.yml's `paths` filter: only image content triggers a release.
           # Compared with the last released version (not just the previous push), so a push
