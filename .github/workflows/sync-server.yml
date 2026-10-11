@@ -135,6 +135,9 @@ jobs:
           FT_NGINX_CERTS_DIR: ${{ vars.FT_NGINX_CERTS_DIR }}
           FT_NGINX_HTTP_PORT: ${{ vars.FT_NGINX_HTTP_PORT }}
           FT_NGINX_HTTPS_PORT: ${{ vars.FT_NGINX_HTTPS_PORT }}
+          # --- Container runtime override (optional; autodetected when unset) ---
+          FT_CONTAINER_ENGINE: ${{ vars.FT_CONTAINER_ENGINE }}
+          FT_COMPOSE: ${{ vars.FT_COMPOSE }}
         run: bash scripts/deploy/render_env.sh > "$RUNNER_TEMP/fintracker.env"
 
       - name: Sync repo and bring the stack up

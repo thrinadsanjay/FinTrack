@@ -27,7 +27,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEMPLATE="$SCRIPT_DIR/../../systemctl/fintracker-compose.service"
 [ -f "$TEMPLATE" ] || die "template not found: $TEMPLATE"
 
-if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+# Same autodetection as the deploy scripts and ./fintrack.
+. "$SCRIPT_DIR/../../deploy/lib/runtime.sh"
+ft_detect_runtime || die "no usable container runtime for $(id -un) -- see the [runtime] lines above"
+
+if [ "$FT_ENGINE" = docker ]; then
   log "Docker detected: installing a system unit that runs as ${DEPLOY_USER}"
   [ "$(id -u)" -eq 0 ] || die "run this as root (or via sudo) to install a system unit"
   sed -e "s#__DEPLOY_PATH__#${DEPLOY_PATH}#g" \
@@ -37,7 +41,7 @@ if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   systemctl daemon-reload
   systemctl enable --now fintracker-compose.service
   log "Installed. Manage it with: systemctl status|restart|stop fintracker-compose"
-elif command -v podman >/dev/null 2>&1; then
+else
   log "Podman detected: installing a user unit for ${DEPLOY_USER} (rootless)"
   [ "$(id -un)" = "$DEPLOY_USER" ] || die "run this AS ${DEPLOY_USER} (not root/sudo) -- rootless Podman units are per-user"
   mkdir -p "$HOME/.config/systemd/user"
@@ -49,6 +53,4 @@ elif command -v podman >/dev/null 2>&1; then
   systemctl --user daemon-reload
   systemctl --user enable --now fintracker-compose.service
   log "Installed. Manage it with: systemctl --user status|restart|stop fintracker-compose"
-else
-  die "neither docker nor podman is installed or usable for $(id -un)"
 fi

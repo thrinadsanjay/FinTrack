@@ -188,3 +188,8 @@ kv FT_MONGO_EXPRESS_SUBDOMAIN
 kv FT_NGINX_CERTS_DIR
 kv FT_NGINX_HTTP_PORT
 kv FT_NGINX_HTTPS_PORT
+
+echo
+echo "# --- Container runtime override (optional; autodetected when unset) ---"
+kv FT_CONTAINER_ENGINE
+kv FT_COMPOSE

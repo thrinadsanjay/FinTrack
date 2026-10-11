@@ -75,33 +75,13 @@ if [ "$(env_value FT_NGINX_ENABLED)" = "true" ] && [ -f "$DEPLOY_PATH/docker-com
   log "Reverse-proxy overlay enabled: including docker-compose.nginx.yml"
 fi
 
-# --- container engine / compose detection: Docker, or rootless Podman ---
-if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-  ENGINE=docker
-  docker compose version >/dev/null 2>&1 || die "docker is present but the compose v2 plugin is missing"
-  compose() { docker compose "${COMPOSE_F_ARGS[@]}" "$@"; }
-elif command -v podman >/dev/null 2>&1; then
-  ENGINE=podman
-  # Fail loudly with podman's own error (a crash here is usually the user running out of
-  # processes/threads or memory: "pthread_create failed: Resource temporarily unavailable").
-  if ! podman_err="$(podman info 2>&1 >/dev/null)"; then
-    printf '[engine] podman is not usable for %s (uid %s). Its output:\n%s\n' "$(id -un)" "$(id -u)" "$(printf '%s\n' "$podman_err" | tail -n 15)" >&2
-    printf '[engine] processes owned by this user: %s (limit: ulimit -u = %s); memory: %s\n' \
-      "$(ps -u "$(id -u)" --no-headers 2>/dev/null | wc -l)" "$(ulimit -u)" "$(free -h 2>/dev/null | awk '/^Mem:/{print $7" available of "$2}')" >&2
-    printf '[engine] busiest commands: %s\n' "$(ps -u "$(id -u)" -o comm= 2>/dev/null | sort | uniq -c | sort -rn | head -n 5 | tr -s ' ' | tr '\n' ';')" >&2
-    exit 1
-  fi
-  if podman compose version >/dev/null 2>&1; then
-    compose() { podman compose "${COMPOSE_F_ARGS[@]}" "$@"; }
-  elif command -v podman-compose >/dev/null 2>&1; then
-    compose() { podman-compose "${COMPOSE_F_ARGS[@]}" "$@"; }
-  else
-    die "podman is installed but no compose implementation (podman compose / podman-compose) was found"
-  fi
-else
-  die "neither docker nor podman is installed or usable for $(id -un)"
-fi
-log "Using container engine: ${ENGINE} (user: $(id -un), uid: $(id -u))"
+# --- container runtime: deploy/lib/runtime.sh (streamed ahead of this script by CI) ---
+# Autodetects docker / podman and docker compose / docker-compose / podman-compose /
+# podman compose; FT_CONTAINER_ENGINE / FT_COMPOSE in .env override the choice.
+declare -F ft_detect_runtime >/dev/null || . "$(dirname "${BASH_SOURCE[0]}")/../../deploy/lib/runtime.sh"
+FT_CONTAINER_ENGINE="${FT_CONTAINER_ENGINE:-$(env_value FT_CONTAINER_ENGINE)}"
+FT_COMPOSE="${FT_COMPOSE:-$(env_value FT_COMPOSE)}"
+ft_detect_runtime || die "no usable container runtime for $(id -un) -- see the [runtime] lines above"
 
 compose config >/dev/null || die "compose config validation failed -- check ${DEPLOY_PATH}/.env and the compose file"
 

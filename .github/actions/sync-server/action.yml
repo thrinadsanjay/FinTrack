@@ -183,7 +183,7 @@ runs:
             -o ServerAliveInterval=15 \
             "${SERVER_USER}@${SERVER_HOST}" \
             "${remote_env} bash -s" \
-            < "$GITHUB_WORKSPACE/scripts/deploy/sync_server.sh"
+            < <(cat "$GITHUB_WORKSPACE/deploy/lib/runtime.sh" "$GITHUB_WORKSPACE/scripts/deploy/sync_server.sh")
 
     - name: Remove SSH material
       if: always()

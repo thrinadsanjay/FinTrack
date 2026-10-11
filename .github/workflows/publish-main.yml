@@ -8,6 +8,7 @@ name: Publish deployment bundle to main
 #   deploy/docker-compose.nginx.yml          ->  docker-compose.nginx.yml
 #   deploy/nginx/templates/*.template        ->  nginx/templates/*.template
 #   deploy/fintrack                          ->  fintrack (executable)
+#   deploy/lib/runtime.sh                    ->  lib/runtime.sh (runtime autodetection, used by fintrack)
 #   env.example                              ->  env.example
 #
 # Runs when one of those files changes on Development (after a merged PR), or
@@ -25,6 +26,7 @@ on:
       - "deploy/docker-compose.nginx.yml"
       - "deploy/nginx/templates/**"
       - "deploy/fintrack"
+      - "deploy/lib/runtime.sh"
       - "env.example"
   workflow_dispatch:
 
@@ -68,7 +70,7 @@ jobs:
         run: |
           set -euo pipefail
           for f in deploy/README.md deploy/docker-compose.yml deploy/docker-compose.nginx.yml \
-                   deploy/nginx/templates/default.conf.template deploy/fintrack env.example; do
+                   deploy/nginx/templates/default.conf.template deploy/fintrack deploy/lib/runtime.sh env.example; do
             [ -f "src/$f" ] || { echo "::error::$f is missing on Development"; exit 1; }
           done
           cd main
@@ -79,8 +81,10 @@ jobs:
           mkdir -p nginx/templates
           cp ../src/deploy/nginx/templates/default.conf.template  nginx/templates/default.conf.template
           cp ../src/deploy/fintrack                               fintrack
+          mkdir -p lib
+          cp ../src/deploy/lib/runtime.sh                         lib/runtime.sh
           cp ../src/env.example                                   env.example
-          git add README.md docker-compose.yml docker-compose.nginx.yml nginx/templates/default.conf.template fintrack env.example
+          git add README.md docker-compose.yml docker-compose.nginx.yml nginx/templates/default.conf.template fintrack lib/runtime.sh env.example
           git update-index --chmod=+x fintrack
 
       - name: Commit and push
