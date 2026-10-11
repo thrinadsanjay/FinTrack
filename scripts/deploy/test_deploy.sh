@@ -39,6 +39,9 @@ env_value() { grep -m1 "^${1}=" "$DEPLOY_PATH/.env" 2>/dev/null | cut -d= -f2-; 
 COMPOSE_F_ARGS=()
 [ -n "$COMPOSE_FILE" ] && COMPOSE_F_ARGS+=(-f "$COMPOSE_FILE")
 if [ "$(env_value FT_NGINX_ENABLED)" = "true" ] && [ -f "$DEPLOY_PATH/docker-compose.nginx.yml" ]; then
+  # Any -f disables compose's default file lookup, so the base file must be named
+  # explicitly before the overlay (the overlay alone has no ft-net, mongo, ...).
+  [ -n "$COMPOSE_FILE" ] || COMPOSE_F_ARGS+=(-f docker-compose.yml)
   COMPOSE_F_ARGS+=(-f docker-compose.nginx.yml)
   log "Reverse-proxy overlay enabled: including docker-compose.nginx.yml"
 fi
