@@ -1,11 +1,12 @@
 name: Release pipeline
 
-# Shared production release: gate -> next version -> build & push image -> git tag -> deploy over SSH.
+# Shared production release: gate -> next version -> build & push image -> git tag
+#   -> prepare server (sync-server.yml: .env, clone/update main, stack up) -> deploy over SSH.
 # Called by:
 #   - release.yml  after a reviewed PR is merged into Development (direct: false)
 #   - ci.yml       on a push to fix/cicd when the TEST_MODE variable is not "true" (direct: true):
 #                  no test server and no merge first, straight to production
-# It calls no other workflow (ci.yml <-> release.yml would otherwise be a cycle).
+# It calls only sync-server.yml (never ci.yml or release.yml, which would be a cycle).
 #
 # Versioning: git tags vMAJOR.MINOR.PATCH are the single source of truth.
 # Each release bumps PATCH of the highest tag.
@@ -194,9 +195,19 @@ jobs:
           # Tags pushed with GITHUB_TOKEN do not trigger workflows (no loop).
           git push origin "refs/tags/v${VERSION}"
 
+  sync-server:
+    name: Prepare server
+    # Writes .env, clones/updates `main` in DEPLOY_PATH and starts the stack, so the
+    # first release on a fresh server works and .env always matches Secrets/Variables.
+    needs: build
+    permissions:
+      contents: read
+    uses: ./.github/workflows/sync-server.yml
+    secrets: inherit
+
   deploy:
     name: Deploy to server
-    needs: [version, build]
+    needs: [version, build, sync-server]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment:
