@@ -1,0 +1,77 @@
+diff --git a/scripts/deploy/remote_deploy.sh b/scripts/deploy/remote_deploy.sh
+index 1d21f63..3ff57aa 100644
+--- a/scripts/deploy/remote_deploy.sh
++++ b/scripts/deploy/remote_deploy.sh
+@@ -45,6 +45,9 @@ env_value() { grep -m1 "^${1}=" "$DEPLOY_PATH/.env" 2>/dev/null | cut -d= -f2-;
+ COMPOSE_F_ARGS=()
+ [ -n "$COMPOSE_FILE" ] && COMPOSE_F_ARGS+=(-f "$COMPOSE_FILE")
+ if [ "$(env_value FT_NGINX_ENABLED)" = "true" ] && [ -f "$DEPLOY_PATH/docker-compose.nginx.yml" ]; then
++  # Any -f disables compose's default file lookup, so the base file must be named
++  # explicitly before the overlay (the overlay alone has no ft-net, mongo, ...).
++  [ -n "$COMPOSE_FILE" ] || COMPOSE_F_ARGS+=(-f docker-compose.yml)
+   COMPOSE_F_ARGS+=(-f docker-compose.nginx.yml)
+   log "Reverse-proxy overlay enabled: including docker-compose.nginx.yml"
+ fi
+diff --git a/scripts/deploy/sync_server.sh b/scripts/deploy/sync_server.sh
+index a4b7d56..ad430d2 100644
+--- a/scripts/deploy/sync_server.sh
++++ b/scripts/deploy/sync_server.sh
+@@ -5,7 +5,7 @@
+ # env.example, README.md) up to date and starts the full stack (mongo, mongo-express,
+ # fintracker) with `compose up -d`.
+ #
+-#   1. First run: git clone --depth 1 --branch GIT_REF into DEPLOY_PATH
++#   1. First run: shallow clone of GIT_REF initialised in place in DEPLOY_PATH
+ #      Later runs: git fetch + git reset --hard origin/GIT_REF
+ #      (reset --hard only touches tracked files; .env and anything else untracked,
+ #      e.g. TLS certs, are left alone)
+@@ -41,12 +41,21 @@ if [ -d "$DEPLOY_PATH/.git" ]; then
+   git fetch --depth 1 origin "$GIT_REF"
+   git reset --hard "origin/${GIT_REF}"
+ else
+-  [ -d "$DEPLOY_PATH" ] && [ -n "$(ls -A "$DEPLOY_PATH" 2>/dev/null)" ] \
+-    && die "DEPLOY_PATH ($DEPLOY_PATH) exists, is non-empty, and is not a git clone; refusing to overwrite it"
+-  log "Cloning ${REPO_URL} (${GIT_REF}) into ${DEPLOY_PATH}"
++  # First run. The action has already created DEPLOY_PATH and written .env into it, so
++  # `git clone` (which needs an empty directory) can't be used: initialise the clone in
++  # place instead. `git checkout` refuses to overwrite untracked files, so files from a
++  # manual setup (an existing docker-compose.yml, README.md, ...) are never clobbered.
++  log "Initialising a clone of ${REPO_URL} (${GIT_REF}) in ${DEPLOY_PATH}"
+   mkdir -p "$DEPLOY_PATH"
+-  git clone --depth 1 --branch "$GIT_REF" --single-branch "$REPO_URL" "$DEPLOY_PATH"
+   cd "$DEPLOY_PATH"
++  git init -q
++  git remote add origin "$REPO_URL"
++  if ! { git fetch --depth 1 origin "$GIT_REF" && git checkout -q -B "$GIT_REF" "origin/${GIT_REF}"; }; then
++    # Don't leave a half-made clone behind: the next run would take the
++    # `reset --hard` path above and overwrite those files.
++    rm -rf "$DEPLOY_PATH/.git"
++    die "could not check out ${GIT_REF} into ${DEPLOY_PATH} -- if git reported files that 'would be overwritten', move them out of the way (keep .env) and re-run"
++  fi
+ fi
+ 
+ [ -f "$DEPLOY_PATH/.env" ] || die ".env is missing in ${DEPLOY_PATH} (should have been written before this script ran)"
+@@ -59,6 +68,9 @@ env_value() { grep -m1 "^${1}=" "$DEPLOY_PATH/.env" 2>/dev/null | cut -d= -f2-;
+ COMPOSE_F_ARGS=()
+ [ -n "$COMPOSE_FILE" ] && COMPOSE_F_ARGS+=(-f "$COMPOSE_FILE")
+ if [ "$(env_value FT_NGINX_ENABLED)" = "true" ] && [ -f "$DEPLOY_PATH/docker-compose.nginx.yml" ]; then
++  # Any -f disables compose's default file lookup, so the base file must be named
++  # explicitly before the overlay (the overlay alone has no ft-net, mongo, ...).
++  [ -n "$COMPOSE_FILE" ] || COMPOSE_F_ARGS+=(-f docker-compose.yml)
+   COMPOSE_F_ARGS+=(-f docker-compose.nginx.yml)
+   log "Reverse-proxy overlay enabled: including docker-compose.nginx.yml"
+ fi
+diff --git a/scripts/deploy/test_deploy.sh b/scripts/deploy/test_deploy.sh
+index 83568a3..e33d35d 100644
+--- a/scripts/deploy/test_deploy.sh
++++ b/scripts/deploy/test_deploy.sh
+@@ -39,6 +39,9 @@ env_value() { grep -m1 "^${1}=" "$DEPLOY_PATH/.env" 2>/dev/null | cut -d= -f2-;
+ COMPOSE_F_ARGS=()
+ [ -n "$COMPOSE_FILE" ] && COMPOSE_F_ARGS+=(-f "$COMPOSE_FILE")
+ if [ "$(env_value FT_NGINX_ENABLED)" = "true" ] && [ -f "$DEPLOY_PATH/docker-compose.nginx.yml" ]; then
++  # Any -f disables compose's default file lookup, so the base file must be named
++  # explicitly before the overlay (the overlay alone has no ft-net, mongo, ...).
++  [ -n "$COMPOSE_FILE" ] || COMPOSE_F_ARGS+=(-f docker-compose.yml)
+   COMPOSE_F_ARGS+=(-f docker-compose.nginx.yml)
+   log "Reverse-proxy overlay enabled: including docker-compose.nginx.yml"
+ fi

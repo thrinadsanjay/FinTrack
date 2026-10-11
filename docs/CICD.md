@@ -85,7 +85,9 @@ fix/cicd push ─► test + docker (lint, tests, Docker build validation)
 * **`TEST_MODE=false`** (or unset): **no test server and no merge first -- straight to production.** Every
   push to `fix/cicd` that passes CI and changed `app/**`, `Dockerfile`, `.dockerignore` or `requirements.txt`
   (compared with the last release tag) is released and deployed to the production server, then the PR is
-  opened/updated so the code also reaches `Development`. The run is never cancelled by a newer push while
+  opened/updated so the code also reaches `Development`. To deploy without application changes, set the
+  `FORCE_DEPLOY` variable to `true`, or include `[force-deploy]` in the commit message (e.g.
+  `git commit --allow-empty -m "Redeploy [force-deploy]"`). The run is never cancelled by a newer push while
   it may be deploying. No `-test` image and no approval email. Note that **merging that PR later releases
   again** (new patch version, same code) because `release.yml` runs on every merge that changes image content.
 * **App variables** (`FT_*`, `MONGO_*`, `ME_CONFIG_*`, `OPENAI_API_KEY`, ...): `scripts/deploy/render_test_env.sh`
@@ -173,6 +175,7 @@ the repo; the `FT_SMTP_*` keys are the *application's* own SMTP config, unrelate
 | `COMPOSE_SERVICE` | `fintracker` | optional; compose service name of the app |
 | `COMPOSE_FILE` | *(empty)* | optional; e.g. `docker-compose.prod.yml` if not the default name |
 | `TEST_MODE` | `true` / `false` | **test pipeline gate** for pushes to `fix/cicd`. `true`: build+push the `-test` image, deploy to and verify the test server, open the PR (production only after the merge). `false`/unset: skip the test server and release straight to **production**, then open the PR. |
+| `FORCE_DEPLOY` | `true` / unset | Direct releases (`fix/cicd`, `TEST_MODE` off) normally skip when nothing in `app/**`, `Dockerfile`, `.dockerignore` or `requirements.txt` changed since the last release tag. `true`: release and deploy on **every** push anyway. For a single forced deploy, put `[force-deploy]` in the commit message instead. |
 | `TEST_DEPLOY_PATH` | e.g. `/opt/fintracker-test` | **required if `TEST_MODE=true`**: directory on the test server that already holds a compose file. No fallback to `DEPLOY_PATH`. |
 | `TEST_SERVER_PORT` | `22` | optional; default if unset |
 | `TEST_COMPOSE_SERVICE` | `fintracker` | optional; falls back to `COMPOSE_SERVICE`, then `fintracker` |
