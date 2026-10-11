@@ -6,9 +6,12 @@ name: CI
 # `pull_request`) to the `fix/cicd` branch specifically -- see docs/CICD.md "Test
 # pipeline" for the full flow.
 #  - push to any working branch  -> lint + tests + Docker build, then open/update a PR to Development
-#  - push to fix/cicd            -> also: build+push a <version>-test image; if TEST_MODE=true,
-#                                    deploy it to the test server and, on the PR's first creation,
-#                                    send an approval-notification email
+#  - push to fix/cicd            -> TEST_MODE=true: build+push a <version>-test image, deploy it to
+#                                    the test server and, on the PR's first creation, send an
+#                                    approval-notification email
+#                                    TEST_MODE unset/false: no test server -- release straight to
+#                                    production (release.yml: new version, image, tag, deploy)
+#                                    when the push changed image content; then open/update the PR
 #  - pull_request to Development -> lint + tests + Docker build (required status checks)
 #  - workflow_call               -> reused by release.yml as the pre-release gate
 on:
@@ -26,8 +29,9 @@ permissions:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  # Superseded pushes to a working branch are cancelled; release gates are never cancelled.
-  cancel-in-progress: ${{ github.ref_name != 'Development' }}
+  # Superseded pushes to a working branch are cancelled; release gates are never cancelled,
+  # and neither is a fix/cicd run that may be releasing straight to production.
+  cancel-in-progress: ${{ github.ref_name != 'Development' && !(github.ref_name == 'fix/cicd' && vars.TEST_MODE != 'true') }}
 
 env:
   DOCKER_IMAGE: ${{ vars.DOCKER_IMAGE || 'automationbuilder/fintracker' }}
@@ -101,7 +105,7 @@ jobs:
   build-test-image:
     name: Build & push test image
     needs: [test, docker]
-    if: github.event_name == 'push' && github.ref_name == 'fix/cicd'
+    if: github.event_name == 'push' && github.ref_name == 'fix/cicd' && vars.TEST_MODE == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
@@ -420,15 +424,27 @@ jobs:
         if: always()
         run: rm -f "$RUNNER_TEMP/fintracker-test.env"
 
+  release-production:
+    name: Release to production (TEST_MODE off)
+    needs: [test, docker]
+    if: github.event_name == 'push' && github.ref_name == 'fix/cicd' && vars.TEST_MODE != 'true'
+    permissions:
+      contents: write # release tag
+    uses: ./.github/workflows/release-pipeline.yml
+    with:
+      direct: true
+    secrets: inherit
+
   open-pull-request:
     name: Open PR to Development
-    needs: [test, docker, build-test-image, deploy-test-server]
+    needs: [test, docker, build-test-image, deploy-test-server, release-production]
     if: >-
       always() &&
       needs.test.result == 'success' &&
       needs.docker.result == 'success' &&
       (needs.build-test-image.result == 'success' || needs.build-test-image.result == 'skipped') &&
       (needs.deploy-test-server.result == 'success' || needs.deploy-test-server.result == 'skipped') &&
+      (needs.release-production.result == 'success' || needs.release-production.result == 'skipped') &&
       github.event_name == 'push' && (
         startsWith(github.ref_name, 'feature/') ||
         startsWith(github.ref_name, 'fix/') ||
