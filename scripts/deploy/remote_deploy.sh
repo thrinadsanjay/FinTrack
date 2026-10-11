@@ -31,8 +31,13 @@ HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-180}"
 [[ "$SERVICE" =~ ^[A-Za-z0-9._-]+$ ]] || die "SERVICE looks invalid: '$SERVICE'"
 [[ "$HEALTH_TIMEOUT" =~ ^[0-9]+$ ]] || die "HEALTH_TIMEOUT must be seconds"
 
-[ -d "$DEPLOY_PATH" ] || die "DEPLOY_PATH does not exist: $DEPLOY_PATH"
+[ -d "$DEPLOY_PATH" ] || die "DEPLOY_PATH does not exist: $DEPLOY_PATH -- on a fresh server, run 'Publish deployment bundle to main' (Actions -> Run workflow) once: it creates the folder, writes .env, clones main and starts the stack; then re-run this deploy"
 cd "$DEPLOY_PATH"
+# DEPLOY_PATH must be the server's clone of `main` (the folder publish-main.yml syncs).
+compose_main="${COMPOSE_FILE:-docker-compose.yml}"
+[ -f "$compose_main" ] \
+  || die "no ${compose_main} in DEPLOY_PATH=${DEPLOY_PATH} -- set the DEPLOY_PATH variable to the folder that holds the clone of main (the one the 'Sync bundle to the server' job uses)"
+[ -f .env ] || die "no .env in DEPLOY_PATH=${DEPLOY_PATH} -- run 'Publish deployment bundle to main' (manual run) to write it, or check DEPLOY_PATH"
 
 # Compose files may reference ${FINTRACKER_VERSION}; plain ":latest" works too.
 export FINTRACKER_VERSION="$VERSION"
