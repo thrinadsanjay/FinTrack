@@ -42,7 +42,7 @@ compose_main="${COMPOSE_FILE:-docker-compose.yml}"
 # Compose files may reference ${FINTRACKER_VERSION}; plain ":latest" works too.
 export FINTRACKER_VERSION="$VERSION"
 
-env_value() { grep -m1 "^${1}=" "$DEPLOY_PATH/.env" 2>/dev/null | cut -d= -f2-; }
+env_value() { grep -m1 "^${1}=" "$DEPLOY_PATH/.env" 2>/dev/null | cut -d= -f2- || true; }  # missing key -> empty, never a set -e exit
 
 # docker-compose.yml, plus the optional nginx reverse-proxy overlay when enabled --
 # included automatically so this single-service recreate doesn't drop the overlay's

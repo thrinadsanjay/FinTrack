@@ -41,7 +41,7 @@ case "$cmd" in
   *) usage; exit 1 ;;
 esac
 
-env_value() { grep -m1 "^${1}=" .env 2>/dev/null | cut -d= -f2-; }
+env_value() { grep -m1 "^${1}=" .env 2>/dev/null | cut -d= -f2- || true; }  # missing key -> empty, never a set -e exit
 
 COMPOSE_F_ARGS=(-f docker-compose.yml)
 if [ "$(env_value FT_NGINX_ENABLED)" = "true" ] && [ -f docker-compose.nginx.yml ]; then

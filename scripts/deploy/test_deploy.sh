@@ -31,7 +31,7 @@ HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-120}"
 cd "$DEPLOY_PATH"
 [ -f .env ] || die ".env is missing in ${DEPLOY_PATH} (should have been written before this script ran)"
 
-env_value() { grep -m1 "^${1}=" "$DEPLOY_PATH/.env" 2>/dev/null | cut -d= -f2-; }
+env_value() { grep -m1 "^${1}=" "$DEPLOY_PATH/.env" 2>/dev/null | cut -d= -f2- || true; }  # missing key -> empty, never a set -e exit
 
 # docker-compose.yml, plus the optional nginx reverse-proxy overlay when enabled --
 # included automatically so a plain `compose up -d` always matches the real running

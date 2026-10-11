@@ -60,7 +60,7 @@ fi
 
 [ -f "$DEPLOY_PATH/.env" ] || die ".env is missing in ${DEPLOY_PATH} (should have been written before this script ran)"
 
-env_value() { grep -m1 "^${1}=" "$DEPLOY_PATH/.env" 2>/dev/null | cut -d= -f2-; }
+env_value() { grep -m1 "^${1}=" "$DEPLOY_PATH/.env" 2>/dev/null | cut -d= -f2- || true; }  # missing key -> empty, never a set -e exit
 
 # docker-compose.yml, plus the optional nginx reverse-proxy overlay when enabled --
 # included automatically so a plain `compose up -d` always matches the real running
@@ -113,6 +113,10 @@ ensure_mount_dir "${certs_dir:-$DEPLOY_PATH/certs}"
 if [ "$(env_value FT_NGINX_ENABLED)" = "true" ]; then
   nginx_certs_dir="$(env_value FT_NGINX_CERTS_DIR)"
   ensure_mount_dir "${nginx_certs_dir:-$DEPLOY_PATH/nginx-certs}"
+  for pem in fullchain.pem privkey.pem; do
+    [ -f "${nginx_certs_dir:-$DEPLOY_PATH/nginx-certs}/${pem}" ] \
+      || die "FT_NGINX_ENABLED=true but ${pem} is missing in ${nginx_certs_dir:-$DEPLOY_PATH/nginx-certs} -- add the FT_NGINX_TLS_FULLCHAIN and FT_NGINX_TLS_PRIVKEY secrets (or set FT_NGINX_ENABLED=false)"
+  done
   public_bind="$(env_value FT_PUBLIC_BIND)"
   [ "$public_bind" = "127.0.0.1" ] \
     || log "WARNING: FT_NGINX_ENABLED=true but FT_PUBLIC_BIND is not 127.0.0.1 -- fintracker is still reachable directly, bypassing nginx"
