@@ -43,7 +43,8 @@ required check. To rebuild without a code change (e.g. base-image security patch
 |---|---|---|
 | `.github/workflows/ci.yml` | push to any branch except `Development`/`main`; PRs into `Development`; called by release | `test`/`docker` jobs: lint, tests, Docker build (not pushed) -- use **no secrets** (safe for fork PRs). On `feature/`, `fix/`, `bugfix/`, `hotfix/`, `chore/` branches, when those pass, calls `pull-request.yml`. On a push to `fix/cicd` specifically, also: `build-test-image` (builds+pushes `<version>-test`), `deploy-test-server` (if `TEST_MODE=true`), `notify-approval-email` (once, when the PR is first created). See [Test pipeline](#test-pipeline). |
 | `.github/workflows/pull-request.yml` | called by CI | Opens a PR `branch → Development` (or refreshes the existing one) with commits, changed files, CI/Docker status and, when supplied, the test-deployment summary. Never approves or merges. |
-| `.github/workflows/release.yml` | push to `Development` touching image content (see above); manual | Guard → CI gate → version → build & push → git tag → deploy → summary. Serialized (`concurrency: release-development`), never cancelled. |
+| `.github/workflows/release.yml` | push to `Development` touching image content (see above); manual | Merged-PR guard → CI gate → `release-pipeline.yml`. Serialized (`concurrency: release-development`), never cancelled. |
+| `.github/workflows/release-pipeline.yml` | called by `release.yml`, and by `ci.yml` on a `fix/cicd` push with `TEST_MODE` off | Gate → version → build & push → git tag → deploy → summary. All production releases and rollbacks share `concurrency: release-production`, never cancelled. |
 | `.github/workflows/publish-main.yml` | push to `Development` touching the deployment bundle; manual | Job `publish`: replaces `main`'s tree with `deploy/README.md` → `README.md`, `deploy/docker-compose.yml` → `docker-compose.yml`, `env.example`. Builds nothing. Job `sync-server` (only if `publish` actually changed `main`): assembles `.env` from Secrets/Variables and calls `sync-server` to clone/pull `main` on the server and `compose up -d` the full stack. |
 | `.github/workflows/rollback.yml` | manual (**Actions → Rollback FinTracker**) | Redeploys an existing version; optionally moves Docker Hub `latest` to it. Shares the release queue. |
 | `.github/actions/ssh-deploy/` | used by release & rollback | Strict host-key SSH; streams `scripts/deploy/remote_deploy.sh` to the server. Recreates only the `fintracker` service for one new image version (Docker or rootless Podman, auto-detected). |
@@ -60,24 +61,33 @@ type normally does, plus:
 
 ```
 fix/cicd push ─► test + docker (lint, tests, Docker build validation)
+   TEST_MODE = "true":
               ─► build-test-image: current version (latest vX.Y.Z tag, NOT incremented) + "-test"
                  ─► push automationbuilder/fintracker:<version>-test to Docker Hub
-              ─► deploy-test-server (only if repo Variable TEST_MODE = "true"):
+              ─► deploy-test-server:
                  ─► render .env: TEST_<KEY> overrides <KEY> per app variable, TEST_SERVER_* required (no
                     fallback to production server credentials)
                  ─► SSH: write .env, `compose pull && compose up -d`, verify /health
+   TEST_MODE = "false" / unset:
+              ─► release-production (release-pipeline.yml, direct): if image content changed since the
+                 last vX.Y.Z tag → next version → build & push X.Y.Z + latest → tag → deploy to the
+                 production server → verify /health (the same steps release.yml runs after a merge)
+   both:
               ─► open-pull-request: create/update PR fix/cicd → Development (includes version, test
                  image, test-deploy status in the body)
-              ─► notify-approval-email: only on the run that CREATES the PR (not on later updates)
+              ─► notify-approval-email: only with TEST_MODE=true, on the run that CREATES the PR
 ```
 
 * **Version:** the test image reuses the current production version number (the latest `vX.Y.Z` git tag)
   with a `-test` suffix -- it is **not** incremented on every `fix/cicd` commit. Multiple commits before
   approval just rebuild/replace the same `<version>-test` tag. The production version only advances in
   `release.yml`, after an approved merge into `Development`.
-* **`TEST_MODE=false`** (or unset): builds and pushes the `-test` image, opens/updates the PR, but never
-  touches the test server, and no email is sent (matches the "First successful **test deployment**" gate
-  on the email).
+* **`TEST_MODE=false`** (or unset): **no test server and no merge first -- straight to production.** Every
+  push to `fix/cicd` that passes CI and changed `app/**`, `Dockerfile`, `.dockerignore` or `requirements.txt`
+  (compared with the last release tag) is released and deployed to the production server, then the PR is
+  opened/updated so the code also reaches `Development`. The run is never cancelled by a newer push while
+  it may be deploying. No `-test` image and no approval email. Note that **merging that PR later releases
+  again** (new patch version, same code) because `release.yml` runs on every merge that changes image content.
 * **App variables** (`FT_*`, `MONGO_*`, `ME_CONFIG_*`, `OPENAI_API_KEY`, ...): `scripts/deploy/render_test_env.sh`
   prefers `TEST_<KEY>` over `<KEY>` for every key `scripts/deploy/render_env.sh` (production) knows about,
   falling back to the production value when no `TEST_` override exists. You only need to set `TEST_<KEY>`
@@ -162,7 +172,7 @@ the repo; the `FT_SMTP_*` keys are the *application's* own SMTP config, unrelate
 | `SERVER_PORT` | `22` | default if unset |
 | `COMPOSE_SERVICE` | `fintracker` | optional; compose service name of the app |
 | `COMPOSE_FILE` | *(empty)* | optional; e.g. `docker-compose.prod.yml` if not the default name |
-| `TEST_MODE` | `true` / `false` | **test pipeline gate.** `false`/unset: build+push the `-test` image and open the PR, but never touch the test server. `true`: also deploy to and verify the test server. |
+| `TEST_MODE` | `true` / `false` | **test pipeline gate** for pushes to `fix/cicd`. `true`: build+push the `-test` image, deploy to and verify the test server, open the PR (production only after the merge). `false`/unset: skip the test server and release straight to **production**, then open the PR. |
 | `TEST_DEPLOY_PATH` | e.g. `/opt/fintracker-test` | **required if `TEST_MODE=true`**: directory on the test server that already holds a compose file. No fallback to `DEPLOY_PATH`. |
 | `TEST_SERVER_PORT` | `22` | optional; default if unset |
 | `TEST_COMPOSE_SERVICE` | `fintracker` | optional; falls back to `COMPOSE_SERVICE`, then `fintracker` |

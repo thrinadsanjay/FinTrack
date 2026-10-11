@@ -20,8 +20,8 @@ permissions:
   contents: read
 
 concurrency:
-  # Shares the release queue: a rollback never races a release.
-  group: release-development
+  # Shares the production release queue (release-pipeline.yml): a rollback never races a release.
+  group: release-production
   cancel-in-progress: false
 
 env:
