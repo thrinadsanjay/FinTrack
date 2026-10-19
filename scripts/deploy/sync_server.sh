@@ -38,7 +38,7 @@ if [ -d "$DEPLOY_PATH/.git" ]; then
   log "Updating existing clone at ${DEPLOY_PATH}"
   cd "$DEPLOY_PATH"
   git remote set-url origin "$REPO_URL"
-  git fetch --depth 1 origin "$GIT_REF"
+  git fetch --depth 1 origin "+refs/heads/${GIT_REF}:refs/remotes/origin/${GIT_REF}"
   git reset --hard "origin/${GIT_REF}"
 else
   # First run. The action has already created DEPLOY_PATH and written .env into it, so
@@ -50,7 +50,7 @@ else
   cd "$DEPLOY_PATH"
   git init -q
   git remote add origin "$REPO_URL"
-  if ! { git fetch --depth 1 origin "$GIT_REF" && git checkout -q -B "$GIT_REF" "origin/${GIT_REF}"; }; then
+  if ! { git fetch --depth 1 origin "+refs/heads/${GIT_REF}:refs/remotes/origin/${GIT_REF}" && git checkout -q -B "$GIT_REF" "origin/${GIT_REF}"; }; then
     # Don't leave a half-made clone behind: the next run would take the
     # `reset --hard` path above and overwrite those files.
     rm -rf "$DEPLOY_PATH/.git"
@@ -60,7 +60,7 @@ fi
 
 [ -f "$DEPLOY_PATH/.env" ] || die ".env is missing in ${DEPLOY_PATH} (should have been written before this script ran)"
 
-env_value() { grep -m1 "^${1}=" "$DEPLOY_PATH/.env" 2>/dev/null | cut -d= -f2-; }
+env_value() { grep -m1 "^${1}=" "$DEPLOY_PATH/.env" 2>/dev/null | cut -d= -f2- || true; }  # missing key -> empty, never a set -e exit
 
 # docker-compose.yml, plus the optional nginx reverse-proxy overlay when enabled --
 # included automatically so a plain `compose up -d` always matches the real running
@@ -75,24 +75,13 @@ if [ "$(env_value FT_NGINX_ENABLED)" = "true" ] && [ -f "$DEPLOY_PATH/docker-com
   log "Reverse-proxy overlay enabled: including docker-compose.nginx.yml"
 fi
 
-# --- container engine / compose detection: Docker, or rootless Podman ---
-if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-  ENGINE=docker
-  docker compose version >/dev/null 2>&1 || die "docker is present but the compose v2 plugin is missing"
-  compose() { docker compose "${COMPOSE_F_ARGS[@]}" "$@"; }
-elif command -v podman >/dev/null 2>&1; then
-  ENGINE=podman
-  if podman compose version >/dev/null 2>&1; then
-    compose() { podman compose "${COMPOSE_F_ARGS[@]}" "$@"; }
-  elif command -v podman-compose >/dev/null 2>&1; then
-    compose() { podman-compose "${COMPOSE_F_ARGS[@]}" "$@"; }
-  else
-    die "podman is installed but no compose implementation (podman compose / podman-compose) was found"
-  fi
-else
-  die "neither docker nor podman is installed or usable for $(id -un)"
-fi
-log "Using container engine: ${ENGINE} (user: $(id -un), uid: $(id -u))"
+# --- container runtime: deploy/lib/runtime.sh (streamed ahead of this script by CI) ---
+# Autodetects docker / podman and docker compose / docker-compose / podman-compose /
+# podman compose; FT_CONTAINER_ENGINE / FT_COMPOSE in .env override the choice.
+declare -F ft_detect_runtime >/dev/null || . "$(dirname "${BASH_SOURCE[0]}")/../../deploy/lib/runtime.sh"
+FT_CONTAINER_ENGINE="${FT_CONTAINER_ENGINE:-$(env_value FT_CONTAINER_ENGINE)}"
+FT_COMPOSE="${FT_COMPOSE:-$(env_value FT_COMPOSE)}"
+ft_detect_runtime || die "no usable container runtime for $(id -un) -- see the [runtime] lines above"
 
 compose config >/dev/null || die "compose config validation failed -- check ${DEPLOY_PATH}/.env and the compose file"
 
@@ -113,6 +102,10 @@ ensure_mount_dir "${certs_dir:-$DEPLOY_PATH/certs}"
 if [ "$(env_value FT_NGINX_ENABLED)" = "true" ]; then
   nginx_certs_dir="$(env_value FT_NGINX_CERTS_DIR)"
   ensure_mount_dir "${nginx_certs_dir:-$DEPLOY_PATH/nginx-certs}"
+  for pem in fullchain.pem privkey.pem; do
+    [ -f "${nginx_certs_dir:-$DEPLOY_PATH/nginx-certs}/${pem}" ] \
+      || die "FT_NGINX_ENABLED=true but ${pem} is missing in ${nginx_certs_dir:-$DEPLOY_PATH/nginx-certs} -- add the FT_NGINX_TLS_FULLCHAIN and FT_NGINX_TLS_PRIVKEY secrets (or set FT_NGINX_ENABLED=false)"
+  done
   public_bind="$(env_value FT_PUBLIC_BIND)"
   [ "$public_bind" = "127.0.0.1" ] \
     || log "WARNING: FT_NGINX_ENABLED=true but FT_PUBLIC_BIND is not 127.0.0.1 -- fintracker is still reachable directly, bypassing nginx"

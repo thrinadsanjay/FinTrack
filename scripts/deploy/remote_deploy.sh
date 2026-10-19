@@ -31,13 +31,18 @@ HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-180}"
 [[ "$SERVICE" =~ ^[A-Za-z0-9._-]+$ ]] || die "SERVICE looks invalid: '$SERVICE'"
 [[ "$HEALTH_TIMEOUT" =~ ^[0-9]+$ ]] || die "HEALTH_TIMEOUT must be seconds"
 
-[ -d "$DEPLOY_PATH" ] || die "DEPLOY_PATH does not exist: $DEPLOY_PATH"
+[ -d "$DEPLOY_PATH" ] || die "DEPLOY_PATH does not exist: $DEPLOY_PATH -- on a fresh server, run 'Publish deployment bundle to main' (Actions -> Run workflow) once: it creates the folder, writes .env, clones main and starts the stack; then re-run this deploy"
 cd "$DEPLOY_PATH"
+# DEPLOY_PATH must be the server's clone of `main` (the folder publish-main.yml syncs).
+compose_main="${COMPOSE_FILE:-docker-compose.yml}"
+[ -f "$compose_main" ] \
+  || die "no ${compose_main} in DEPLOY_PATH=${DEPLOY_PATH} -- set the DEPLOY_PATH variable to the folder that holds the clone of main (the one the 'Sync bundle to the server' job uses)"
+[ -f .env ] || die "no .env in DEPLOY_PATH=${DEPLOY_PATH} -- run 'Publish deployment bundle to main' (manual run) to write it, or check DEPLOY_PATH"
 
 # Compose files may reference ${FINTRACKER_VERSION}; plain ":latest" works too.
 export FINTRACKER_VERSION="$VERSION"
 
-env_value() { grep -m1 "^${1}=" "$DEPLOY_PATH/.env" 2>/dev/null | cut -d= -f2-; }
+env_value() { grep -m1 "^${1}=" "$DEPLOY_PATH/.env" 2>/dev/null | cut -d= -f2- || true; }  # missing key -> empty, never a set -e exit
 
 # docker-compose.yml, plus the optional nginx reverse-proxy overlay when enabled --
 # included automatically so this single-service recreate doesn't drop the overlay's
@@ -52,29 +57,18 @@ if [ "$(env_value FT_NGINX_ENABLED)" = "true" ] && [ -f "$DEPLOY_PATH/docker-com
   log "Reverse-proxy overlay enabled: including docker-compose.nginx.yml"
 fi
 
-# --- container engine / compose detection: Docker, or rootless Podman ---
-if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-  ENGINE=docker
-  docker compose version >/dev/null 2>&1 || die "docker is present but the compose v2 plugin is missing"
-  compose() { docker compose "${COMPOSE_F_ARGS[@]}" "$@"; }
-elif command -v podman >/dev/null 2>&1; then
-  ENGINE=podman
-  if podman compose version >/dev/null 2>&1; then
-    compose() { podman compose "${COMPOSE_F_ARGS[@]}" "$@"; }
-  elif command -v podman-compose >/dev/null 2>&1; then
-    compose() { podman-compose "${COMPOSE_F_ARGS[@]}" "$@"; }
-  else
-    die "podman is installed but no compose implementation (podman compose / podman-compose) was found"
-  fi
-else
-  die "neither docker nor podman is installed or usable for $(id -un)"
-fi
-log "Using container engine: ${ENGINE}"
+# --- container runtime: deploy/lib/runtime.sh (streamed ahead of this script by CI) ---
+# Autodetects docker / podman and docker compose / docker-compose / podman-compose /
+# podman compose; FT_CONTAINER_ENGINE / FT_COMPOSE in .env override the choice.
+declare -F ft_detect_runtime >/dev/null || . "$(dirname "${BASH_SOURCE[0]}")/../../deploy/lib/runtime.sh"
+FT_CONTAINER_ENGINE="${FT_CONTAINER_ENGINE:-$(env_value FT_CONTAINER_ENGINE)}"
+FT_COMPOSE="${FT_COMPOSE:-$(env_value FT_COMPOSE)}"
+ft_detect_runtime || die "no usable container runtime for $(id -un) -- see the [runtime] lines above"
 
-compose config --services | grep -qx "$SERVICE" \
+ft_compose_services | grep -qx "$SERVICE" \
   || die "service '$SERVICE' not found in the compose file in $DEPLOY_PATH"
-if ! compose config --images | grep -qxE "${IMAGE}:(latest|${VERSION})"; then
-  die "compose service '$SERVICE' must use image ${IMAGE}:latest (or ${IMAGE}:\${FINTRACKER_VERSION}); found: $(compose config --images | tr '\n' ' ')"
+if ! ft_compose_images | grep -qxE "${IMAGE}:(latest|${VERSION})"; then
+  die "compose service '$SERVICE' must use image ${IMAGE}:latest (or ${IMAGE}:\${FINTRACKER_VERSION}); found: $(ft_compose_images | tr '\n' ' ')"
 fi
 
 # Docker auto-creates a missing bind-mount host directory; rootless Podman does not
@@ -99,30 +93,33 @@ if [ "$(env_value FT_NGINX_ENABLED)" = "true" ]; then
     || log "WARNING: FT_NGINX_ENABLED=true but FT_PUBLIC_BIND is not 127.0.0.1 -- fintracker is still reachable directly, bypassing nginx"
 fi
 
-container_id() { compose ps -q "$SERVICE" 2>/dev/null | head -n 1; }
+container_id() { ft_service_container "$SERVICE"; }
 
 prev_cid="$(container_id || true)"
 prev_image_id=""
 prev_version="none"
 if [ -n "$prev_cid" ]; then
-  prev_image_id="$($ENGINE inspect --format '{{.Image}}' "$prev_cid" 2>/dev/null || true)"
-  prev_version="$($ENGINE image inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' "$prev_image_id" 2>/dev/null || true)"
+  prev_image_id="$(engine inspect --format '{{.Image}}' "$prev_cid" 2>/dev/null || true)"
+  prev_version="$(engine image inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' "$prev_image_id" 2>/dev/null || true)"
   prev_version="${prev_version:-unknown}"
 fi
 log "Currently running: ${prev_version}"
 
 log "Pulling ${IMAGE}:${VERSION}"
-$ENGINE pull --quiet "${IMAGE}:${VERSION}" >/dev/null || die "$ENGINE pull ${IMAGE}:${VERSION} failed"
-new_image_id="$($ENGINE image inspect --format '{{.Id}}' "${IMAGE}:${VERSION}")"
+engine pull --quiet "${IMAGE}:${VERSION}" >/dev/null || die "${FT_ENGINE} pull ${IMAGE}:${VERSION} failed"
+new_image_id="$(engine image inspect --format '{{.Id}}' "${IMAGE}:${VERSION}")"
 
 # Point the local :latest at the exact version being deployed (does not touch the registry).
-$ENGINE tag "${IMAGE}:${VERSION}" "${IMAGE}:latest"
+engine tag "${IMAGE}:${VERSION}" "${IMAGE}:latest"
 
 log "Recreating service '${SERVICE}' (other services untouched)"
 compose up -d --no-deps "$SERVICE"
 
 health_version() {
-  compose exec -T "$SERVICE" python -c \
+  local cid
+  cid="$(ft_service_container "$SERVICE")"
+  [ -n "$cid" ] || return 1
+  engine exec "$cid" python -c \
     "import json, os, urllib.request as u; print(json.load(u.urlopen('http://127.0.0.1:%s/health' % os.environ.get('PORT', '8000'), timeout=4)).get('version', ''))" \
     2>/dev/null | tr -d '\r' | tail -n 1
 }
@@ -132,9 +129,9 @@ verify() {
   while [ "$SECONDS" -lt "$deadline" ]; do
     cid="$(container_id || true)"
     if [ -n "$cid" ]; then
-      state="$($ENGINE inspect --format '{{.State.Status}}' "$cid" 2>/dev/null || echo missing)"
-      image_id="$($ENGINE inspect --format '{{.Image}}' "$cid" 2>/dev/null || echo "")"
-      health="$($ENGINE inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid" 2>/dev/null || echo none)"
+      state="$(engine inspect --format '{{.State.Status}}' "$cid" 2>/dev/null || echo missing)"
+      image_id="$(engine inspect --format '{{.Image}}' "$cid" 2>/dev/null || echo "")"
+      health="$(engine inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid" 2>/dev/null || echo none)"
       if [ "$state" = "exited" ] || [ "$state" = "dead" ]; then
         log "Container ${state}."
         return 1
@@ -162,11 +159,12 @@ fi
 
 log "Deployment verification FAILED. Diagnostics:"
 compose ps || true
-compose logs --no-color --tail=100 "$SERVICE" || true
+diag_cid="$(ft_service_container "$SERVICE")"
+[ -z "$diag_cid" ] || engine logs --tail 100 "$diag_cid" 2>&1 || true
 
 if [ "$AUTO_ROLLBACK" = "true" ] && [ -n "$prev_image_id" ] && [ "$prev_image_id" != "$new_image_id" ]; then
   log "Restoring previous version (${prev_version}) so the service stays up"
-  $ENGINE tag "$prev_image_id" "${IMAGE}:latest"
+  engine tag "$prev_image_id" "${IMAGE}:latest"
   if [[ "$prev_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     export FINTRACKER_VERSION="$prev_version"
   else

@@ -404,6 +404,10 @@ jobs:
           TEST_FT_NGINX_HTTP_PORT: ${{ vars.TEST_FT_NGINX_HTTP_PORT }}
           FT_NGINX_HTTPS_PORT: ${{ vars.FT_NGINX_HTTPS_PORT }}
           TEST_FT_NGINX_HTTPS_PORT: ${{ vars.TEST_FT_NGINX_HTTPS_PORT }}
+          FT_CONTAINER_ENGINE: ${{ vars.FT_CONTAINER_ENGINE }}
+          TEST_FT_CONTAINER_ENGINE: ${{ vars.TEST_FT_CONTAINER_ENGINE }}
+          FT_COMPOSE: ${{ vars.FT_COMPOSE }}
+          TEST_FT_COMPOSE: ${{ vars.TEST_FT_COMPOSE }}
         run: |
           FINTRACKER_VERSION="${VERSION}-test" bash scripts/deploy/render_test_env.sh > "$RUNNER_TEMP/fintracker-test.env"
 

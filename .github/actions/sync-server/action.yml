@@ -36,6 +36,18 @@ inputs:
   ssh-known-hosts:
     description: known_hosts line(s) for the server (from `ssh-keyscan`, verified out of band)
     required: true
+  tls-fullchain:
+    description: nginx TLS certificate chain (PEM). Written as fullchain.pem when set together with tls-privkey.
+    required: false
+    default: ""
+  tls-privkey:
+    description: nginx TLS private key (PEM). Written as privkey.pem (mode 600).
+    required: false
+    default: ""
+  tls-dir:
+    description: Certificate folder on the server, absolute or relative to deploy-path (FT_NGINX_CERTS_DIR)
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -84,6 +96,68 @@ runs:
             "${remote_env} bash -c $(printf '%q' "$remote_script")" \
             < "$ENV_FILE"
 
+    - name: Write nginx TLS certificate on the server
+      if: inputs.tls-fullchain != '' || inputs.tls-privkey != ''
+      shell: bash
+      env:
+        TLS_FULLCHAIN: ${{ inputs.tls-fullchain }}
+        TLS_PRIVKEY: ${{ inputs.tls-privkey }}
+        TLS_DIR: ${{ inputs.tls-dir }}
+        DEPLOY_PATH: ${{ inputs.deploy-path }}
+        SERVER_HOST: ${{ inputs.server-host }}
+        SERVER_USER: ${{ inputs.server-user }}
+        SERVER_PORT: ${{ inputs.server-port }}
+      run: |
+        set -euo pipefail
+        if [ -z "$TLS_FULLCHAIN" ] || [ -z "$TLS_PRIVKEY" ]; then
+          echo "::error::Set both FT_NGINX_TLS_FULLCHAIN and FT_NGINX_TLS_PRIVKEY secrets (or neither)."
+          exit 1
+        fi
+        work="$(mktemp -d)"
+        trap 'rm -rf "$work"' EXIT
+        umask 077
+        mkdir "$work/certs"
+        # Pasted secrets may carry Windows line endings; PEM files need plain \n.
+        printf '%s\n' "$TLS_FULLCHAIN" | tr -d '\r' > "$work/certs/fullchain.pem"
+        printf '%s\n' "$TLS_PRIVKEY"   | tr -d '\r' > "$work/certs/privkey.pem"
+
+        # Validate before anything reaches the server (only non-secret facts are printed).
+        openssl x509 -in "$work/certs/fullchain.pem" -noout 2>/dev/null \
+          || { echo "::error::FT_NGINX_TLS_FULLCHAIN is not a PEM certificate (paste the full -----BEGIN CERTIFICATE----- ... chain, not the CSR)."; exit 1; }
+        openssl pkey -in "$work/certs/privkey.pem" -noout 2>/dev/null \
+          || { echo "::error::FT_NGINX_TLS_PRIVKEY is not an unencrypted PEM private key."; exit 1; }
+        cert_pub="$(openssl x509 -in "$work/certs/fullchain.pem" -noout -pubkey | openssl pkey -pubin -outform DER | sha256sum)"
+        key_pub="$(openssl pkey -in "$work/certs/privkey.pem" -pubout -outform DER | sha256sum)"
+        [ "$cert_pub" = "$key_pub" ] \
+          || { echo "::error::FT_NGINX_TLS_PRIVKEY does not belong to the certificate in FT_NGINX_TLS_FULLCHAIN."; exit 1; }
+        openssl x509 -in "$work/certs/fullchain.pem" -noout -checkend 0 >/dev/null \
+          || { echo "::error::The TLS certificate has expired ($(openssl x509 -in "$work/certs/fullchain.pem" -noout -enddate))."; exit 1; }
+        openssl x509 -in "$work/certs/fullchain.pem" -noout -checkend 2592000 >/dev/null \
+          || echo "::warning::The TLS certificate expires within 30 days ($(openssl x509 -in "$work/certs/fullchain.pem" -noout -enddate)). Update the FT_NGINX_TLS_* secrets."
+        echo "Certificate: $(openssl x509 -in "$work/certs/fullchain.pem" -noout -subject) | $(openssl x509 -in "$work/certs/fullchain.pem" -noout -enddate)"
+        san="$(openssl x509 -in "$work/certs/fullchain.pem" -noout -ext subjectAltName 2>/dev/null | tail -n +2 | tr -d ' ' || true)"
+        [ -z "$san" ] || echo "Covers: ${san}"
+
+        remote_env="$(printf 'DEPLOY_PATH=%q TLS_DIR=%q' "$DEPLOY_PATH" "${TLS_DIR:-nginx-certs}")"
+        # Unpack next to the target, then move into place: nginx never sees a half-written pair.
+        remote_script='set -euo pipefail; umask 077; cd "$DEPLOY_PATH"; mkdir -p "$TLS_DIR"; chmod 700 "$TLS_DIR";
+          tmp="$(mktemp -d "$TLS_DIR/.incoming.XXXXXX")"; tar -xf - -C "$tmp";
+          chmod 644 "$tmp/fullchain.pem"; chmod 600 "$tmp/privkey.pem";
+          mv -f "$tmp/fullchain.pem" "$TLS_DIR/fullchain.pem"; mv -f "$tmp/privkey.pem" "$TLS_DIR/privkey.pem"; rmdir "$tmp";
+          echo "[tls] certificate written to $(cd "$TLS_DIR" && pwd)"'
+
+        # Always strict here: a private key must only ever go to the verified server
+        # (SSH_KNOWN_HOSTS), even while the other steps are still in testing mode.
+        tar -C "$work/certs" -cf - fullchain.pem privkey.pem | \
+        ssh -i "$HOME/.ssh/fintracker_deploy" \
+            -p "$SERVER_PORT" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -o ConnectTimeout=20 \
+            "${SERVER_USER}@${SERVER_HOST}" \
+            "${remote_env} bash -c $(printf '%q' "$remote_script")"
+
     - name: Sync repo and bring the stack up
       shell: bash
       env:
@@ -109,7 +183,7 @@ runs:
             -o ServerAliveInterval=15 \
             "${SERVER_USER}@${SERVER_HOST}" \
             "${remote_env} bash -s" \
-            < "$GITHUB_WORKSPACE/scripts/deploy/sync_server.sh"
+            < <(cat "$GITHUB_WORKSPACE/deploy/lib/runtime.sh" "$GITHUB_WORKSPACE/scripts/deploy/sync_server.sh")
 
     - name: Remove SSH material
       if: always()

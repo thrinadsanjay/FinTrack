@@ -31,7 +31,7 @@ HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-120}"
 cd "$DEPLOY_PATH"
 [ -f .env ] || die ".env is missing in ${DEPLOY_PATH} (should have been written before this script ran)"
 
-env_value() { grep -m1 "^${1}=" "$DEPLOY_PATH/.env" 2>/dev/null | cut -d= -f2-; }
+env_value() { grep -m1 "^${1}=" "$DEPLOY_PATH/.env" 2>/dev/null | cut -d= -f2- || true; }  # missing key -> empty, never a set -e exit
 
 # docker-compose.yml, plus the optional nginx reverse-proxy overlay when enabled --
 # included automatically so a plain `compose up -d` always matches the real running
@@ -46,26 +46,15 @@ if [ "$(env_value FT_NGINX_ENABLED)" = "true" ] && [ -f "$DEPLOY_PATH/docker-com
   log "Reverse-proxy overlay enabled: including docker-compose.nginx.yml"
 fi
 
-# --- container engine / compose detection: Docker, or rootless Podman ---
-if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-  ENGINE=docker
-  docker compose version >/dev/null 2>&1 || die "docker is present but the compose v2 plugin is missing"
-  compose() { docker compose "${COMPOSE_F_ARGS[@]}" "$@"; }
-elif command -v podman >/dev/null 2>&1; then
-  ENGINE=podman
-  if podman compose version >/dev/null 2>&1; then
-    compose() { podman compose "${COMPOSE_F_ARGS[@]}" "$@"; }
-  elif command -v podman-compose >/dev/null 2>&1; then
-    compose() { podman-compose "${COMPOSE_F_ARGS[@]}" "$@"; }
-  else
-    die "podman is installed but no compose implementation (podman compose / podman-compose) was found"
-  fi
-else
-  die "neither docker nor podman is installed or usable for $(id -un)"
-fi
-log "Using container engine: ${ENGINE} (user: $(id -un))"
+# --- container runtime: deploy/lib/runtime.sh (streamed ahead of this script by CI) ---
+# Autodetects docker / podman and docker compose / docker-compose / podman-compose /
+# podman compose; FT_CONTAINER_ENGINE / FT_COMPOSE in .env override the choice.
+declare -F ft_detect_runtime >/dev/null || . "$(dirname "${BASH_SOURCE[0]}")/../../deploy/lib/runtime.sh"
+FT_CONTAINER_ENGINE="${FT_CONTAINER_ENGINE:-$(env_value FT_CONTAINER_ENGINE)}"
+FT_COMPOSE="${FT_COMPOSE:-$(env_value FT_COMPOSE)}"
+ft_detect_runtime || die "no usable container runtime for $(id -un) -- see the [runtime] lines above"
 
-compose config --services | grep -qx "$SERVICE" \
+ft_compose_services | grep -qx "$SERVICE" \
   || die "service '$SERVICE' not found in the compose file in $DEPLOY_PATH"
 
 # Docker auto-creates a missing bind-mount host directory; rootless Podman does not
@@ -97,7 +86,10 @@ log "Recreating the stack"
 compose up -d
 
 health_ok() {
-  compose exec -T "$SERVICE" python -c \
+  local cid
+  cid="$(ft_service_container "$SERVICE")"
+  [ -n "$cid" ] || return 1
+  engine exec "$cid" python -c \
     "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:%s/health' % __import__('os').environ.get('PORT', '8000'), timeout=4).status == 200 else 1)" \
     >/dev/null 2>&1
 }
@@ -105,10 +97,10 @@ health_ok() {
 verify() {
   local deadline=$((SECONDS + HEALTH_TIMEOUT)) cid state health
   while [ "$SECONDS" -lt "$deadline" ]; do
-    cid="$(compose ps -q "$SERVICE" 2>/dev/null | head -n 1)"
+    cid="$(ft_service_container "$SERVICE")"
     if [ -n "$cid" ]; then
-      state="$($ENGINE inspect --format '{{.State.Status}}' "$cid" 2>/dev/null || echo missing)"
-      health="$($ENGINE inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid" 2>/dev/null || echo none)"
+      state="$(engine inspect --format '{{.State.Status}}' "$cid" 2>/dev/null || echo missing)"
+      health="$(engine inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid" 2>/dev/null || echo none)"
       if [ "$state" = "exited" ] || [ "$state" = "dead" ]; then
         log "Container ${state}."
         return 1
@@ -131,5 +123,6 @@ fi
 
 log "Test deployment verification FAILED. Diagnostics:"
 compose ps || true
-compose logs --no-color --tail=100 "$SERVICE" || true
+diag_cid="$(ft_service_container "$SERVICE")"
+[ -z "$diag_cid" ] || engine logs --tail 100 "$diag_cid" 2>&1 || true
 die "test deployment failed verification"
