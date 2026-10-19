@@ -57,6 +57,21 @@ jobs:
           path: src
           persist-credentials: false
 
+      # Servers run anything from legacy docker-compose v1 (e.g. Oracle Linux 7 with
+      # Docker 19.03) to the latest `docker compose` v2: the bundle must parse with both.
+      - name: Validate compose files (docker-compose v1.29 + docker compose v2)
+        working-directory: src/deploy
+        run: |
+          set -euo pipefail
+          cp ../env.example .env
+          for files in "-f docker-compose.yml" "-f docker-compose.yml -f docker-compose.nginx.yml"; do
+            echo "docker compose (v2) ${files}"
+            docker compose ${files} config -q
+            echo "docker-compose 1.29.2 (legacy v1) ${files}"
+            docker run --rm -v "$PWD:/bundle:ro" -w /bundle docker/compose:1.29.2 ${files} config -q
+          done
+          rm .env
+
       - name: Checkout main
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

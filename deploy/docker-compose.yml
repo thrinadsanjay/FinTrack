@@ -5,6 +5,7 @@
 # Actions and pulled from Docker Hub.
 #
 #   Update:  git pull && docker compose pull fintracker && docker compose up -d
+#            (legacy: docker-compose pull fintracker && docker-compose up -d)
 #
 # Why the explicit `pull`: `up -d` does NOT re-download a tag that already exists
 # locally, so a new `latest` is only fetched by `docker compose pull`. Only the
@@ -16,7 +17,12 @@
 #   - the app service is named `fintracker`
 #   - its image is automationbuilder/fintracker:${FINTRACKER_VERSION:-latest}
 #   - no `build:` section
-name: fin_tracker
+#
+# Compatibility: Docker Compose v2 (`docker compose`), legacy docker-compose v1
+# (>= 1.27, e.g. Oracle Linux 7 with Docker 19.03) and podman-compose. Hence:
+#   - no `version:` key (v1 >= 1.27 and v2 both read the Compose Specification)
+#   - no top-level `name:` (v1 rejects it). The project name comes from
+#     COMPOSE_PROJECT_NAME=fin_tracker in .env, which every compose tool reads.
 
 services:
   mongo:
