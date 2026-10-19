@@ -38,7 +38,7 @@ if [ -d "$DEPLOY_PATH/.git" ]; then
   log "Updating existing clone at ${DEPLOY_PATH}"
   cd "$DEPLOY_PATH"
   git remote set-url origin "$REPO_URL"
-  git fetch --depth 1 origin "$GIT_REF"
+  git fetch --depth 1 origin "+refs/heads/${GIT_REF}:refs/remotes/origin/${GIT_REF}"
   git reset --hard "origin/${GIT_REF}"
 else
   # First run. The action has already created DEPLOY_PATH and written .env into it, so
@@ -50,7 +50,7 @@ else
   cd "$DEPLOY_PATH"
   git init -q
   git remote add origin "$REPO_URL"
-  if ! { git fetch --depth 1 origin "$GIT_REF" && git checkout -q -B "$GIT_REF" "origin/${GIT_REF}"; }; then
+  if ! { git fetch --depth 1 origin "+refs/heads/${GIT_REF}:refs/remotes/origin/${GIT_REF}" && git checkout -q -B "$GIT_REF" "origin/${GIT_REF}"; }; then
     # Don't leave a half-made clone behind: the next run would take the
     # `reset --hard` path above and overwrite those files.
     rm -rf "$DEPLOY_PATH/.git"
