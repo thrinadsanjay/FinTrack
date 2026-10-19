@@ -38,6 +38,10 @@ cat <<'EOF'
 EOF
 
 echo
+echo "# Compose project name (instead of a top-level \`name:\`, which docker-compose v1 rejects)."
+echo "COMPOSE_PROJECT_NAME=fin_tracker"
+
+echo
 echo "# --- Core App ---"
 kv FT_ENV
 kv FT_APP_NAME

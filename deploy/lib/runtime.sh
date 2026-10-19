@@ -152,15 +152,18 @@ ft_compose_images() {
   compose config 2>/dev/null | awk '/^ +image:/ {v=$2; gsub(/["\047]/,"",v); print v}'
 }
 
-# Compose project name: COMPOSE_PROJECT_NAME, else the file's top-level `name:`, else the folder.
+# Compose project name, resolved the way compose does: COMPOSE_PROJECT_NAME (environment,
+# then .env), else the file's top-level `name:` (older bundles), else the folder.
 ft_compose_project() {
   if [ -n "${COMPOSE_PROJECT_NAME:-}" ]; then echo "$COMPOSE_PROJECT_NAME"; return; fi
+  local n
+  n="$(sed -n 's/^COMPOSE_PROJECT_NAME=["'\'']\{0,1\}\([A-Za-z0-9_.-]*\).*/\1/p' .env 2>/dev/null | head -n1)"
+  [ -n "$n" ] && { echo "$n"; return; }
   local f="docker-compose.yml" i
   local -a fa=(${COMPOSE_F_ARGS[@]+"${COMPOSE_F_ARGS[@]}"})
   for ((i = 0; i + 1 < ${#fa[@]}; i++)); do
     [ "${fa[$i]}" = "-f" ] && { f="${fa[$((i + 1))]}"; break; }
   done
-  local n
   n="$(sed -n 's/^name:[[:space:]]*["'\'']\{0,1\}\([A-Za-z0-9_.-]*\).*/\1/p' "$f" 2>/dev/null | head -n1)"
   [ -n "$n" ] && { echo "$n"; return; }
   basename "$(pwd)" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-'

@@ -55,6 +55,10 @@ cat <<'EOF'
 EOF
 
 echo
+echo "# Compose project name (instead of a top-level \`name:\`, which docker-compose v1 rejects)."
+echo "COMPOSE_PROJECT_NAME=fin_tracker"
+
+echo
 printf 'FINTRACKER_VERSION=%s\n' "${FINTRACKER_VERSION:?FINTRACKER_VERSION must be exported by the caller}"
 
 echo
