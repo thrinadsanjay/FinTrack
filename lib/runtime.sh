@@ -135,6 +135,63 @@ ft_detect_runtime() {
   local mode=""
   [ "$FT_ENGINE" = podman ] && mode="$( [ "$(id -u)" -eq 0 ] && echo ', rootful' || echo ', rootless')"
   _ft_rt_log "engine: ${FT_ENGINE} ($("$FT_ENGINE" --version 2>/dev/null | head -n1)${mode}) | compose: ${FT_COMPOSE_NAME} | user: $(id -un) (uid $(id -u))"
+  ft_select_mongo_tag
+}
+
+# MongoDB image tag for this host, exported as FT_MONGO_IMAGE_TAG (compose prefers the
+# environment over .env). An explicit FT_MONGO_IMAGE_TAG (environment or .env) always wins,
+# then the image of the project's existing mongo container. Otherwise (fresh install):
+#   CPU without AVX                              -> 4.4  (MongoDB >= 5.0 needs AVX)
+#   EL7 family (Oracle Linux / RHEL / CentOS 7)  -> 5.0  (Ubuntu 20.04 base, glibc 2.31:
+#   or Docker < 20.10.10                                  older seccomp profiles break the
+#                                                         clone3-based threads of glibc >= 2.34,
+#                                                         used by mongo >= 6.0 images)
+#   anything else                                -> latest (the compose file's default)
+# Never downgrade an existing data volume: once a newer MongoDB has opened it, pin the
+# tag you run in FT_MONGO_IMAGE_TAG.
+FT_MONGO_TAG_LEGACY="5.0"
+FT_MONGO_TAG_NO_AVX="4.4"
+ft_select_mongo_tag() {
+  local tag="${FT_MONGO_IMAGE_TAG:-}" reason=""
+  [ -n "$tag" ] || tag="$(sed -n 's/^FT_MONGO_IMAGE_TAG=["'\'']\{0,1\}\([A-Za-z0-9_.-]*\).*/\1/p' .env 2>/dev/null | head -n1)"
+  if [ -n "$tag" ]; then
+    _ft_rt_log "mongo image tag: ${tag} (FT_MONGO_IMAGE_TAG)"
+    return 0
+  fi
+
+  # Auto-selection is for fresh installs only: an existing mongo container keeps its
+  # image, so a deploy can never swap the MongoDB version under an existing data volume.
+  local existing
+  existing="$(engine ps -aq --filter "label=com.docker.compose.project=$(ft_compose_project)" \
+                --filter label=com.docker.compose.service=mongo 2>/dev/null | head -n1)"
+  [ -n "$existing" ] && existing="$(engine inspect --format '{{.Config.Image}}' "$existing" 2>/dev/null || true)"
+  if [[ "$existing" == *mongo:* ]]; then
+    export FT_MONGO_IMAGE_TAG="${existing##*:}"
+    _ft_rt_log "mongo image tag: ${FT_MONGO_IMAGE_TAG} (kept from the existing mongo container; set FT_MONGO_IMAGE_TAG to change it)"
+    return 0
+  fi
+
+  local os_id="" os_ver="" docker_ver=""
+  if [ -r /etc/os-release ]; then
+    os_id="$(. /etc/os-release && echo "${ID:-} ${ID_LIKE:-}")"
+    os_ver="$(. /etc/os-release && echo "${VERSION_ID:-}")"
+  fi
+  [ "${FT_ENGINE:-}" = docker ] && docker_ver="$(docker version --format '{{.Server.Version}}' 2>/dev/null || true)"
+
+  if [ -r /proc/cpuinfo ] && ! grep -qw avx /proc/cpuinfo; then
+    tag="$FT_MONGO_TAG_NO_AVX"; reason="CPU has no AVX"
+  elif [[ " ${os_id} " =~ \ (ol|rhel|centos)\  ]] && [[ "$os_ver" == 7* ]]; then
+    tag="$FT_MONGO_TAG_LEGACY"; reason="EL7-family host (${os_id%% *} ${os_ver})"
+  elif [ -n "$docker_ver" ] && [ "$(printf '%s\n' "${docker_ver%%-*}" 20.10.10 | sort -V | head -n1)" != 20.10.10 ]; then
+    tag="$FT_MONGO_TAG_LEGACY"; reason="Docker ${docker_ver} < 20.10.10"
+  fi
+
+  if [ -n "$tag" ]; then
+    export FT_MONGO_IMAGE_TAG="$tag"
+    _ft_rt_log "mongo image tag: ${tag} (auto: ${reason}; set FT_MONGO_IMAGE_TAG to override)"
+  else
+    _ft_rt_log "mongo image tag: latest (auto; set FT_MONGO_IMAGE_TAG to pin a version)"
+  fi
 }
 
 # Services in the compose project (works with every compose tool).
