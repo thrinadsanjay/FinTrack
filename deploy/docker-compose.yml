@@ -26,7 +26,10 @@
 
 services:
   mongo:
-    image: mongo:${FT_MONGO_IMAGE_TAG:-latest} # pin to the major version you run, e.g. 7.0
+    # Tag: FT_MONGO_IMAGE_TAG, else auto-selected per host by ./fintrack and the deploy
+    # scripts (lib/runtime.sh: 5.0 on Oracle Linux/RHEL/CentOS 7 or Docker < 20.10.10,
+    # 4.4 without AVX), else latest. Never downgrade an existing data volume.
+    image: mongo:${FT_MONGO_IMAGE_TAG:-latest}
     hostname: mongodb
     restart: unless-stopped
     env_file:
@@ -46,13 +49,18 @@ services:
     security_opt:
       - apparmor=unconfined
     healthcheck:
-      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.adminCommand({ ping: 1 }).ok' mongodb:27017/admin | grep 1 >/dev/null"]
+      # mongosh ships with mongo >= 6.0 images; 4.4/5.0 only have the legacy `mongo` shell.
+      test: ["CMD-SHELL", "sh=mongosh; command -v mongosh >/dev/null || sh=mongo; $$sh --quiet --eval 'db.adminCommand({ ping: 1 }).ok' localhost:27017/admin | grep -q 1"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 20s
     networks:
-      - ft-net
+      ft-net:
+        # `hostname:` alone isn't resolvable by other containers; the alias is what
+        # makes mongodb:27017 (FT_MONGO_URI, mongo-express) work on every engine.
+        aliases:
+          - mongodb
 
   mongo-express:
     image: mongo-express:1.0.2
@@ -88,6 +96,9 @@ services:
       - .env
     environment:
       PORT: ${PORT:-8000}
+      # The app's built-in default is mongodb://localhost, which inside this container
+      # is the app itself (Connection refused) -- default to the mongo service instead.
+      FT_MONGO_URI: ${FT_MONGO_URI:-mongodb://mongodb:27017}
       # Proxmox/LXC often blocks uvloop socketpair used for signal handling.
       UVICORN_LOOP: asyncio
     # Public by default. Set FT_PUBLIC_BIND=127.0.0.1 when fronting this with the
