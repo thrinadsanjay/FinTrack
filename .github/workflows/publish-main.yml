@@ -29,6 +29,11 @@ on:
       - "deploy/lib/runtime.sh"
       - "env.example"
   workflow_dispatch:
+    inputs:
+      sync-server:
+        description: Sync the server (.env, TLS cert, compose up -d) even if main is unchanged
+        type: boolean
+        default: true
 
 permissions:
   contents: write # push to main
@@ -44,6 +49,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       published: ${{ steps.commit.outputs.published }}
+      sync: ${{ steps.decide.outputs.sync }}
     steps:
       - name: Only publish from Development
         if: github.ref != 'refs/heads/Development'
@@ -131,13 +137,28 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # Sync whenever the bundle changed, or on a manual run (unless unticked) -- the latter
+      # is the only way to re-push .env / the TLS cert after editing a Secret or Variable
+      # (e.g. enabling nginx) without touching the compose file.
+      - name: Decide whether to sync the server
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          PUBLISHED: ${{ steps.commit.outputs.published }}
+          SYNC_INPUT: ${{ inputs.sync-server }}
+        run: |
+          sync=false
+          if [ "$PUBLISHED" = "true" ]; then sync=true
+          elif [ "$EVENT" = "workflow_dispatch" ] && [ "$SYNC_INPUT" != "false" ]; then sync=true
+          fi
+          echo "event=${EVENT} published=${PUBLISHED:-<empty>} sync-server input=${SYNC_INPUT:-<empty>} -> sync=${sync}"
+          echo "sync=${sync}" >> "$GITHUB_OUTPUT"
+
   sync-server:
     name: Sync bundle to the server
     needs: publish
-    # Runs whenever the bundle actually changed, OR on a manual run regardless -- the
-    # latter is the only way to re-push .env after adding/editing a Secret or Variable
-    # without also touching the compose file (nothing else triggers this workflow then).
-    if: needs.publish.outputs.published == 'true' || github.event_name == 'workflow_dispatch'
+    # Decided (and logged) by the publish job's "Decide whether to sync the server" step.
+    if: ${{ !cancelled() && needs.publish.result == 'success' && needs.publish.outputs.sync == 'true' }}
     permissions:
       contents: read
     uses: ./.github/workflows/sync-server.yml
