@@ -137,6 +137,13 @@ body.user-authenticated .ft-shell {
   scrollbar-width: thin;
 }
 
+/* Never squeeze items when the nav is taller than the viewport (zoom, small
+   screens): scroll instead. Without this the overflow:hidden section headings
+   shrink to zero height and vanish. */
+.ft-nav > * {
+  flex-shrink: 0;
+}
+
 .ft-nav__section {
   margin-top: 0.85rem;
   margin-bottom: 0.2rem;

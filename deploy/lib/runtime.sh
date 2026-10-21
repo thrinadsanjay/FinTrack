@@ -195,8 +195,11 @@ ft_select_mongo_tag() {
 }
 
 # Services in the compose project (works with every compose tool).
+# Output must be non-empty: docker-compose v1 answers an unknown option with usage on
+# stderr and exit code 0, so success alone doesn't mean the option worked.
 ft_compose_services() {
-  compose config --services 2>/dev/null && return 0
+  local out
+  out="$(compose config --services 2>/dev/null)" && [ -n "$out" ] && { printf '%s\n' "$out"; return 0; }
   compose config 2>/dev/null | awk '
     /^services:/ {in_s=1; next}
     in_s && /^[^ #]/ {in_s=0}
@@ -205,7 +208,8 @@ ft_compose_services() {
 
 # Image references in the compose project (`config --images` is docker-compose-only).
 ft_compose_images() {
-  compose config --images 2>/dev/null && return 0
+  local out
+  out="$(compose config --images 2>/dev/null)" && [ -n "$out" ] && { printf '%s\n' "$out"; return 0; }
   compose config 2>/dev/null | awk '/^ +image:/ {v=$2; gsub(/["\047]/,"",v); print v}'
 }
 
