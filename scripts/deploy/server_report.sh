@@ -32,6 +32,46 @@ project="$(ft_compose_project)"
 ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
 [ -n "$ip" ] || ip="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i=1;i<NF;i++) if ($i=="src") print $(i+1)}')"
 ip="${ip:-unknown}"
+host_name="$(hostname -f 2>/dev/null || hostname 2>/dev/null || echo unknown)"
+
+# Host CPU %: two /proc/stat samples 1s apart (busy = everything but idle + iowait).
+cpu_sample() { awk '/^cpu /{idle=$5+$6; t=0; for (i=2;i<=NF;i++) t+=$i; print t, idle}' /proc/stat 2>/dev/null; }
+cpu_pct=""
+s1="$(cpu_sample)"
+if [ -n "$s1" ]; then
+  sleep 1; s2="$(cpu_sample)"
+  cpu_pct="$(echo "$s1 $s2" | awk '{dt=$3-$1; di=$4-$2; if (dt>0) printf "%.0f", 100*(dt-di)/dt}')"
+fi
+cores="$(nproc 2>/dev/null || echo '?')"
+load="$(cut -d' ' -f1-3 /proc/loadavg 2>/dev/null)"
+
+# RAM / swap from /proc/meminfo (MemAvailable = what applications can still use).
+# Kernels without MemAvailable: estimate it as free + buffers + page cache.
+read -r mem_total mem_avail swap_total swap_free <<< "$(awk '
+  /^MemTotal:/{t=$2} /^MemAvailable:/{a=$2} /^MemFree:/{f=$2} /^Buffers:/{b=$2} /^Cached:/{c=$2}
+  /^SwapTotal:/{st=$2} /^SwapFree:/{sf=$2}
+  END {if (a == "") a=f+b+c; print t+0, a+0, st+0, sf+0}' /proc/meminfo 2>/dev/null)"
+gib() { awk -v k="$1" 'BEGIN {printf "%.1f GiB", k/1048576}'; }
+pct() { awk -v u="$1" -v t="$2" 'BEGIN {if (t>0) printf "%.0f", 100*u/t}'; }
+mem_used=$(( ${mem_total:-0} - ${mem_avail:-0} ))
+mem_pct="$(pct "$mem_used" "${mem_total:-0}")"
+swap_used=$(( ${swap_total:-0} - ${swap_free:-0} ))
+swap_pct="$(pct "$swap_used" "${swap_total:-0}")"
+
+# Disk: the deploy folder's filesystem and the engine's data root (images, volumes --
+# MongoDB data lives there), listed once each when they share a filesystem.
+engine_root="$(engine info --format '{{.DockerRootDir}}' 2>/dev/null || true)"
+[ -n "$engine_root" ] || engine_root="$(engine info --format '{{.Store.GraphRoot}}' 2>/dev/null || true)"
+disk_rows="$(for d in "$DEPLOY_PATH" ${engine_root:+"$engine_root"} /; do
+  # Parse around the "NN%" column so spaces in the device or mount path can't shift fields.
+  df -Pk "$d" 2>/dev/null | awk -v d="$d" 'NR==2 {
+    for (i=NF; i>0; i--) if ($i ~ /^[0-9]+%$/) break
+    m=$(i+1); for (j=i+2; j<=NF; j++) m=m " " $j
+    print m "|" d "|" $(i-3) "|" $(i-2) "|" $i }'
+done | awk -F'|' '!seen[$1]++')"
+
+# Per-container CPU / RAM (one sample).
+stats="$(engine stats --no-stream --format '{{.Name}}|{{.CPUPerc}}|{{.MemPerc}}|{{.MemUsage}}' 2>/dev/null || true)"
 
 app_port="$(env_value PORT)"; app_port="${app_port:-8000}"
 public_port="$(env_value FT_PUBLIC_PORT)"; public_port="${public_port:-8008}"
@@ -77,6 +117,12 @@ fi
 
 # --- report ------------------------------------------------------------------------
 cell() { printf '%s' "${1:--}" | sed 's/|/\\|/g'; }
+# Usage percentage with a traffic light: < 75 green, < 90 amber, >= 90 red.
+level() {
+  [ -n "$1" ] || { echo "n/a"; return; }
+  local n="${1%%.*}"; n="${n//[!0-9]/}"; n="${n:-0}"
+  if [ "$n" -ge 90 ]; then echo "🔴 $1%"; elif [ "$n" -ge 75 ]; then echo "🟠 $1%"; else echo "🟢 $1%"; fi
+}
 ok() { [ "$1" = 200 ] && echo "✅ ${1}" || echo "❌ ${1:-no response}"; }
 host_url() {  # bind address, port, service:port, [scheme]
   local scheme="${4:-http}"
@@ -91,7 +137,8 @@ echo "### 🖥️ Server status"
 echo
 echo "| | |"
 echo "|---|---|"
-echo "| IP Address | \`${ip}\` ($(hostname 2>/dev/null || echo '?')) |"
+echo "| Hostname | \`${host_name}\` |"
+echo "| IP Address | \`${ip}\` |"
 echo "| Status | ${status} — ${up}/${total} containers up |"
 echo "| Nginx | $([ "$nginx_enabled" = true ] && echo True || echo False) |"
 echo "| App health (\`/health\`) | $(ok "$app_health") |"
@@ -99,16 +146,34 @@ echo "| App health (\`/health\`) | $(ok "$app_health") |"
 echo "| Engine | ${FT_ENGINE} ($(${FT_ENGINE} --version 2>/dev/null | head -n1)), ${FT_COMPOSE_NAME} |"
 echo "| Compose project | \`${project}\` in \`${DEPLOY_PATH}\` |"
 echo
+echo "### 📊 Host resources"
+echo
+echo "| Resource | Usage | Details |"
+echo "|---|---|---|"
+echo "| CPU | $(level "$cpu_pct") | ${cores} cores, load avg ${load:-n/a} (1/5/15 min) |"
+echo "| RAM | $(level "$mem_pct") | $(gib "$mem_used") used of $(gib "${mem_total:-0}") |"
+[ "${swap_total:-0}" -gt 0 ] && echo "| Swap | $(level "$swap_pct") | $(gib "$swap_used") used of $(gib "$swap_total") |"
+while IFS='|' read -r mnt dir size used dpct; do
+  [ -n "$mnt" ] || continue
+  label="$mnt"
+  [ "$dir" = "$DEPLOY_PATH" ] && label="${mnt} (deploy folder)"
+  [ -n "$engine_root" ] && [ "$dir" = "$engine_root" ] && label="${mnt} (${FT_ENGINE} images + volumes)"
+  echo "| Disk \`$(cell "$label")\` | $(level "${dpct%\%}") | $(gib "$used") used of $(gib "$size") |"
+done <<< "$disk_rows"
+echo
 echo "### 📦 Containers"
 echo
-echo "| Container | Service | Image | Status | Ports |"
-echo "|---|---|---|---|---|"
+echo "| Container | Service | Image | Status | CPU | RAM | Ports |"
+echo "|---|---|---|---|---|---|---|"
 if [ -n "$rows" ]; then
   while IFS='|' read -r name svc image st ports; do
-    echo "| $(cell "$name") | $(cell "$svc") | \`$(cell "$image")\` | $(cell "$st") | $(cell "${ports//, /<br>}") |"
+    c_cpu=""; c_mem=""; c_usage=""
+    IFS='|' read -r _ c_cpu c_mem c_usage <<< "$(printf '%s\n' "$stats" | awk -F'|' -v n="$name" '$1==n {print; exit}')"
+    c_usage="${c_usage%% / *}"
+    echo "| $(cell "$name") | $(cell "$svc") | \`$(cell "$image")\` | $(cell "$st") | $(cell "$c_cpu") | $(cell "${c_mem:+${c_mem} (${c_usage})}") | $(cell "${ports//, /<br>}") |"
   done <<< "$rows"
 else
-  echo "| _no containers found for project ${project}_ | | | | |"
+  echo "| _no containers found for project ${project}_ | | | | | | |"
 fi
 echo
 echo "### 🌐 Hosted URLs"
