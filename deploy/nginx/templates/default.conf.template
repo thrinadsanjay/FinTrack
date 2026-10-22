@@ -9,6 +9,12 @@
 server {
     listen 80;
     server_name ${FT_FINTRACKER_SUBDOMAIN}.${FT_DOMAIN} ${FT_MONGO_EXPRESS_SUBDOMAIN}.${FT_DOMAIN};
+    # Container healthcheck (docker-compose.nginx.yml): answered here, never redirected to
+    # https://127.0.0.1, which fails because the certificate is for the real hostnames.
+    location = /nginx-health {
+        access_log off;
+        return 200 "ok\n";
+    }
     location / {
         return 301 https://$host$request_uri;
     }
