@@ -9,6 +9,11 @@ name: Sync server
 #                            automatically and Secret/Variable changes reach .env
 on:
   workflow_call:
+    inputs:
+      environment:
+        description: GitHub environment whose Variables/Secrets (and server) are used
+        type: string
+        default: Development
 
 permissions:
   contents: read
@@ -19,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment:
-      name: Development
+      name: ${{ inputs.environment }}
     steps:
       - name: Checkout (deploy scripts)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

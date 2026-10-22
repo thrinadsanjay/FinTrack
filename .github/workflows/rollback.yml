@@ -15,13 +15,20 @@ on:
         required: true
         type: boolean
         default: true
+      environment:
+        description: GitHub environment to deploy to (its Variables/Secrets and server are used)
+        type: choice
+        options:
+          - Development
+          - Production
+        default: Development
 
 permissions:
   contents: read
 
 concurrency:
   # Shares the production release queue (release-pipeline.yml): a rollback never races a release.
-  group: release-production
+  group: release-${{ inputs.environment }}
   cancel-in-progress: false
 
 env:
@@ -33,7 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment:
-      name: Development
+      name: ${{ inputs.environment }}
     steps:
       - name: Validate version input
         id: v
@@ -102,6 +109,7 @@ jobs:
           VERSION: ${{ steps.v.outputs.version }}
           PREVIOUS: ${{ steps.ssh.outputs.previous-version }}
           MOVE_LATEST: ${{ inputs.move_latest }}
+          DEPLOY_ENV: ${{ inputs.environment }}
         run: |
           cat <<EOF
           ========================================
@@ -112,7 +120,7 @@ jobs:
           Docker Image: ${DOCKER_IMAGE}:${VERSION}
           Replaced: ${PREVIOUS:-unknown}
           Docker Hub latest moved: ${MOVE_LATEST}
-          Environment: Development
+          Environment: ${DEPLOY_ENV}
           Deployment Server: <masked>
           Deployment Status: SUCCESS
           ========================================
@@ -125,5 +133,6 @@ jobs:
             echo "| Now running | \`${DOCKER_IMAGE}:${VERSION}\` |"
             echo "| Replaced | \`${PREVIOUS:-unknown}\` |"
             echo "| Docker Hub \`latest\` moved | ${MOVE_LATEST} |"
+            echo "| Environment | ${DEPLOY_ENV} |"
             echo "| Server | _masked_ |"
           } >> "$GITHUB_STEP_SUMMARY"

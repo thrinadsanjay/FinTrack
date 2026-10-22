@@ -21,6 +21,10 @@ on:
         description: Merged pull request number (release.yml only)
         type: string
         default: ""
+      environment:
+        description: GitHub environment whose Variables/Secrets (and server) are used
+        type: string
+        default: Development
 
 permissions:
   contents: read
@@ -28,7 +32,7 @@ permissions:
 concurrency:
   # One production release/rollback at a time, whichever path started it. Never cancelled.
   # (Different from release.yml's own group, so caller and callee never wait on each other.)
-  group: release-production
+  group: release-${{ inputs.environment }}
   cancel-in-progress: false
 
 env:
@@ -203,6 +207,8 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/sync-server.yml
+    with:
+      environment: ${{ inputs.environment }}
     secrets: inherit
 
   deploy:
@@ -211,7 +217,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment:
-      name: Development
+      name: ${{ inputs.environment }}
     env:
       VERSION: ${{ needs.version.outputs.version }}
     steps:
@@ -238,6 +244,7 @@ jobs:
       - name: Release summary
         env:
           PREVIOUS: ${{ steps.ssh.outputs.previous-version }}
+          DEPLOY_ENV: ${{ inputs.environment }}
           PR: ${{ inputs.pr }}
           SOURCE: ${{ inputs.direct && 'direct push to fix/cicd (TEST_MODE off, no test server)' || '' }}
         run: |
@@ -255,7 +262,7 @@ jobs:
           ${DOCKER_IMAGE}:latest
 
           Environment:
-          Development
+          ${DEPLOY_ENV}
 
           Deployment Server:
           <masked>
@@ -275,7 +282,7 @@ jobs:
             echo "| Version | \`${VERSION}\` (git tag \`v${VERSION}\`) |"
             echo "| Image | \`${DOCKER_IMAGE}:${VERSION}\` |"
             echo "| Latest | \`${DOCKER_IMAGE}:latest\` → same image |"
-            echo "| Environment | Development |"
+            echo "| Environment | ${DEPLOY_ENV} |"
             echo "| Server | _masked_ |"
             echo "| Previously running | \`${PREVIOUS:-unknown}\` |"
             if [ -n "$SOURCE" ]; then echo "| Source | ${SOURCE} |"; else echo "| Pull request | #${PR} |"; fi

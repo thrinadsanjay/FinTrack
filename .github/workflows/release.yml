@@ -23,6 +23,14 @@ on:
       - ".dockerignore"
       - "requirements.txt"
   workflow_dispatch:
+    inputs:
+      environment:
+        description: GitHub environment to deploy to (its Variables/Secrets and server are used)
+        type: choice
+        options:
+          - Development
+          - Production
+        default: Development
 
 permissions:
   contents: read
@@ -83,4 +91,5 @@ jobs:
     uses: ./.github/workflows/release-pipeline.yml
     with:
       pr: ${{ needs.guard.outputs.pr }}
+      environment: ${{ inputs.environment || 'Development' }}
     secrets: inherit
