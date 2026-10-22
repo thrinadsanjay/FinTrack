@@ -1,10 +1,13 @@
+# HTTPS template -- used when FT_NGINX_HTTPS=true (the default). Plain-HTTP twin:
+# default.conf.https-false.
+#
 # Rendered by the official nginx image's own docker-entrypoint at container start:
-# every *.template file under /etc/nginx/templates/ is passed through `envsubst`
+# docker-compose.nginx.yml sets NGINX_ENVSUBST_TEMPLATE_SUFFIX=.https-${FT_NGINX_HTTPS},
+# so only the matching file under /etc/nginx/templates/ is passed through `envsubst`
 # (using only env vars actually set on the container -- never nginx's own $request_uri
 # style variables, which aren't environment variables) and written to
-# /etc/nginx/conf.d/ with the .template suffix stripped. No separate render step or
-# script is needed; see deploy/docker-compose.nginx.yml for which three vars are
-# passed in (FT_DOMAIN, FT_FINTRACKER_SUBDOMAIN, FT_MONGO_EXPRESS_SUBDOMAIN).
+# /etc/nginx/conf.d/default.conf. Variables passed in: FT_DOMAIN,
+# FT_FINTRACKER_SUBDOMAIN, FT_MONGO_EXPRESS_SUBDOMAIN.
 
 server {
     listen 80;

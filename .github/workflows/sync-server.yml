@@ -134,6 +134,7 @@ jobs:
           ME_CONFIG_OPTIONS_EDITORTHEME: ${{ vars.ME_CONFIG_OPTIONS_EDITORTHEME }}
           # --- Reverse proxy (optional: docker-compose.nginx.yml overlay) ---
           FT_NGINX_ENABLED: ${{ vars.FT_NGINX_ENABLED }}
+          FT_NGINX_HTTPS: ${{ vars.FT_NGINX_HTTPS }}
           FT_DOMAIN: ${{ vars.FT_DOMAIN }}
           FT_FINTRACKER_SUBDOMAIN: ${{ vars.FT_FINTRACKER_SUBDOMAIN }}
           FT_MONGO_EXPRESS_SUBDOMAIN: ${{ vars.FT_MONGO_EXPRESS_SUBDOMAIN }}
@@ -158,9 +159,10 @@ jobs:
           server-port: ${{ vars.SERVER_PORT || '22' }}
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
           ssh-known-hosts: ${{ secrets.SSH_KNOWN_HOSTS }}
-          # nginx TLS certificate (only when the reverse proxy is enabled).
-          tls-fullchain: ${{ vars.FT_NGINX_ENABLED == 'true' && secrets.FT_NGINX_TLS_FULLCHAIN || '' }}
-          tls-privkey: ${{ vars.FT_NGINX_ENABLED == 'true' && secrets.FT_NGINX_TLS_PRIVKEY || '' }}
+          # nginx TLS certificate (only when the reverse proxy is enabled in HTTPS mode;
+          # FT_NGINX_HTTPS unset means HTTPS. Expression comparisons ignore case).
+          tls-fullchain: ${{ vars.FT_NGINX_ENABLED == 'true' && vars.FT_NGINX_HTTPS != 'false' && secrets.FT_NGINX_TLS_FULLCHAIN || '' }}
+          tls-privkey: ${{ vars.FT_NGINX_ENABLED == 'true' && vars.FT_NGINX_HTTPS != 'false' && secrets.FT_NGINX_TLS_PRIVKEY || '' }}
           tls-dir: ${{ vars.FT_NGINX_CERTS_DIR || '' }}
 
       - name: Remove local .env copy

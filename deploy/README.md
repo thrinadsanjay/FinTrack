@@ -6,7 +6,7 @@ This branch holds only what a server needs to run FinTracker:
 |---|---|
 | `docker-compose.yml` | MongoDB, mongo-express and FinTracker. The app image is pulled from Docker Hub (`automationbuilder/fintracker`); nothing is built here. |
 | `docker-compose.nginx.yml` | Opt-in overlay: TLS-terminating nginx in front of fintracker/mongo-express. Inert unless `FT_NGINX_ENABLED=true` in `.env` -- see `docs/CICD.md` "Reverse proxy (nginx)". |
-| `nginx/templates/default.conf.template` | nginx config template for the overlay above (rendered by nginx's own entrypoint at container start). |
+| `nginx/templates/default.conf.https-true` / `default.conf.https-false` | nginx config templates for the overlay above: HTTPS, or plain HTTP. `FT_NGINX_HTTPS=true\|false` in `.env` picks one; nginx's own entrypoint renders it at container start. |
 | `fintrack` | Convenience wrapper: `./fintrack up\|down\|restart\|ps\|logs\|pull`. Handles engine detection and the nginx overlay for you -- see "Safe operations" below. |
 | `env.example` | Template for `.env` (secrets and settings). |
 | `README.md` | This guide. |

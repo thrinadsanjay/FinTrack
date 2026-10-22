@@ -392,6 +392,8 @@ jobs:
           # --- Reverse proxy (optional: docker-compose.nginx.yml overlay) ---
           FT_NGINX_ENABLED: ${{ vars.FT_NGINX_ENABLED }}
           TEST_FT_NGINX_ENABLED: ${{ vars.TEST_FT_NGINX_ENABLED }}
+          FT_NGINX_HTTPS: ${{ vars.FT_NGINX_HTTPS }}
+          TEST_FT_NGINX_HTTPS: ${{ vars.TEST_FT_NGINX_HTTPS }}
           FT_DOMAIN: ${{ vars.FT_DOMAIN }}
           TEST_FT_DOMAIN: ${{ vars.TEST_FT_DOMAIN }}
           FT_FINTRACKER_SUBDOMAIN: ${{ vars.FT_FINTRACKER_SUBDOMAIN }}

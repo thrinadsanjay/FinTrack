@@ -84,6 +84,13 @@ domain="$(env_value FT_DOMAIN)"
 app_sub="$(env_value FT_FINTRACKER_SUBDOMAIN)"; app_sub="${app_sub:-fintracker}"
 me_sub="$(env_value FT_MONGO_EXPRESS_SUBDOMAIN)"; me_sub="${me_sub:-mongo}"
 https_port="$(env_value FT_NGINX_HTTPS_PORT)"; https_port="${https_port:-443}"
+http_port="$(env_value FT_NGINX_HTTP_PORT)"; http_port="${http_port:-80}"
+# FT_NGINX_HTTPS (default true) picks the nginx template: HTTPS, or plain HTTP.
+if [ "$(env_value FT_NGINX_HTTPS)" = false ]; then
+  px_scheme=http; px_port="$http_port"; px_inner=80
+else
+  px_scheme=https; px_port="$https_port"; px_inner=443
+fi
 
 # Container rows: name | service | image | status | ports (docker and podman templates differ).
 if [ "$FT_ENGINE" = podman ]; then
@@ -105,7 +112,7 @@ http_code() { curl -ks -o /dev/null -m 10 -w '%{http_code}' "$@" 2>/dev/null || 
 app_health="$(http_code "http://127.0.0.1:${public_port}/health")"
 nginx_health=""
 if [ "$nginx_enabled" = true ] && [ -n "$domain" ]; then
-  nginx_health="$(http_code --resolve "${app_sub}.${domain}:${https_port}:127.0.0.1" "https://${app_sub}.${domain}:${https_port}/health")"
+  nginx_health="$(http_code --resolve "${app_sub}.${domain}:${px_port}:127.0.0.1" "${px_scheme}://${app_sub}.${domain}:${px_port}/health")"
 fi
 
 if [ "$total" -gt 0 ] && [ "$up" -eq "$total" ] && [ "$unhealthy" -eq 0 ] && [ "$app_health" = 200 ] \
@@ -140,9 +147,9 @@ echo "|---|---|"
 echo "| Hostname | \`${host_name}\` |"
 echo "| IP Address | \`${ip}\` |"
 echo "| Status | ${status} — ${up}/${total} containers up |"
-echo "| Nginx | $([ "$nginx_enabled" = true ] && echo True || echo False) |"
+echo "| Nginx | $([ "$nginx_enabled" = true ] && echo "True (${px_scheme^^})" || echo False) |"
 echo "| App health (\`/health\`) | $(ok "$app_health") |"
-[ -n "$nginx_health" ] && echo "| App via nginx (HTTPS) | $(ok "$nginx_health") |"
+[ -n "$nginx_health" ] && echo "| App via nginx (${px_scheme^^}) | $(ok "$nginx_health") |"
 echo "| Engine | ${FT_ENGINE} ($(${FT_ENGINE} --version 2>/dev/null | head -n1)), ${FT_COMPOSE_NAME} |"
 echo "| Compose project | \`${project}\` in \`${DEPLOY_PATH}\` |"
 echo
@@ -181,9 +188,9 @@ echo
 echo "| URL | → container (service:port) |"
 echo "|---|---|"
 if [ "$nginx_enabled" = true ] && [ -n "$domain" ]; then
-  sfx=""; [ "$https_port" = 443 ] || sfx=":${https_port}"
-  echo "| \`https://${app_sub}.${domain}${sfx}\` | \`nginx:443 → fintracker:${app_port}\` |"
-  echo "| \`https://${me_sub}.${domain}${sfx}\` | \`nginx:443 → mongo-express:8081\` |"
+  sfx=""; [ "$px_port" = "$px_inner" ] || sfx=":${px_port}"
+  echo "| \`${px_scheme}://${app_sub}.${domain}${sfx}\` | \`nginx:${px_inner} → fintracker:${app_port}\` |"
+  echo "| \`${px_scheme}://${me_sub}.${domain}${sfx}\` | \`nginx:${px_inner} → mongo-express:8081\` |"
 fi
 host_url "$public_bind" "$public_port" "fintracker:${app_port}"
 host_url "$me_bind" "$me_port" "mongo-express:8081"

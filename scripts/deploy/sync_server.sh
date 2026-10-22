@@ -102,10 +102,18 @@ ensure_mount_dir "${certs_dir:-$DEPLOY_PATH/certs}"
 if [ "$(env_value FT_NGINX_ENABLED)" = "true" ]; then
   nginx_certs_dir="$(env_value FT_NGINX_CERTS_DIR)"
   ensure_mount_dir "${nginx_certs_dir:-$DEPLOY_PATH/nginx-certs}"
-  for pem in fullchain.pem privkey.pem; do
-    [ -f "${nginx_certs_dir:-$DEPLOY_PATH/nginx-certs}/${pem}" ] \
-      || die "FT_NGINX_ENABLED=true but ${pem} is missing in ${nginx_certs_dir:-$DEPLOY_PATH/nginx-certs} -- add the FT_NGINX_TLS_FULLCHAIN and FT_NGINX_TLS_PRIVKEY secrets (or set FT_NGINX_ENABLED=false)"
-  done
+  nginx_https="$(env_value FT_NGINX_HTTPS)"
+  case "${nginx_https:-true}" in
+    true)
+      log "nginx mode: HTTPS (template default.conf.https-true)"
+      for pem in fullchain.pem privkey.pem; do
+        [ -f "${nginx_certs_dir:-$DEPLOY_PATH/nginx-certs}/${pem}" ] \
+          || die "FT_NGINX_ENABLED=true but ${pem} is missing in ${nginx_certs_dir:-$DEPLOY_PATH/nginx-certs} -- add the FT_NGINX_TLS_FULLCHAIN and FT_NGINX_TLS_PRIVKEY secrets (or set FT_NGINX_HTTPS=false for plain HTTP)"
+      done ;;
+    false)
+      log "nginx mode: plain HTTP (template default.conf.https-false; no certificate needed)" ;;
+    *) die "FT_NGINX_HTTPS must be true or false (lower case), got '${nginx_https}'" ;;
+  esac
   public_bind="$(env_value FT_PUBLIC_BIND)"
   [ "$public_bind" = "127.0.0.1" ] \
     || log "WARNING: FT_NGINX_ENABLED=true but FT_PUBLIC_BIND is not 127.0.0.1 -- fintracker is still reachable directly, bypassing nginx"
