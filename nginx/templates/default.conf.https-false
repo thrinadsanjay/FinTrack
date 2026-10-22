@@ -1,0 +1,60 @@
+# Plain-HTTP template -- used when FT_NGINX_HTTPS=false (no certificate needed).
+# HTTPS twin: default.conf.https-true. Rendered the same way (see that file).
+#
+# Over plain HTTP the app's session cookie is only kept when FT_ENV is not
+# "production" and FT_BASE_URL starts with http:// (app/core/session.py marks it
+# Secure otherwise, and browsers drop Secure cookies on http://) -- set both
+# accordingly, or sign-in will loop back to the login page.
+
+# ==========================================
+# FinTracker - HTTP
+# ==========================================
+server {
+    listen 80;
+    server_name ${FT_FINTRACKER_SUBDOMAIN}.${FT_DOMAIN};
+
+    # Container healthcheck (docker-compose.nginx.yml). This is the first server on
+    # port 80, so it also answers requests for 127.0.0.1.
+    location = /nginx-health {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    client_max_body_size 25m;
+
+    location / {
+        proxy_pass http://fintracker:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        # WebSocket support
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+
+# ==========================================
+# Mongo Express - HTTP
+# ==========================================
+server {
+    listen 80;
+    server_name ${FT_MONGO_EXPRESS_SUBDOMAIN}.${FT_DOMAIN};
+
+    location = /nginx-health {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    location / {
+        proxy_pass http://mongo-express:8081;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
