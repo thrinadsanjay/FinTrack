@@ -34,6 +34,13 @@ on:
         description: Sync the server (.env, TLS cert, compose up -d) even if main is unchanged
         type: boolean
         default: true
+      environment:
+        description: GitHub environment to deploy to (its Variables/Secrets and server are used)
+        type: choice
+        options:
+          - Development
+          - Production
+        default: Development
 
 permissions:
   contents: write # push to main
@@ -162,4 +169,6 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/sync-server.yml
+    with:
+      environment: ${{ inputs.environment || 'Development' }}
     secrets: inherit
