@@ -1,4 +1,4 @@
-# Opt-in reverse-proxy overlay: terminates TLS and routes
+# Opt-in reverse-proxy overlay: terminates TLS (or serves plain HTTP) and routes
 #   <FT_FINTRACKER_SUBDOMAIN>.<FT_DOMAIN>    -> fintracker
 #   <FT_MONGO_EXPRESS_SUBDOMAIN>.<FT_DOMAIN> -> mongo-express
 # over the existing ft-net network (see docker-compose.yml). Published to `main`
@@ -8,9 +8,14 @@
 #
 #   docker compose -f docker-compose.yml -f docker-compose.nginx.yml up -d
 #
-# Config is rendered from nginx/templates/default.conf.template by nginx's own
-# entrypoint at container start (see that file). Certs: place the issued
-# fullchain.pem + privkey.pem (not the CSR) in FT_NGINX_CERTS_DIR first.
+# Config is rendered by nginx's own entrypoint at container start from ONE of
+#   nginx/templates/default.conf.https-true    FT_NGINX_HTTPS=true (default): HTTPS,
+#                                              port 80 redirects to 443
+#   nginx/templates/default.conf.https-false   FT_NGINX_HTTPS=false: plain HTTP only
+# chosen by NGINX_ENVSUBST_TEMPLATE_SUFFIX below (nginx renders only files with that
+# suffix). FT_NGINX_HTTPS must be exactly `true` or `false` (lower case).
+# HTTPS certs: place the issued fullchain.pem + privkey.pem (not the CSR) in
+# FT_NGINX_CERTS_DIR first (CI does this from the FT_NGINX_TLS_* secrets).
 #
 # Once nginx is the public entry point, set FT_PUBLIC_BIND=127.0.0.1 in .env so
 # fintracker is no longer reachable directly -- see docker-compose.yml's `ports:`
@@ -27,6 +32,8 @@ services:
       FT_DOMAIN: ${FT_DOMAIN:?set FT_DOMAIN in .env to use the nginx overlay}
       FT_FINTRACKER_SUBDOMAIN: ${FT_FINTRACKER_SUBDOMAIN:-fintracker}
       FT_MONGO_EXPRESS_SUBDOMAIN: ${FT_MONGO_EXPRESS_SUBDOMAIN:-mongo}
+      # Picks the template: .https-true (HTTPS) or .https-false (plain HTTP).
+      NGINX_ENVSUBST_TEMPLATE_SUFFIX: .https-${FT_NGINX_HTTPS:-true}
     ports:
       - "${FT_NGINX_HTTP_PORT:-80}:80"
       - "${FT_NGINX_HTTPS_PORT:-443}:443"

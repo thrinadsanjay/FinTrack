@@ -6,7 +6,7 @@ name: Publish deployment bundle to main
 #   deploy/README.md                         ->  README.md
 #   deploy/docker-compose.yml                ->  docker-compose.yml
 #   deploy/docker-compose.nginx.yml          ->  docker-compose.nginx.yml
-#   deploy/nginx/templates/*.template        ->  nginx/templates/*.template
+#   deploy/nginx/templates/default.conf.*    ->  nginx/templates/ (https-true / https-false)
 #   deploy/fintrack                          ->  fintrack (executable)
 #   deploy/lib/runtime.sh                    ->  lib/runtime.sh (runtime autodetection, used by fintrack)
 #   env.example                              ->  env.example
@@ -98,7 +98,7 @@ jobs:
         run: |
           set -euo pipefail
           for f in deploy/README.md deploy/docker-compose.yml deploy/docker-compose.nginx.yml \
-                   deploy/nginx/templates/default.conf.template deploy/fintrack deploy/lib/runtime.sh env.example; do
+                   deploy/nginx/templates/default.conf.https-true deploy/nginx/templates/default.conf.https-false deploy/fintrack deploy/lib/runtime.sh env.example; do
             [ -f "src/$f" ] || { echo "::error::$f is missing on Development"; exit 1; }
           done
           cd main
@@ -107,12 +107,12 @@ jobs:
           cp ../src/deploy/docker-compose.yml                     docker-compose.yml
           cp ../src/deploy/docker-compose.nginx.yml                docker-compose.nginx.yml
           mkdir -p nginx/templates
-          cp ../src/deploy/nginx/templates/default.conf.template  nginx/templates/default.conf.template
+          cp ../src/deploy/nginx/templates/default.conf.https-*   nginx/templates/
           cp ../src/deploy/fintrack                               fintrack
           mkdir -p lib
           cp ../src/deploy/lib/runtime.sh                         lib/runtime.sh
           cp ../src/env.example                                   env.example
-          git add README.md docker-compose.yml docker-compose.nginx.yml nginx/templates/default.conf.template fintrack lib/runtime.sh env.example
+          git add README.md docker-compose.yml docker-compose.nginx.yml nginx/templates fintrack lib/runtime.sh env.example
           git update-index --chmod=+x fintrack
 
       - name: Commit and push

@@ -206,7 +206,7 @@ the compose file's built-in default.
 | `OPENAI_API_KEY` | `FT_LOG_LEVEL`, `FT_DEBUG_LOG`, `PORT`, `FT_APP_PORT`, `FT_SCHEDULER_ENABLED`, `FT_SETTINGS_CACHE_SECONDS`, `FT_LOG_DIR`, `FT_LOG_FILE`, `FT_AUDIT_LOG_FILE`, `FT_TELEGRAM_LOG_FILE`, `FT_SCHEDULER_LOG_FILE`, `FT_ERROR_LOG_FILE`, `FT_LOG_MAX_BYTES`, `FT_LOG_BACKUP_COUNT`, `SCHEDULER_RUN_TIME`, `FT_NOTIFICATION_ALERT_INTERVAL_SECONDS` |
 | `MONGO_INITDB_ROOT_PASSWORD` | `FINTRACKER_VERSION`, `FT_PUBLIC_PORT`, `FT_MONGO_BIND`, `FT_MONGO_PORT`, `FT_MONGO_EXPRESS_BIND`, `FT_MONGO_EXPRESS_PORT`, `FT_MONGO_IMAGE_TAG`, `FT_MONGO_VOLUME`, `MONGO_INITDB_DATABASE`, `MONGO_INITDB_ROOT_USERNAME`, `ME_CONFIG_MONGODB_SERVER`, `ME_CONFIG_MONGODB_PORT`, `ME_CONFIG_BASICAUTH_USERNAME`, `ME_CONFIG_OPTIONS_EDITORTHEME` |
 | `ME_CONFIG_BASICAUTH_PASSWORD` | |
-| | `FT_NGINX_ENABLED`, `FT_PUBLIC_BIND`, `FT_DOMAIN`, `FT_FINTRACKER_SUBDOMAIN`, `FT_MONGO_EXPRESS_SUBDOMAIN`, `FT_NGINX_CERTS_DIR`, `FT_NGINX_HTTP_PORT`, `FT_NGINX_HTTPS_PORT` (see [Reverse proxy](#reverse-proxy-nginx)) |
+| | `FT_NGINX_ENABLED`, `FT_NGINX_HTTPS`, `FT_PUBLIC_BIND`, `FT_DOMAIN`, `FT_FINTRACKER_SUBDOMAIN`, `FT_MONGO_EXPRESS_SUBDOMAIN`, `FT_NGINX_CERTS_DIR`, `FT_NGINX_HTTP_PORT`, `FT_NGINX_HTTPS_PORT` (see [Reverse proxy](#reverse-proxy-nginx)) |
 
 Adding a new key to `env.example` means adding it in three places: `env.example` itself,
 `scripts/deploy/render_env.sh`, and the `env:` block of the `sync-server` job's *Assemble .env* step
@@ -238,18 +238,26 @@ Opt-in: `deploy/docker-compose.nginx.yml` is an overlay (not a separate standalo
   to loopback-only (`FT_MONGO_EXPRESS_BIND`) regardless. All three deploy scripts warn (not fail) if
   `FT_NGINX_ENABLED=true` but `FT_PUBLIC_BIND` isn't `127.0.0.1`, since that's the one combination that
   leaves fintracker reachable both directly and through nginx.
-* **Certs:** nginx needs the **issued certificate + its private key**, not the CSR (the CSR was only
+* **HTTPS or HTTP:** `FT_NGINX_HTTPS` (default `true`) picks the template.
+  `true` uses `default.conf.https-true` (TLS on 443, port 80 redirects to HTTPS) and requires the
+  certificate below. `false` uses `default.conf.https-false` (plain HTTP on 80, no certificate; the
+  `FT_NGINX_TLS_*` secrets aren't uploaded). The overlay sets
+  `NGINX_ENVSUBST_TEMPLATE_SUFFIX=.https-${FT_NGINX_HTTPS}`, so nginx renders only the matching file;
+  `render_env.sh` normalises `True`/`yes`/`1` to exactly `true`/`false`. Over plain HTTP, also set a
+  non-production `FT_ENV` and an `http://` `FT_BASE_URL`: otherwise the session cookie is `Secure` and
+  browsers drop it, so sign-in loops back to the login page.
+* **Certs (HTTPS mode):** nginx needs the **issued certificate + its private key**, not the CSR (the CSR was only
   needed once, to request the certificate from your CA). Place them, named `fullchain.pem` and
   `privkey.pem`, in `FT_NGINX_CERTS_DIR` (default `/etc/fintracker/nginx-certs`) on the server before
   enabling. The deploy scripts create this directory automatically if it's missing (same rootless-Podman
   bind-mount fix as `FT_CERTS_DIR` -- see below) but never create or touch the certificate files
   themselves.
-* **Config:** `deploy/nginx/templates/default.conf.template` is rendered by the official `nginx` image's
-  own entrypoint (`envsubst` over `*.template` files in `/etc/nginx/templates/`) at container start --
+* **Config:** the selected `deploy/nginx/templates/default.conf.https-*` file is rendered by the official `nginx` image's
+  own entrypoint (`envsubst` over the template files in `/etc/nginx/templates/`) at container start --
   there's no separate render script or CI step for it. Only `FT_DOMAIN`, `FT_FINTRACKER_SUBDOMAIN` and
   `FT_MONGO_EXPRESS_SUBDOMAIN` are passed into the nginx container's environment (not the full `.env`),
   so there's no risk of accidentally colliding with nginx's own `$host`/`$scheme`-style variables.
-* **Test server:** `TEST_FT_NGINX_ENABLED`, `TEST_FT_PUBLIC_BIND`, `TEST_FT_DOMAIN`,
+* **Test server:** `TEST_FT_NGINX_ENABLED`, `TEST_FT_NGINX_HTTPS`, `TEST_FT_PUBLIC_BIND`, `TEST_FT_DOMAIN`,
   `TEST_FT_FINTRACKER_SUBDOMAIN`, `TEST_FT_MONGO_EXPRESS_SUBDOMAIN`, `TEST_FT_NGINX_CERTS_DIR`,
   `TEST_FT_NGINX_HTTP_PORT`, `TEST_FT_NGINX_HTTPS_PORT` follow the same `TEST_<KEY>` override pattern as
   every other app variable (falls back to the production value above if unset).

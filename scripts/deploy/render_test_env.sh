@@ -186,6 +186,16 @@ kv ME_CONFIG_OPTIONS_EDITORTHEME
 echo
 echo "# --- Reverse proxy (optional: docker-compose.nginx.yml overlay) ---"
 kv FT_NGINX_ENABLED
+# Written as exactly true/false: nginx picks its template by this value
+# (default.conf.https-true / -false), so "True", "yes", "1" etc. are normalised here.
+FT_NGINX_HTTPS="${TEST_FT_NGINX_HTTPS:-${FT_NGINX_HTTPS:-}}"
+case "$(printf '%s' "${FT_NGINX_HTTPS:-}" | tr '[:upper:]' '[:lower:]')" in
+  "")              ;;
+  true|yes|on|1)   echo "FT_NGINX_HTTPS=true" ;;
+  false|no|off|0)  echo "FT_NGINX_HTTPS=false" ;;
+  *) printf '%s: FT_NGINX_HTTPS must be true or false, got %s
+' "$(basename "$0")" "$FT_NGINX_HTTPS" >&2; exit 1 ;;
+esac
 kv FT_DOMAIN
 kv FT_FINTRACKER_SUBDOMAIN
 kv FT_MONGO_EXPRESS_SUBDOMAIN
