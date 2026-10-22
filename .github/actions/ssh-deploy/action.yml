@@ -108,6 +108,20 @@ runs:
           exit "$status"
         fi
 
+    - name: Deployment report
+      shell: bash
+      env:
+        DEPLOY_PATH: ${{ inputs.deploy-path }}
+        COMPOSE_FILE: ${{ inputs.compose-file }}
+        SERVER_HOST: ${{ inputs.server-host }}
+        SERVER_USER: ${{ inputs.server-user }}
+        SERVER_PORT: ${{ inputs.server-port }}
+        REPORT_TITLE: "🚀 Deployment report (version ${{ inputs.version }})"
+        # TEMPORARY while testing -- same as the steps above; set back to "yes" for production
+        SSH_STRICT: "no"
+      # Informational only (always exits 0): IP, status, nginx, containers, URLs.
+      run: bash "$GITHUB_WORKSPACE/scripts/deploy/report.sh"
+
     - name: Remove SSH material
       if: always()
       shell: bash
