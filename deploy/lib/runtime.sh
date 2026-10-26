@@ -171,6 +171,19 @@ ft_select_mongo_tag() {
     return 0
   fi
 
+  # No container, but the data volume survived (e.g. after `compose down`): its MongoDB
+  # version is unknown, and an older mongod can't open newer data files (it aborts with
+  # "WiredTiger metadata corruption"). Never pick a legacy tag for it -- stay on the
+  # compose default and ask for an explicit pin.
+  local vol
+  vol="$(sed -n 's/^FT_MONGO_VOLUME=["'\'']\{0,1\}\([A-Za-z0-9_.-]*\).*/\1/p' .env 2>/dev/null | head -n1)"
+  vol="${FT_MONGO_VOLUME:-${vol:-fin_tracker_mongodb_data}}"
+  if engine volume inspect "$vol" >/dev/null 2>&1; then
+    _ft_rt_log "mongo image tag: latest (data volume ${vol} already exists, no mongo container to read its version from)"
+    _ft_rt_log "WARNING: set FT_MONGO_IMAGE_TAG to the MongoDB version that wrote ${vol}; auto-selection only applies to fresh installs"
+    return 0
+  fi
+
   local os_id="" os_ver="" docker_ver=""
   if [ -r /etc/os-release ]; then
     os_id="$(. /etc/os-release && echo "${ID:-} ${ID_LIKE:-}")"
